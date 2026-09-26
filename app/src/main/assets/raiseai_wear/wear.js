@@ -224,6 +224,7 @@
     ensureVoiceShell();
     const prompt = findPrompt();
     if (!prompt) {
+      document.body.classList.remove("raiseai-wear-ready");
       if (state !== "listening" && state !== "starting" && state !== "sending") {
         emitState("loading");
       }
@@ -231,7 +232,10 @@
     }
 
     const composer = findComposer(prompt);
-    if (!composer) return;
+    if (!composer) {
+      document.body.classList.remove("raiseai-wear-ready");
+      return;
+    }
 
     document.body.classList.add("raiseai-wear-ready");
     prompt.classList.add("raiseai-prompt");

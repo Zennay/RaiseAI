@@ -1,8 +1,7 @@
 :root {
   color-scheme: dark !important;
-  --raise-safe-x: 22px;
   --raise-accent: #10a37f;
-  --raise-panel: rgba(22, 22, 25, 0.94);
+  --raise-safe-x: 30px;
 }
 
 html,
@@ -31,6 +30,10 @@ body {
   display: none !important;
 }
 
+/*
+ * Keep the real ChatGPT conversation alive behind the Wear voice surface.
+ * The page remains untouched while signed out so desktop-assisted login stays usable.
+ */
 .raiseai-main {
   position: relative !important;
   width: 100vw !important;
@@ -53,37 +56,22 @@ body {
 
 .raiseai-main pre,
 .raiseai-main table {
-  max-width: calc(100vw - 44px) !important;
+  max-width: calc(100vw - 60px) !important;
   overflow-x: auto !important;
   font-size: 12px !important;
 }
 
 #raiseai-wear-topbar {
-  position: fixed !important;
-  z-index: 2147483646 !important;
-  top: 7px !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  width: calc(100vw - 86px) !important;
-  height: 32px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  pointer-events: none !important;
-  border-radius: 18px !important;
-  color: #d7d7db !important;
-  background: rgba(0, 0, 0, 0.68) !important;
-  font: 650 12px/1 system-ui, sans-serif !important;
-  backdrop-filter: blur(9px) !important;
+  display: none !important;
 }
 
-/* Keep ChatGPT's real composer alive for dictation, but move it outside the visible round UI. */
+/* Keep ChatGPT's real composer alive for dictation, but off the visible round UI. */
 .raiseai-composer {
   position: fixed !important;
   z-index: 1 !important;
   left: 26px !important;
   right: 26px !important;
-  bottom: -160px !important;
+  bottom: -180px !important;
   width: auto !important;
   max-width: none !important;
   min-height: 82px !important;
@@ -98,92 +86,141 @@ body {
   overflow-y: auto !important;
 }
 
+/*
+ * Full-screen, round-first voice surface.
+ * Hidden until the ChatGPT composer exists, so login pages remain fully usable.
+ */
 #raiseai-voice-shell {
+  display: none !important;
+}
+
+body.raiseai-wear-ready {
+  overflow: hidden !important;
+}
+
+body.raiseai-wear-ready #raiseai-voice-shell {
   position: fixed !important;
   z-index: 2147483647 !important;
-  left: 50% !important;
-  bottom: 12px !important;
-  transform: translateX(-50%) !important;
-  width: calc(100vw - 46px) !important;
-  min-height: 118px !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
-  justify-content: flex-end !important;
+  justify-content: center !important;
   box-sizing: border-box !important;
-  padding: 10px 12px 8px !important;
-  border: 1px solid rgba(255, 255, 255, 0.10) !important;
-  border-radius: 34px !important;
-  background: linear-gradient(180deg, rgba(28, 28, 31, 0.90), rgba(15, 15, 17, 0.96)) !important;
-  box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.62) !important;
-  backdrop-filter: blur(12px) !important;
+  padding: 54px 36px 42px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background:
+    radial-gradient(circle at 50% 47%, rgba(16, 163, 127, 0.13), transparent 39%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.035), transparent 66%),
+    #000 !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+}
+
+body.raiseai-wear-ready #raiseai-voice-shell::before {
+  content: "Raise AI";
+  position: absolute !important;
+  top: 28px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  max-width: 62vw !important;
+  color: rgba(255, 255, 255, 0.62) !important;
+  font: 650 12px/1 system-ui, sans-serif !important;
+  letter-spacing: 0.04em !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
 }
 
 #raiseai-voice-status {
-  width: 100% !important;
-  min-height: 16px !important;
-  margin-bottom: 2px !important;
+  position: absolute !important;
+  top: 24% !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 72vw !important;
+  min-height: 18px !important;
   text-align: center !important;
-  color: #d7d7db !important;
-  font: 650 12px/1.25 system-ui, sans-serif !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  font: 650 14px/1.25 system-ui, sans-serif !important;
+  pointer-events: none !important;
 }
 
 #raiseai-transcript {
-  width: 100% !important;
-  min-height: 18px !important;
-  max-height: 36px !important;
-  margin-bottom: 5px !important;
+  position: absolute !important;
+  left: 50% !important;
+  bottom: 14% !important;
+  transform: translateX(-50%) !important;
+  width: 72vw !important;
+  min-height: 20px !important;
+  max-height: 58px !important;
+  margin: 0 !important;
   overflow: hidden !important;
   text-align: center !important;
-  color: #fff !important;
-  font: 500 12px/1.35 system-ui, sans-serif !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  font: 500 14px/1.35 system-ui, sans-serif !important;
   display: -webkit-box !important;
-  -webkit-line-clamp: 2 !important;
+  -webkit-line-clamp: 3 !important;
   -webkit-box-orient: vertical !important;
+  pointer-events: none !important;
 }
 
 #raiseai-voice-orb {
   position: relative !important;
-  width: 68px !important;
-  min-width: 68px !important;
-  height: 68px !important;
-  min-height: 68px !important;
+  width: clamp(142px, 43vw, 178px) !important;
+  min-width: clamp(142px, 43vw, 178px) !important;
+  height: clamp(142px, 43vw, 178px) !important;
+  min-height: clamp(142px, 43vw, 178px) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   padding: 0 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
   border-radius: 50% !important;
   color: #fff !important;
   background:
-    radial-gradient(circle at 32% 28%, rgba(70, 216, 184, 0.52), transparent 34%),
-    radial-gradient(circle at 70% 72%, rgba(16, 163, 127, 0.58), transparent 42%),
-    #1a1a1d !important;
-  box-shadow: 0 0 0 1px rgba(16, 163, 127, 0.16), 0 8px 26px rgba(0, 0, 0, 0.52) !important;
+    radial-gradient(circle at 31% 27%, rgba(89, 234, 199, 0.45), transparent 30%),
+    radial-gradient(circle at 70% 72%, rgba(16, 163, 127, 0.56), transparent 43%),
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.08), transparent 66%),
+    #111416 !important;
+  box-shadow:
+    0 0 0 1px rgba(16, 163, 127, 0.14),
+    0 0 44px rgba(16, 163, 127, 0.14),
+    0 18px 44px rgba(0, 0, 0, 0.58) !important;
   -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation !important;
+}
+
+#raiseai-voice-orb:active {
+  transform: scale(0.97) !important;
 }
 
 #raiseai-voice-orb svg {
   position: relative !important;
   z-index: 2 !important;
-  width: 30px !important;
-  height: 30px !important;
+  width: 54px !important;
+  height: 54px !important;
 }
 
 .raiseai-orb-ring {
   position: absolute !important;
-  inset: -5px !important;
-  border: 2px solid rgba(54, 218, 178, 0.0) !important;
+  inset: -12px !important;
+  border: 3px solid rgba(72, 232, 190, 0) !important;
   border-radius: 50% !important;
   pointer-events: none !important;
 }
 
 html[data-raiseai-state="listening"] #raiseai-voice-orb {
   background:
-    radial-gradient(circle at 30% 28%, rgba(86, 236, 198, 0.68), transparent 34%),
-    radial-gradient(circle at 72% 70%, rgba(16, 163, 127, 0.82), transparent 44%),
-    #14251f !important;
-  box-shadow: 0 0 24px rgba(16, 163, 127, 0.34), 0 8px 26px rgba(0, 0, 0, 0.5) !important;
+    radial-gradient(circle at 30% 28%, rgba(94, 245, 205, 0.72), transparent 31%),
+    radial-gradient(circle at 72% 70%, rgba(16, 163, 127, 0.88), transparent 45%),
+    #0f241d !important;
+  box-shadow:
+    0 0 0 1px rgba(88, 238, 200, 0.20),
+    0 0 58px rgba(16, 163, 127, 0.36),
+    0 18px 44px rgba(0, 0, 0, 0.50) !important;
 }
 
 html[data-raiseai-state="listening"] .raiseai-orb-ring {
@@ -194,45 +231,62 @@ html[data-raiseai-state="listening"] .raiseai-orb-ring {
 html[data-raiseai-state="starting"] #raiseai-voice-orb,
 html[data-raiseai-state="finalizing"] #raiseai-voice-orb,
 html[data-raiseai-state="sending"] #raiseai-voice-orb {
-  opacity: 0.84 !important;
+  opacity: 0.86 !important;
+}
+
+html[data-raiseai-state="sending"] #raiseai-voice-orb {
+  animation: raiseai-breathe 1.2s ease-in-out infinite alternate !important;
 }
 
 @keyframes raiseai-pulse {
   0% {
     transform: scale(0.94);
-    opacity: 0.88;
+    opacity: 0.86;
   }
   70% {
-    transform: scale(1.18);
-    opacity: 0.15;
+    transform: scale(1.17);
+    opacity: 0.12;
   }
   100% {
-    transform: scale(1.24);
+    transform: scale(1.23);
     opacity: 0;
   }
 }
 
-@media (max-height: 330px) {
-  .raiseai-main {
-    padding-top: 34px !important;
-    padding-bottom: 138px !important;
+@keyframes raiseai-breathe {
+  from { transform: scale(0.98); }
+  to { transform: scale(1.025); }
+}
+
+@media (max-height: 390px) {
+  body.raiseai-wear-ready #raiseai-voice-shell {
+    padding: 44px 30px 30px !important;
   }
 
-  #raiseai-wear-topbar {
-    top: 3px !important;
-    height: 29px !important;
+  body.raiseai-wear-ready #raiseai-voice-shell::before {
+    top: 19px !important;
   }
 
-  #raiseai-voice-shell {
-    bottom: 7px !important;
-    min-height: 104px !important;
-    padding-top: 7px !important;
+  #raiseai-voice-status {
+    top: 20% !important;
+    font-size: 13px !important;
+  }
+
+  #raiseai-transcript {
+    bottom: 11% !important;
+    font-size: 12px !important;
+    max-height: 48px !important;
   }
 
   #raiseai-voice-orb {
-    width: 60px !important;
-    min-width: 60px !important;
-    height: 60px !important;
-    min-height: 60px !important;
+    width: clamp(126px, 39vw, 154px) !important;
+    min-width: clamp(126px, 39vw, 154px) !important;
+    height: clamp(126px, 39vw, 154px) !important;
+    min-height: clamp(126px, 39vw, 154px) !important;
+  }
+
+  #raiseai-voice-orb svg {
+    width: 46px !important;
+    height: 46px !important;
   }
 }

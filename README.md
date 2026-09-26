@@ -1,6 +1,15 @@
-# Raise AI v1.1 — Galaxy Watch 7
+# Raise AI v1.2 — Galaxy Watch 7
 
-## New in v1.1: voice-first Raise AI
+## New in v1.2: fullscreen voice + usable external login
+
+- The microphone is now the primary **fullscreen** Wear OS surface instead of a small panel at the bottom.
+- The microphone orb is roughly 2.5× larger and centered for a round Galaxy Watch 7 display.
+- Listening, sending and idle states keep the same full-screen layout, with a subtle animated ring and short transcript preview.
+- The full-screen surface is hidden whenever the ChatGPT composer is not available. This keeps the real sign-in/account page visible instead of covering it.
+- Desktop-assisted login remains the safe external-input route: run `login-from-mac.command`, type on the Mac via scrcpy/ADB, while the actual ChatGPT session and cookies stay on the Watch.
+- No ChatGPT password, cookie or session token is copied through a Raise AI server.
+
+## v1.1: voice-first Raise AI
 
 - Raise-to-mouth now opens the existing ChatGPT Wear shell and asks it to start dictation immediately.
 - A native ↔ WebExtension state bridge prevents a second gesture from restarting the microphone while the current utterance is still listening/finalizing/sending.

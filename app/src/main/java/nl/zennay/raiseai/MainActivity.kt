@@ -90,7 +90,7 @@ class MainActivity : Activity(), SensorEventListener {
         }, matchWrap())
 
         column.addView(TextView(this).apply {
-            text = "Watch 7 · v1.1"
+            text = "Watch 7 · v1.2"
             setTextColor(Color.LTGRAY)
             textSize = 13f
             gravity = android.view.Gravity.CENTER
@@ -141,7 +141,7 @@ class MainActivity : Activity(), SensorEventListener {
         }, matchWrap(bottom = 6))
 
         column.addView(TextView(this).apply {
-            text = "Voice-first Wear UI. Raise-to-mouth starts dictation, 4 seconds of silence sends automatically, and the loaded ChatGPT page is kept warm briefly for fast repeat use."
+            text = "Fullscreen voice-first Wear UI. Raise-to-mouth opens one large microphone surface, 4 seconds of silence sends automatically, and the loaded ChatGPT page stays warm briefly for fast repeat use."
             setTextColor(Color.LTGRAY)
             textSize = 11f
             gravity = android.view.Gravity.CENTER

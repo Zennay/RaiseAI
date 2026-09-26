@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "RaiseGPT Wear UI",
-  "version": "1.1.0",
-  "description": "Wear OS voice-first presentation layer for the official ChatGPT website.",
+  "version": "1.2.0",
+  "description": "Fullscreen Wear OS voice-first presentation layer for the official ChatGPT website.",
   "browser_specific_settings": {
     "gecko": {
       "id": "raiseai-wear@zennay.nl"
