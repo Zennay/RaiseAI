@@ -14,6 +14,13 @@ test("routes freshness-sensitive questions to search", () => {
   assert.equal(classifyIntent("Wat is het laatste nieuws over OpenAI vandaag?").route, "current_info");
 });
 
+test("routes complex questions to the stronger AI lane", () => {
+  assert.equal(
+    classifyIntent("Analyseer deze architectuur en vergelijk de trade-offs").route,
+    "deep_ai"
+  );
+});
+
 test("routes normal informational questions to the cheap AI lane", () => {
   assert.equal(classifyIntent("Leg kubernetes pods simpel uit").route, "quick_ai");
 });
