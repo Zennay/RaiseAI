@@ -1,5 +1,6 @@
 package nl.zennay.raiseai
 
+import kotlin.math.min
 import kotlin.math.sqrt
 
 data class DetectionDebug(
@@ -9,57 +10,75 @@ data class DetectionDebug(
     val armed: Boolean
 )
 
-/**
- * Raise-to-mouth detector with explicit re-arming.
- *
- * After a trigger, the detector is disarmed. It will not trigger again until the wrist has
- * clearly left the calibrated mouth pose for a short period. This prevents the assistant from being
- * reopened repeatedly while the user is still talking or keeps the watch near their mouth.
- */
 class RaiseGestureDetector {
     private var gravityX = 0f
     private var gravityY = 0f
     private var gravityZ = 9.81f
     private var initialized = false
-
     private var movingUntilMs = 0L
+    private var movementBurstStartedMs = 0L
+    private var movementHits = 0
     private var poseStartedMs = 0L
     private var outsidePoseStartedMs = 0L
+    private var approachPrimedUntilMs = 0L
+    private var approachStartSimilarity = 1f
+    private var lastSimilarity = 0f
+    private var hasSimilarity = false
     private var lastTriggerMs = Long.MIN_VALUE / 2
     private var armed = true
 
-    var similarityThreshold = 0.965f
+    var similarityThreshold = 0.955f
     var rearmSimilarityThreshold = 0.90f
-    var movementThreshold = 1.25f
-    var holdMs = 180L
-    var movementWindowMs = 1_250L
-    var cooldownMs = 3_000L
-    var rearmHoldMs = 550L
+    var movementThreshold = 0.85f
+    var holdMs = 200L
+    var movementWindowMs = 1_400L
+    var movementBurstMs = 700L
+    var requiredMovementHits = 2
+    var approachStartSimilarityThreshold = 0.92f
+    var approachWindowMs = 1_900L
+    var minimumApproachRise = 0.025f
+    var cooldownMs = 2_500L
+    var rearmHoldMs = 500L
 
-    fun onAccelerometer(
-        x: Float,
-        y: Float,
-        z: Float,
-        timeMs: Long,
-        mouthPose: MouthPose?
-    ): DetectionDebug {
+    fun onAccelerometer(x: Float, y: Float, z: Float, timeMs: Long, mouthPose: MouthPose?): DetectionDebug {
         if (!initialized) {
+            // Establish the current wrist orientation as the baseline. Do not count sensor
+            // startup/filter settling as an intentional arm movement.
             gravityX = x
             gravityY = y
             gravityZ = z
             initialized = true
+
+            if (mouthPose == null) {
+                return DetectionDebug(false, 0f, 0f, armed)
+            }
+
+            val length = sqrt(x * x + y * y + z * z).coerceAtLeast(0.001f)
+            val initialSimilarity =
+                (x / length) * mouthPose.x +
+                (y / length) * mouthPose.y +
+                (z / length) * mouthPose.z
+            lastSimilarity = initialSimilarity
+            hasSimilarity = true
+            return DetectionDebug(false, initialSimilarity, 0f, armed)
         }
 
-        val alpha = 0.86f
+        val alpha = 0.84f
         gravityX = alpha * gravityX + (1f - alpha) * x
         gravityY = alpha * gravityY + (1f - alpha) * y
         gravityZ = alpha * gravityZ + (1f - alpha) * z
-
         val dx = x - gravityX
         val dy = y - gravityY
         val dz = z - gravityZ
         val dynamic = sqrt(dx * dx + dy * dy + dz * dz)
+
+        if (movementBurstStartedMs != 0L && timeMs - movementBurstStartedMs > movementBurstMs) {
+            movementBurstStartedMs = 0L
+            movementHits = 0
+        }
         if (dynamic >= movementThreshold) {
+            if (movementBurstStartedMs == 0L) movementBurstStartedMs = timeMs
+            movementHits++
             movingUntilMs = timeMs + movementWindowMs
         }
 
@@ -68,51 +87,81 @@ class RaiseGestureDetector {
             return DetectionDebug(false, 0f, dynamic, armed)
         }
 
-        val gravityLength = sqrt(
-            gravityX * gravityX + gravityY * gravityY + gravityZ * gravityZ
-        ).coerceAtLeast(0.001f)
-
-        val nx = gravityX / gravityLength
-        val ny = gravityY / gravityLength
-        val nz = gravityZ / gravityLength
-        val similarity = nx * mouthPose.x + ny * mouthPose.y + nz * mouthPose.z
+        val length = sqrt(gravityX * gravityX + gravityY * gravityY + gravityZ * gravityZ).coerceAtLeast(0.001f)
+        val similarity = (gravityX / length) * mouthPose.x +
+            (gravityY / length) * mouthPose.y +
+            (gravityZ / length) * mouthPose.z
 
         if (!armed) {
-            val clearlyAwayFromMouth = similarity < rearmSimilarityThreshold
-            if (clearlyAwayFromMouth) {
+            if (similarity < rearmSimilarityThreshold) {
                 if (outsidePoseStartedMs == 0L) outsidePoseStartedMs = timeMs
-                val awayLongEnough = timeMs - outsidePoseStartedMs >= rearmHoldMs
-                val cooldownDone = timeMs - lastTriggerMs >= cooldownMs
-                if (awayLongEnough && cooldownDone) {
+                if (timeMs - outsidePoseStartedMs >= rearmHoldMs &&
+                    timeMs - lastTriggerMs >= cooldownMs
+                ) {
                     armed = true
                     outsidePoseStartedMs = 0L
                     poseStartedMs = 0L
                     movingUntilMs = 0L
+                    movementBurstStartedMs = 0L
+                    movementHits = 0
+                    approachPrimedUntilMs = 0L
+                    approachStartSimilarity = 1f
                 }
             } else {
                 outsidePoseStartedMs = 0L
             }
+            lastSimilarity = similarity
+            hasSimilarity = true
             return DetectionDebug(false, similarity, dynamic, armed)
         }
 
         val recentlyMoved = timeMs <= movingUntilMs
+        val movementConfirmed = recentlyMoved && movementHits >= requiredMovementHits
+        if (recentlyMoved) {
+            val previous = if (hasSimilarity) lastSimilarity else similarity
+            val candidateStart = min(previous, similarity)
+            if (candidateStart <= approachStartSimilarityThreshold) {
+                approachStartSimilarity =
+                    if (timeMs > approachPrimedUntilMs) candidateStart
+                    else min(approachStartSimilarity, candidateStart)
+                approachPrimedUntilMs = timeMs + approachWindowMs
+            }
+        }
+
+        val approachedMouth =
+            timeMs <= approachPrimedUntilMs &&
+            similarity - approachStartSimilarity >= minimumApproachRise
         val matchesPose = similarity >= similarityThreshold
         val cooledDown = timeMs - lastTriggerMs >= cooldownMs
 
-        if (recentlyMoved && matchesPose && cooledDown) {
+        if (movementConfirmed && approachedMouth && matchesPose && cooledDown) {
             if (poseStartedMs == 0L) poseStartedMs = timeMs
             if (timeMs - poseStartedMs >= holdMs) {
                 lastTriggerMs = timeMs
                 poseStartedMs = 0L
                 movingUntilMs = 0L
+                movementBurstStartedMs = 0L
+                movementHits = 0
                 outsidePoseStartedMs = 0L
+                approachPrimedUntilMs = 0L
+                approachStartSimilarity = 1f
                 armed = false
+                lastSimilarity = similarity
+                hasSimilarity = true
                 return DetectionDebug(true, similarity, dynamic, armed)
             }
         } else {
             poseStartedMs = 0L
         }
 
+        if (timeMs > movingUntilMs && timeMs > approachPrimedUntilMs) {
+            movementHits = 0
+            movementBurstStartedMs = 0L
+            approachStartSimilarity = 1f
+        }
+
+        lastSimilarity = similarity
+        hasSimilarity = true
         return DetectionDebug(false, similarity, dynamic, armed)
     }
 }

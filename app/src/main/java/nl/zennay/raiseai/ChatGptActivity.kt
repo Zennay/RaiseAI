@@ -6,10 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -20,6 +24,7 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -39,11 +44,19 @@ class ChatGptActivity : Activity() {
     private var pendingAndroidPermission: GeckoSession.PermissionDelegate.Callback? = null
     private var autoStartRequested = false
     private var lastNavigationUrl: String = ""
+    private var textToSpeech: TextToSpeech? = null
+    private var ttsReady = false
+    private var finalUtteranceId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         autoStartRequested = intent.getBooleanExtra(EXTRA_TRY_WEBSITE_MIC, false)
+
+        setupTextToSpeech()
+        WearBridge.setAssistantReplyHandler { reply ->
+            handler.post { speakAssistantReply(reply) }
+        }
 
         setContentView(buildUi())
         ensureMicrophonePermission()
@@ -70,6 +83,109 @@ class ChatGptActivity : Activity() {
                 showStatus("Ik luister al", 900L)
             }
         }
+    }
+
+
+    private fun setupTextToSpeech() {
+        textToSpeech = TextToSpeech(this) { status ->
+            val engine = textToSpeech
+            if (status == TextToSpeech.SUCCESS && engine != null) {
+                var languageResult = engine.setLanguage(Locale.getDefault())
+                if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED
+                ) {
+                    languageResult = engine.setLanguage(Locale.forLanguageTag("nl-NL"))
+                }
+                ttsReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
+                    languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+                engine.setSpeechRate(1.02f)
+                engine.setPitch(1.0f)
+                engine.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) = Unit
+                    override fun onDone(utteranceId: String?) {
+                        if (utteranceId != null && utteranceId == finalUtteranceId) {
+                            finalUtteranceId = null
+                            handler.post {
+                                WearBridge.setSpeaking(false)
+                                showStatus("Klaar", 700L)
+                            }
+                        }
+                    }
+                    @Deprecated("Legacy callback")
+                    override fun onError(utteranceId: String?) {
+                        handler.post { handleSpeechError() }
+                    }
+                    override fun onError(utteranceId: String?, errorCode: Int) {
+                        handler.post { handleSpeechError() }
+                    }
+                })
+            } else {
+                ttsReady = false
+            }
+        }
+    }
+
+    private fun speakAssistantReply(rawText: String) {
+        val engine = textToSpeech
+        val chunks = speechChunks(rawText)
+        if (!ttsReady || engine == null || chunks.isEmpty()) {
+            WearBridge.setSpeaking(false)
+            showStatus("Antwoord ontvangen · spraak niet beschikbaar", 2_500L)
+            return
+        }
+
+        engine.stop()
+        val baseId = "raise_reply_" + SystemClock.uptimeMillis()
+        finalUtteranceId = baseId + "_" + chunks.lastIndex
+        WearBridge.setSpeaking(true)
+        showStatus("Antwoord afspelen…")
+
+        var failed = false
+        chunks.forEachIndexed { index, chunk ->
+            val result = engine.speak(
+                chunk,
+                if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
+                null,
+                baseId + "_" + index
+            )
+            if (result == TextToSpeech.ERROR) failed = true
+        }
+        if (failed) handleSpeechError()
+    }
+
+    private fun speechChunks(rawText: String): List<String> {
+        val cleaned = rawText
+            .replace(96.toChar(), ' ')
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (cleaned.isBlank()) return emptyList()
+
+        val chunks = mutableListOf<String>()
+        val current = StringBuilder()
+        for (word in cleaned.split(' ')) {
+            val extra = if (current.isEmpty()) word.length else word.length + 1
+            if (current.length + extra > 2_800 && current.isNotEmpty()) {
+                chunks += current.toString()
+                current.clear()
+            }
+            if (current.isNotEmpty()) current.append(' ')
+            current.append(word)
+        }
+        if (current.isNotEmpty()) chunks += current.toString()
+        return chunks
+    }
+
+    private fun handleSpeechError() {
+        finalUtteranceId = null
+        textToSpeech?.stop()
+        WearBridge.setSpeaking(false)
+        showStatus("Spraak afspelen mislukt", 2_000L)
     }
 
     private fun buildUi(): FrameLayout {
@@ -321,6 +437,14 @@ class ChatGptActivity : Activity() {
     }
 
     override fun onDestroy() {
+        WearBridge.setAssistantReplyHandler(null)
+        finalUtteranceId = null
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
+        ttsReady = false
+        WearBridge.setSpeaking(false)
+
         handler.removeCallbacksAndMessages(null)
         pendingAndroidPermission?.reject()
         pendingAndroidPermission = null

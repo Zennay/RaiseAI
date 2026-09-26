@@ -1,6 +1,14 @@
-# Raise AI v1.2 — Galaxy Watch 7
+# Raise AI v1.3 — Galaxy Watch 7
 
-## New in v1.2: fullscreen voice + usable external login
+## New in v1.3: spoken replies + 2-second silence + stronger raise detection
+
+- ChatGPT replies are read aloud through the Watch TextToSpeech engine.
+- Dictation finalizes after roughly **2 seconds without transcript activity**.
+- Fresh raises are blocked while ChatGPT is generating or the Watch is speaking.
+- Raise-to-mouth now requires multiple movement samples, an approach from outside the calibrated mouth orientation, and a stable final mouth pose.
+- Sensor startup/filter settling no longer counts as intentional arm movement.
+
+## v1.2: fullscreen voice + usable external login
 
 - The microphone is now the primary **fullscreen** Wear OS surface instead of a small panel at the bottom.
 - The microphone orb is roughly 2.5× larger and centered for a round Galaxy Watch 7 display.

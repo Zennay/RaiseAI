@@ -23,6 +23,9 @@
         <package android:name="com.google.android.wearable.assistant" />
         <package android:name="com.google.android.apps.chromecast.app" />
         <package android:name="com.sec.android.app.sbrowser" />
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
     </queries>
 
     <application

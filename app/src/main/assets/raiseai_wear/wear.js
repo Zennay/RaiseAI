@@ -5,7 +5,10 @@
   window.__raiseAiWearInstalled = true;
 
   const NATIVE_APP = "raiseai";
-  const SILENCE_MS = 4000;
+  const SILENCE_MS = 2000;
+  const ASSISTANT_STABLE_MS = 850;
+  const ASSISTANT_FALLBACK_STABLE_MS = 1800;
+  const ASSISTANT_TIMEOUT_MS = 90000;
   const START_RETRY_MS = 450;
   const START_RETRY_LIMIT = 18;
 
@@ -17,6 +20,14 @@
   let lastPromptText = "";
   let listeningStartedWithText = "";
   let scheduled = false;
+  let awaitingAssistantReply = false;
+  let assistantWaitStartedAt = 0;
+  let assistantBaselineCount = 0;
+  let assistantBaselineText = "";
+  let assistantCandidate = "";
+  let assistantCandidateSince = 0;
+  let sawAssistantGenerating = false;
+  let lastDeliveredAssistant = "";
 
   const clean = (value) => (value || "").toString().trim().toLowerCase();
   const visible = (element) => element && !element.disabled &&
@@ -119,9 +130,7 @@
 
   function armSilenceTimer() {
     clearSilenceTimer();
-    const prompt = findPrompt();
-    const text = promptText(prompt);
-    if (state !== "listening" || !text || text === listeningStartedWithText) return;
+    if (state !== "listening") return;
 
     silenceTimer = setTimeout(() => {
       finalizeAndSend("silence");
@@ -137,6 +146,82 @@
     lastPromptText = text;
     updateVoiceShell({ transcript: text });
     if (text && text !== listeningStartedWithText) armSilenceTimer();
+  }
+
+
+  function assistantSnapshot() {
+    const nodes = Array.from(document.querySelectorAll("[data-message-author-role='assistant']"));
+    const last = nodes[nodes.length - 1] || null;
+    const text = (last?.innerText || last?.textContent || "").trim();
+    return { count: nodes.length, text };
+  }
+
+  function isAssistantGenerating() {
+    const stopWords = ["stop generating", "stop response", "stoppen", "stop genereren", "stop antwoord"];
+    return Array.from(document.querySelectorAll("button")).some((button) => {
+      if (!visible(button)) return false;
+      const label = labelOf(button);
+      return stopWords.some((word) => label.includes(word));
+    });
+  }
+
+  function beginAssistantWait() {
+    const baseline = assistantSnapshot();
+    awaitingAssistantReply = true;
+    assistantWaitStartedAt = Date.now();
+    assistantBaselineCount = baseline.count;
+    assistantBaselineText = baseline.text;
+    assistantCandidate = "";
+    assistantCandidateSince = 0;
+    sawAssistantGenerating = false;
+  }
+
+  function deliverAssistantReply(text) {
+    const cleaned = (text || "").trim();
+    if (!cleaned || cleaned === lastDeliveredAssistant || !port) return false;
+    try {
+      port.postMessage({ type: "assistantReply", text: cleaned.slice(0, 12000) });
+      lastDeliveredAssistant = cleaned;
+      awaitingAssistantReply = false;
+      assistantCandidate = "";
+      assistantCandidateSince = 0;
+      emitState("speaking", { transcript: cleaned });
+      return true;
+    } catch (_) {
+      port = null;
+      return false;
+    }
+  }
+
+  function trackAssistantReply() {
+    if (!awaitingAssistantReply) return;
+    const now = Date.now();
+    if (now - assistantWaitStartedAt > ASSISTANT_TIMEOUT_MS) {
+      awaitingAssistantReply = false;
+      emitState("ready", { error: "assistant_timeout" });
+      return;
+    }
+
+    const snapshot = assistantSnapshot();
+    const isNewReply =
+      snapshot.count > assistantBaselineCount ||
+      (snapshot.text && snapshot.text !== assistantBaselineText);
+    if (!isNewReply || !snapshot.text) return;
+
+    const generating = isAssistantGenerating();
+    if (generating) sawAssistantGenerating = true;
+    if (snapshot.text !== assistantCandidate) {
+      assistantCandidate = snapshot.text;
+      assistantCandidateSince = now;
+      return;
+    }
+
+    const requiredStableMs =
+      sawAssistantGenerating ? ASSISTANT_STABLE_MS : ASSISTANT_FALLBACK_STABLE_MS;
+    if (!generating && assistantCandidateSince > 0 &&
+        now - assistantCandidateSince >= requiredStableMs) {
+      deliverAssistantReply(assistantCandidate);
+    }
   }
 
   function markMain(prompt) {
@@ -208,7 +293,8 @@
       starting: "Microfoon starten…",
       listening: "Luisteren…",
       finalizing: "Even wachten…",
-      sending: "Versturen…",
+      sending: "ChatGPT denkt…",
+      speaking: "Antwoord afspelen…",
       disconnected: "Verbinding herstellen…"
     };
     status.textContent = labels[state] || "Praat met ChatGPT";
@@ -254,14 +340,13 @@
     ).forEach((element) => element.classList.add("raiseai-hidden"));
 
     trackPromptChange();
+    trackAssistantReply();
 
     if ((state === "loading" || state === "disconnected") && mic) {
       emitState("ready");
     }
 
-    if (state === "sending" && !promptText(prompt)) {
-      emitState("ready");
-    }
+    // Stay busy until the new assistant reply has been detected and spoken.
   }
 
   function retryStart(source) {
@@ -277,7 +362,7 @@
 
   function startDictation(source = "unknown") {
     if (state === "listening" || state === "starting" ||
-        state === "finalizing" || state === "sending") {
+        state === "finalizing" || state === "sending" || state === "speaking") {
       return false;
     }
 
@@ -307,6 +392,7 @@
             source,
             transcript: promptText(findPrompt())
           });
+          armSilenceTimer();
         }
       }, 180);
       return true;
@@ -328,12 +414,10 @@
     }
 
     if (send && visible(send) && !send.disabled) {
+      beginAssistantWait();
       emitState("sending", { reason, transcript: text });
       send.click();
       setTimeout(adapt, 250);
-      setTimeout(() => {
-        if (state === "sending") emitState("ready");
-      }, 2200);
       return;
     }
 
@@ -367,6 +451,8 @@
         if (!message || typeof message !== "object") return;
         if (message.type === "startDictation") {
           startDictation(message.reason || "native");
+        } else if (message.type === "ttsState") {
+          emitState(message.speaking ? "speaking" : "ready");
         } else if (message.type === "cancelDictation") {
           clearSilenceTimer();
           if (state === "listening" || state === "starting") {
