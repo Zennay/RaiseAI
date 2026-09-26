@@ -71,13 +71,6 @@ class GestureMonitorService : Service(), SensorEventListener {
         CalibrationStore.setMonitoringEnabled(this, true)
         applyPowerState(force = true)
 
-        // Warm only the browser engine in the background. The actual ChatGPT page is cached
-        // for a bounded window after use, so fast launch does not mean a hidden page runs 24/7.
-        handler.postDelayed({
-            runCatching { GeckoEngine.prewarm(applicationContext) }
-                .onFailure { Log.w(TAG, "Gecko prewarm failed", it) }
-        }, GECKO_PREWARM_DELAY_MS)
-
         handler.postDelayed(powerStateRunnable, POWER_STATE_CHECK_MS)
         handler.postDelayed(statsFlushRunnable, STATS_FLUSH_MS)
     }
@@ -112,7 +105,7 @@ class GestureMonitorService : Service(), SensorEventListener {
 
         if (sessionGuard.shouldBlockLaunch()) {
             sessionBlocksPending++
-            updateNotification("ChatGPT is already active · waiting for a fresh raise")
+            updateNotification("Raise AI is already active · waiting for a fresh raise")
             Log.i(TAG, "Blocked retrigger because an assistant session is active")
             return
         }
@@ -120,13 +113,13 @@ class GestureMonitorService : Service(), SensorEventListener {
         Log.i(TAG, "Raise detected similarity=${result.similarity}")
         CalibrationStore.recordTrigger(this, result.similarity)
         vibrate()
-        val launched = ChatGptLauncher.launchFromService(this)
+        val launched = NativeVoiceLauncher.launchFromService(this)
         if (launched) {
             sessionGuard.markAssistantLaunched()
-            updateNotification("ChatGPT opened · lower wrist before the next raise")
+            updateNotification("Raise AI listening · lower wrist before the next raise")
         } else {
-            updateNotification("Gesture detected · open Raise AI to repair ChatGPT launch")
-            Log.w(TAG, "ChatGPT launch blocked")
+            updateNotification("Gesture detected · open Raise AI to repair native launch")
+            Log.w(TAG, "Native Raise AI launch blocked")
         }
     }
 
@@ -155,7 +148,7 @@ class GestureMonitorService : Service(), SensorEventListener {
             updateNotification("Paused for Sleep / Do Not Disturb")
         } else {
             registerAccelerometer()
-            updateNotification("Raise your watch to your mouth for ChatGPT")
+            updateNotification("Raise your watch to your mouth for Raise AI")
         }
     }
 
@@ -228,7 +221,7 @@ class GestureMonitorService : Service(), SensorEventListener {
         }
         manager.createNotificationChannel(channel)
 
-        val notification = buildNotification("Raise your watch to your mouth for ChatGPT")
+        val notification = buildNotification("Raise your watch to your mouth for Raise AI")
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(
                 NOTIFICATION_ID,
@@ -256,7 +249,7 @@ class GestureMonitorService : Service(), SensorEventListener {
         val talkPending = PendingIntent.getActivity(
             this,
             3,
-            Intent(this, ChatGptProxyActivity::class.java),
+            Intent(this, NativeVoiceActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val geminiPending = PendingIntent.getActivity(
@@ -272,7 +265,7 @@ class GestureMonitorService : Service(), SensorEventListener {
             .setContentText(status)
             .setOngoing(true)
             .setContentIntent(openPending)
-            .addAction(Notification.Action.Builder(null, "ChatGPT", talkPending).build())
+            .addAction(Notification.Action.Builder(null, "Raise AI", talkPending).build())
             .addAction(Notification.Action.Builder(null, "Gemini", geminiPending).build())
             .addAction(Notification.Action.Builder(null, "Stop", stopPending).build())
             .build()
@@ -301,7 +294,6 @@ class GestureMonitorService : Service(), SensorEventListener {
         private const val SENSOR_BATCH_LATENCY_US = 250_000
         private const val POWER_STATE_CHECK_MS = 60_000L
         private const val STATS_FLUSH_MS = 15L * 60L * 1_000L
-        private const val GECKO_PREWARM_DELAY_MS = 2_500L
         const val ACTION_STOP = "nl.zennay.raiseai.STOP_MONITORING"
     }
 }
