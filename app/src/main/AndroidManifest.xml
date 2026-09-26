@@ -48,6 +48,12 @@
             android:theme="@style/AssistantProxyTheme" />
 
         <activity
+            android:name=".NativeVoiceActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <activity
             android:name=".ChatGptActivity"
             android:configChanges="orientation|screenSize"
             android:excludeFromRecents="false"
