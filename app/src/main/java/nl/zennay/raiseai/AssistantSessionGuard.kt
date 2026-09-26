@@ -8,11 +8,12 @@ import android.os.SystemClock
 import android.util.Log
 
 /**
- * Prevents Raise AI from reopening ChatGPT or Gemini while an assistant session is active.
+ * Prevents accidental assistant reopen loops while still allowing a fresh wrist gesture to start
+ * another dictation once Raise AI is ready again.
  *
- * With Usage Access (granted by the dev installer), we inspect the most recent foreground app.
- * Without Usage Access we fall back to a conservative time lock so the watch never enters a
- * rapid open/reopen loop.
+ * With Usage Access we inspect the most recent foreground app. When Raise AI itself is foreground,
+ * the WebExtension/native bridge decides whether a gesture is safe based on the live voice state.
+ * Without Usage Access we keep a conservative fallback lock.
  */
 class AssistantSessionGuard(private val context: Context) {
     private var lastLaunchElapsedMs = Long.MIN_VALUE / 2
@@ -26,9 +27,14 @@ class AssistantSessionGuard(private val context: Context) {
         if (ageMs < MINIMUM_SESSION_LOCK_MS) return true
 
         val foregroundPackage = currentForegroundPackage()
+
         if (foregroundPackage == AssistantLauncher.GOOGLE_WEAR_ASSISTANT_PACKAGE) return true
         if (foregroundPackage == ChatGptLauncher.SAMSUNG_BROWSER_PACKAGE) return true
-        if (foregroundPackage == context.packageName) return true
+
+        if (foregroundPackage == context.packageName) {
+            return WearBridge.shouldBlockGesture()
+        }
+
         if (foregroundPackage != null) return false
 
         // If Usage Access is unavailable or Android returns no recent foreground event,
@@ -59,8 +65,10 @@ class AssistantSessionGuard(private val context: Context) {
 
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
-                val resumed = event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
+                val resumed =
+                    event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
                     event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND
+
                 if (resumed && event.timeStamp >= latestTimestamp) {
                     latestTimestamp = event.timeStamp
                     latestPackage = event.packageName
@@ -75,8 +83,11 @@ class AssistantSessionGuard(private val context: Context) {
 
     companion object {
         private const val TAG = "RaiseAI.SessionGuard"
-        private const val MINIMUM_SESSION_LOCK_MS = 5_000L
-        private const val FALLBACK_SESSION_LOCK_MS = 45_000L
+
+        // The gesture detector itself already has a 3-second cooldown and explicit wrist-away
+        // rearming. This shorter lock only absorbs duplicate Activity launches from one trigger.
+        private const val MINIMUM_SESSION_LOCK_MS = 1_500L
+        private const val FALLBACK_SESSION_LOCK_MS = 30_000L
         private const val FOREGROUND_LOOKBACK_MS = 60L * 60L * 1_000L
     }
 }
