@@ -14,9 +14,10 @@ else
 fi
 ADB="$SDK_DIR/platform-tools/adb"
 APK="${1:-}"
+CONNECT_ENDPOINT="${2:-${WATCH_ENDPOINT:-}}"
 
 if [ -z "$APK" ]; then
-  echo "Usage: ./install-watch-apk.command /path/to/RaiseAI.apk"
+  echo "Usage: ./install-watch-apk.command /path/to/RaiseAI.apk [watch-ip:port]"
   exit 2
 fi
 [ -x "$ADB" ] || { echo "adb not found at: $ADB"; exit 1; }
@@ -50,6 +51,12 @@ find_watch() {
 }
 
 TARGET="${ANDROID_SERIAL:-$(find_watch | head -n 1)}"
+if [ -z "$TARGET" ] && [ -n "${CONNECT_ENDPOINT:-}" ]; then
+  echo "Connecting to Watch via ${CONNECT_ENDPOINT}..."
+  "$ADB" connect "$CONNECT_ENDPOINT" >/dev/null 2>&1 || true
+  sleep 1
+  TARGET="${ANDROID_SERIAL:-$(find_watch | head -n 1)}"
+fi
 if [ -z "$TARGET" ]; then
   try_mdns_connect
   sleep 1
@@ -59,7 +66,8 @@ fi
 if [ -z "$TARGET" ]; then
   echo "No connected Wear OS watch found."
   echo "On the Watch: Developer options → Wireless debugging → ON."
-  echo "If needed, pair once with adb pair, then rerun this command."
+  echo "If already paired, pass the general Wireless debugging IP:port as the second argument."
+  echo "Example: ./install-watch-apk.command RaiseAI.apk 192.168.1.219:12345"
   "$ADB" devices -l
   exit 1
 fi
