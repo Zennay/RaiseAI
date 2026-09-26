@@ -1,0 +1,177 @@
+:root {
+  color-scheme: dark !important;
+  --raise-safe-x: 22px;
+  --raise-accent: #10a37f;
+}
+
+html,
+body {
+  background: #000 !important;
+  overscroll-behavior: contain !important;
+  overflow-x: hidden !important;
+  scrollbar-width: none !important;
+}
+
+body {
+  -webkit-text-size-adjust: 100% !important;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+}
+
+body.raiseai-wear-ready {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+body.raiseai-wear-ready > :not(.raiseai-keep):not(#raiseai-wear-topbar) {
+  max-width: 100vw !important;
+}
+
+.raiseai-hidden {
+  display: none !important;
+}
+
+.raiseai-main {
+  position: relative !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 42px var(--raise-safe-x) 118px !important;
+  box-sizing: border-box !important;
+  background: #000 !important;
+}
+
+.raiseai-main article,
+.raiseai-main [data-message-author-role] {
+  max-width: none !important;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+  font-size: 15px !important;
+  line-height: 1.42 !important;
+}
+
+.raiseai-main pre,
+.raiseai-main table {
+  max-width: calc(100vw - 44px) !important;
+  overflow-x: auto !important;
+  font-size: 12px !important;
+}
+
+#raiseai-wear-topbar {
+  position: fixed !important;
+  z-index: 2147483646 !important;
+  top: 7px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: calc(100vw - 78px) !important;
+  height: 34px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  pointer-events: none !important;
+  border-radius: 18px !important;
+  color: #d7d7db !important;
+  background: rgba(0, 0, 0, 0.76) !important;
+  font: 600 12px/1 system-ui, sans-serif !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.raiseai-composer {
+  position: fixed !important;
+  z-index: 2147483645 !important;
+  left: 18px !important;
+  right: 18px !important;
+  bottom: 10px !important;
+  width: auto !important;
+  max-width: none !important;
+  min-height: 76px !important;
+  margin: 0 !important;
+  padding: 8px 8px 8px 13px !important;
+  box-sizing: border-box !important;
+  border: 1px solid #3d3d42 !important;
+  border-radius: 26px !important;
+  background: rgba(31, 31, 34, 0.98) !important;
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.62) !important;
+}
+
+.raiseai-composer button:not(.raiseai-action),
+.raiseai-composer [role="button"]:not(.raiseai-action) {
+  display: none !important;
+}
+
+.raiseai-prompt {
+  display: block !important;
+  width: calc(100% - 112px) !important;
+  min-width: 0 !important;
+  min-height: 52px !important;
+  max-height: 94px !important;
+  margin: 0 !important;
+  padding: 9px 3px !important;
+  overflow-y: auto !important;
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+  color: #fff !important;
+  background: transparent !important;
+}
+
+.raiseai-action {
+  display: flex !important;
+  position: absolute !important;
+  bottom: 11px !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  color: #fff !important;
+  background: #48484d !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.raiseai-mic {
+  right: 59px !important;
+}
+
+.raiseai-send {
+  right: 7px !important;
+  background: var(--raise-accent) !important;
+}
+
+.raiseai-action svg {
+  width: 25px !important;
+  height: 25px !important;
+}
+
+@media (max-height: 330px) {
+  .raiseai-main {
+    padding-top: 34px !important;
+    padding-bottom: 104px !important;
+  }
+
+  #raiseai-wear-topbar {
+    top: 3px !important;
+    height: 29px !important;
+  }
+
+  .raiseai-composer {
+    min-height: 68px !important;
+    bottom: 6px !important;
+  }
+
+  .raiseai-action {
+    bottom: 8px !important;
+  }
+}

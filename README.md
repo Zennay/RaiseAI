@@ -1,1 +1,161 @@
-# RaiseAI
+# Raise AI v1.0 — Galaxy Watch 7
+
+## New in v1.0: an actual Wear UI
+
+- Bundles Mozilla GeckoView, so Raise AI no longer depends on the missing Android System WebView or Samsung Internet UI.
+- Loads the official `chatgpt.com` website in-app and keeps the user's normal web login on the Watch.
+- A local built-in WebExtension removes sidebar/desktop clutter and makes the conversation, prompt, microphone and send controls fit a round screen.
+- Microphone access is granted only to trusted ChatGPT HTTPS origins; Samsung Internet remains an emergency fallback if GeckoView cannot start.
+- Uses no OpenAI API key, private endpoint, copied cookie, backend or per-message API billing.
+- Packages only the Galaxy Watch 7 `arm64-v8a` browser binary. The APK is still much larger than v0.9 because it contains a complete browser engine.
+
+## v0.7 daily-driver optimizations retained
+
+- **No Gemini reset loop:** trigger is disarmed until the wrist leaves the mouth pose; Usage Access additionally blocks launches while Gemini is foreground.
+- **Sleep/DND pause:** monitoring pauses when the Watch is in Do Not Disturb/Bedtime quiet mode.
+- **Lower-power sampling:** ~10 Hz accelerometer sampling plus FIFO batching where supported.
+- **Runtime counters:** active minutes, sleep-paused minutes and blocked Gemini retriggers.
+- **Auto-start:** attempts to restart monitoring after reboot/app update if it was enabled.
+- **Installer fixes:** Wear-feature based watch detection, direct APK install, SDK path setup and a self-contained Gradle bootstrap.
+
+Small Wear OS prototype for a **raise-to-mouth → ChatGPT Web** interaction on Samsung Galaxy Watch 7, with a dedicated Wear layout and Gemini retained for Google Home.
+
+The project deliberately has no backend, database, OpenAI/Gemini API key, phone companion, analytics SDK, or account system. ChatGPT runs as the official website in bundled GeckoView and uses the user's normal website session.
+
+**Start with `START-HERE.md`.** For ChatGPT login/microphone setup see `CHATGPT-WEB-SETUP.md`; for Gemini + Google Home see `GEMINI-HOME-SETUP.md`.
+
+## What v0.9 fixed
+
+- Detects that the tested Galaxy Watch 7 has Samsung Internet but no Android System WebView service.
+- Opens ChatGPT in `com.sec.android.app.sbrowser` instead of crashing the embedded activity.
+- Keeps embedded ChatGPT Web available on Wear OS devices that do expose a WebView provider.
+- Blocks gesture retriggers while Samsung Internet is foreground.
+- Corrects the installer output to v0.9 / ChatGPT instead of the stale v0.7 / Gemini text.
+
+## What v0.8 added
+
+- A Wear OS WebView that loads the official `chatgpt.com` site and keeps its cookie session locally.
+- Android and WebView microphone permission handling restricted to trusted ChatGPT HTTPS origins.
+- An automatic attempt to click ChatGPT's own dictation button after a raise.
+- No API key, token billing, response scraping or private ChatGPT endpoints.
+- ChatGPT as the default raise-to-mouth target, while Gemini and Google Home remain separate fallbacks.
+- A session guard that also prevents ChatGPT from being reopened while Raise AI is foreground.
+
+## What V0.3 does
+
+- Calibrates the physical orientation of **your** watch when held near your mouth.
+- Runs an opt-in foreground sensor service using the accelerometer.
+- Requires recent movement + calibrated mouth orientation + a short hold before triggering.
+- Gives a short haptic when a raise is detected.
+- Attempts Android `VOICE_COMMAND` first for an immediate voice session, then falls back to `ACTION_ASSIST`.
+- Includes separate **Test Gemini voice / Test AI question / Test Google Home command** buttons so assistant/account integration can be tested separately from the gesture.
+- Counts real gesture triggers so detection can be separated from Gemini-launch problems.
+- Records labeled Watch 7 sensor traces for **mouth raise / check time / normal movement**.
+- Includes a one-command ADB export of those traces.
+- Gives the monitoring notification a **Gemini** fallback if Android blocks hands-free background launch.
+
+## Important V0.3 limitation
+
+Modern Android restricts background activity launches. The gesture detector itself is implemented, but whether the background trigger can open Gemini hands-free must be verified on the real Watch 7 / current One UI Watch build. The app intentionally keeps a foreground notification visible while monitoring.
+
+If a raise increases the **Triggers** counter but Gemini does not appear, the gesture worked and the remaining problem is specifically the assistant/background bridge.
+
+## Easiest install
+
+### Android Studio
+
+1. Install a current Android Studio.
+2. Double-click `open-in-android-studio.command`, or open this folder manually.
+3. Let Gradle sync; install Android SDK Platform 35 / API 35 if prompted.
+4. On Watch 7 enable **Developer options → Wireless debugging**.
+5. Android Studio → **Pair Devices Using Wi-Fi** → select the Watch 7 → **Run**.
+6. Watch: **Calibrate mouth pose → Test Gemini voice → Test Google Home command → Enable raise-to-talk**.
+
+### macOS script
+
+After Android Studio is installed:
+
+```bash
+./setup-and-install-watch.command
+```
+
+The script uses Android Studio's bundled Java when possible, detects the usual macOS Android SDK location, creates `local.properties`, creates a Gradle 9.6 wrapper if needed, pairs ADB, builds, installs and launches the app.
+
+## Collect gesture evidence
+
+In the watch app, record several examples of each:
+
+1. **Record mouth raise · 4 sec**
+2. **Record check-time raise · 4 sec**
+3. **Record normal movement · 4 sec**
+
+Then run:
+
+```bash
+./pull-watch-data.command
+```
+
+It pulls `sensor-traces.csv` from the debug build into this folder. The CSV contains label, session id, elapsed milliseconds and x/y/z accelerometer values.
+
+Then run:
+
+```bash
+python3 analyze-watch-data.py sensor-traces.csv
+```
+
+It compares the end orientation of mouth raises with check-time and normal-movement sessions and suggests a Watch-specific similarity threshold when the data separates cleanly.
+
+## Project structure
+
+```text
+app/src/main/java/nl/zennay/raiseai/
+├── MainActivity.kt              # setup, calibration, ChatGPT/Gemini tests, trace recording
+├── ChatGptActivity.kt           # bundled GeckoView shell + trusted microphone bridge
+├── assets/raiseai_wear/         # Wear CSS/JS built-in WebExtension
+├── ChatGptLauncher.kt           # foreground/background ChatGPT activity launch
+├── GestureMonitorService.kt     # opt-in foreground sensor monitor
+├── RaiseGestureDetector.kt      # small testable detector
+├── SensorTraceRecorder.kt       # labeled Watch 7 CSV traces
+├── CalibrationStore.kt          # mouth-pose, enabled state, trigger stats
+├── AssistantLauncher.kt         # Android voice-command / assist bridge
+├── AssistantProxyActivity.kt    # experimental background bridge
+└── HomeLauncher.kt              # Google Home app fallback / setup helper
+```
+
+## Build tooling
+
+- Android Gradle Plugin 9.4.0
+- Gradle 9.6.0
+- compile / target SDK 35
+- Java 17 bytecode target
+- AGP 9 built-in Kotlin (no legacy `org.jetbrains.kotlin.android` plugin)
+- Mozilla GeckoView 139, arm64-v8a only
+
+## Gemini + Google Home
+
+Raise AI uses your real Gemini assistant. If Google Home is enabled under Gemini Connected apps on the paired phone, supported smart-home commands are handled by Gemini itself — Raise AI does not need a separate Home API or cloud backend. See `GEMINI-HOME-SETUP.md`.
+
+## Diagnostics
+
+Run `pull-diagnostics.command` after a test session to export Raise AI logcat, package/service state, battery information and sensor traces into one folder.
+
+## Next proof gate
+
+Before recorder-style AI dictation or more UI:
+
+1. install on the physical Watch 7;
+2. confirm **Test Gemini voice** opens Gemini and note whether `VOICE_COMMAND` or `ASSIST` was used;
+3. confirm **Test AI question** gets a normal Gemini answer;
+4. confirm **Test Google Home command** actually changes a harmless Home device;
+5. confirm raises increment **Triggers**;
+6. see whether the background trigger opens Gemini hands-free;
+7. collect labeled mouth/time-check/normal traces;
+8. measure false positives and battery impact.
+
+
+## v0.6: hands-free Gemini fix
+- Removed generic `ACTION_VOICE_COMMAND` because Samsung routed it to Bixby.
+- Uses the physically verified `ACTION_ASSIST` scoped to `com.google.android.wearable.assistant`.
+- Installer grants the personal-sideload `SYSTEM_ALERT_WINDOW` app-op over ADB so a raise gesture can launch Gemini while Raise AI is in the background.
+- Automatically prefers a connected Wear OS watch over a connected Android phone.
+- Added `upgrade-watch.command` for one-click updates once the Watch is already paired.

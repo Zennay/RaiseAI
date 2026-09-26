@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "RaiseGPT Wear UI",
+  "version": "1.0.0",
+  "description": "Wear OS presentation layer for the official ChatGPT website.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "raiseai-wear@zennay.nl"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://*.chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://*.chat.openai.com/*"
+      ],
+      "css": ["wear.css"],
+      "js": ["wear.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

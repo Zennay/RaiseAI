@@ -1,0 +1,53 @@
+# Android / Gradle generated output and downloaded tooling
+.gradle/
+.kotlin/
+.tools/
+build/
+out/
+.externalNativeBuild/
+.cxx/
+captures/
+*.apk
+*.aab
+*.apks
+*.dex
+*.class
+*.hprof
+
+# Local IDE and machine configuration
+.idea/
+*.iml
+local.properties
+.DS_Store
+._*
+
+# Secrets and signing material
+.env
+.env.*
+!.env.example
+!.env.sample
+secrets.properties
+keystore.properties
+signing.properties
+credentials.json
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Project archives and temporary files
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.log
+*.tmp
+*.bak
+
+# Device diagnostics and personal sensor recordings
+/watch-diagnostics-*/
+/watch-sensor-traces-*.csv
+/sensor-traces.csv
