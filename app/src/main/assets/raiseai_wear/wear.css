@@ -2,6 +2,7 @@
   color-scheme: dark !important;
   --raise-safe-x: 22px;
   --raise-accent: #10a37f;
+  --raise-panel: rgba(22, 22, 25, 0.94);
 }
 
 html,
@@ -13,6 +14,7 @@ body {
 }
 
 body {
+  margin: 0 !important;
   -webkit-text-size-adjust: 100% !important;
   text-rendering: optimizeLegibility;
 }
@@ -25,15 +27,6 @@ body {
   display: none !important;
 }
 
-body.raiseai-wear-ready {
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-body.raiseai-wear-ready > :not(.raiseai-keep):not(#raiseai-wear-topbar) {
-  max-width: 100vw !important;
-}
-
 .raiseai-hidden {
   display: none !important;
 }
@@ -44,7 +37,7 @@ body.raiseai-wear-ready > :not(.raiseai-keep):not(#raiseai-wear-topbar) {
   max-width: 100vw !important;
   min-width: 0 !important;
   margin: 0 !important;
-  padding: 42px var(--raise-safe-x) 118px !important;
+  padding: 42px var(--raise-safe-x) 154px !important;
   box-sizing: border-box !important;
   background: #000 !important;
 }
@@ -71,94 +64,158 @@ body.raiseai-wear-ready > :not(.raiseai-keep):not(#raiseai-wear-topbar) {
   top: 7px !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
-  width: calc(100vw - 78px) !important;
-  height: 34px !important;
+  width: calc(100vw - 86px) !important;
+  height: 32px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   pointer-events: none !important;
   border-radius: 18px !important;
   color: #d7d7db !important;
-  background: rgba(0, 0, 0, 0.76) !important;
-  font: 600 12px/1 system-ui, sans-serif !important;
-  backdrop-filter: blur(8px) !important;
+  background: rgba(0, 0, 0, 0.68) !important;
+  font: 650 12px/1 system-ui, sans-serif !important;
+  backdrop-filter: blur(9px) !important;
 }
 
+/* Keep ChatGPT's real composer alive for dictation, but move it outside the visible round UI. */
 .raiseai-composer {
   position: fixed !important;
-  z-index: 2147483645 !important;
-  left: 18px !important;
-  right: 18px !important;
-  bottom: 10px !important;
+  z-index: 1 !important;
+  left: 26px !important;
+  right: 26px !important;
+  bottom: -160px !important;
   width: auto !important;
   max-width: none !important;
-  min-height: 76px !important;
-  margin: 0 !important;
-  padding: 8px 8px 8px 13px !important;
-  box-sizing: border-box !important;
-  border: 1px solid #3d3d42 !important;
-  border-radius: 26px !important;
-  background: rgba(31, 31, 34, 0.98) !important;
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.62) !important;
-}
-
-.raiseai-composer button:not(.raiseai-action),
-.raiseai-composer [role="button"]:not(.raiseai-action) {
-  display: none !important;
+  min-height: 82px !important;
+  opacity: 0.001 !important;
+  pointer-events: none !important;
 }
 
 .raiseai-prompt {
   display: block !important;
-  width: calc(100% - 112px) !important;
-  min-width: 0 !important;
   min-height: 52px !important;
-  max-height: 94px !important;
-  margin: 0 !important;
-  padding: 9px 3px !important;
+  max-height: 96px !important;
   overflow-y: auto !important;
-  font-size: 16px !important;
-  line-height: 1.35 !important;
-  color: #fff !important;
-  background: transparent !important;
 }
 
-.raiseai-action {
+#raiseai-voice-shell {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  left: 50% !important;
+  bottom: 12px !important;
+  transform: translateX(-50%) !important;
+  width: calc(100vw - 46px) !important;
+  min-height: 118px !important;
   display: flex !important;
-  position: absolute !important;
-  bottom: 11px !important;
-  width: 48px !important;
-  min-width: 48px !important;
-  height: 48px !important;
-  min-height: 48px !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  box-sizing: border-box !important;
+  padding: 10px 12px 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 34px !important;
+  background: linear-gradient(180deg, rgba(28, 28, 31, 0.90), rgba(15, 15, 17, 0.96)) !important;
+  box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.62) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+#raiseai-voice-status {
+  width: 100% !important;
+  min-height: 16px !important;
+  margin-bottom: 2px !important;
+  text-align: center !important;
+  color: #d7d7db !important;
+  font: 650 12px/1.25 system-ui, sans-serif !important;
+}
+
+#raiseai-transcript {
+  width: 100% !important;
+  min-height: 18px !important;
+  max-height: 36px !important;
+  margin-bottom: 5px !important;
+  overflow: hidden !important;
+  text-align: center !important;
+  color: #fff !important;
+  font: 500 12px/1.35 system-ui, sans-serif !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+}
+
+#raiseai-voice-orb {
+  position: relative !important;
+  width: 68px !important;
+  min-width: 68px !important;
+  height: 68px !important;
+  min-height: 68px !important;
+  display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   padding: 0 !important;
-  border: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 50% !important;
   color: #fff !important;
-  background: #48484d !important;
-  opacity: 1 !important;
-  visibility: visible !important;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(70, 216, 184, 0.52), transparent 34%),
+    radial-gradient(circle at 70% 72%, rgba(16, 163, 127, 0.58), transparent 42%),
+    #1a1a1d !important;
+  box-shadow: 0 0 0 1px rgba(16, 163, 127, 0.16), 0 8px 26px rgba(0, 0, 0, 0.52) !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
-.raiseai-mic {
-  right: 59px !important;
+#raiseai-voice-orb svg {
+  position: relative !important;
+  z-index: 2 !important;
+  width: 30px !important;
+  height: 30px !important;
 }
 
-.raiseai-send {
-  right: 7px !important;
-  background: var(--raise-accent) !important;
+.raiseai-orb-ring {
+  position: absolute !important;
+  inset: -5px !important;
+  border: 2px solid rgba(54, 218, 178, 0.0) !important;
+  border-radius: 50% !important;
+  pointer-events: none !important;
 }
 
-.raiseai-action svg {
-  width: 25px !important;
-  height: 25px !important;
+html[data-raiseai-state="listening"] #raiseai-voice-orb {
+  background:
+    radial-gradient(circle at 30% 28%, rgba(86, 236, 198, 0.68), transparent 34%),
+    radial-gradient(circle at 72% 70%, rgba(16, 163, 127, 0.82), transparent 44%),
+    #14251f !important;
+  box-shadow: 0 0 24px rgba(16, 163, 127, 0.34), 0 8px 26px rgba(0, 0, 0, 0.5) !important;
+}
+
+html[data-raiseai-state="listening"] .raiseai-orb-ring {
+  border-color: rgba(72, 232, 190, 0.72) !important;
+  animation: raiseai-pulse 1.35s ease-out infinite !important;
+}
+
+html[data-raiseai-state="starting"] #raiseai-voice-orb,
+html[data-raiseai-state="finalizing"] #raiseai-voice-orb,
+html[data-raiseai-state="sending"] #raiseai-voice-orb {
+  opacity: 0.84 !important;
+}
+
+@keyframes raiseai-pulse {
+  0% {
+    transform: scale(0.94);
+    opacity: 0.88;
+  }
+  70% {
+    transform: scale(1.18);
+    opacity: 0.15;
+  }
+  100% {
+    transform: scale(1.24);
+    opacity: 0;
+  }
 }
 
 @media (max-height: 330px) {
   .raiseai-main {
     padding-top: 34px !important;
-    padding-bottom: 104px !important;
+    padding-bottom: 138px !important;
   }
 
   #raiseai-wear-topbar {
@@ -166,12 +223,16 @@ body.raiseai-wear-ready > :not(.raiseai-keep):not(#raiseai-wear-topbar) {
     height: 29px !important;
   }
 
-  .raiseai-composer {
-    min-height: 68px !important;
-    bottom: 6px !important;
+  #raiseai-voice-shell {
+    bottom: 7px !important;
+    min-height: 104px !important;
+    padding-top: 7px !important;
   }
 
-  .raiseai-action {
-    bottom: 8px !important;
+  #raiseai-voice-orb {
+    width: 60px !important;
+    min-width: 60px !important;
+    height: 60px !important;
+    min-height: 60px !important;
   }
 }

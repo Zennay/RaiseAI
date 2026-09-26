@@ -70,6 +70,14 @@ class GestureMonitorService : Service(), SensorEventListener {
 
         CalibrationStore.setMonitoringEnabled(this, true)
         applyPowerState(force = true)
+
+        // Warm only the browser engine in the background. The actual ChatGPT page is cached
+        // for a bounded window after use, so fast launch does not mean a hidden page runs 24/7.
+        handler.postDelayed({
+            runCatching { GeckoEngine.prewarm(applicationContext) }
+                .onFailure { Log.w(TAG, "Gecko prewarm failed", it) }
+        }, GECKO_PREWARM_DELAY_MS)
+
         handler.postDelayed(powerStateRunnable, POWER_STATE_CHECK_MS)
         handler.postDelayed(statsFlushRunnable, STATS_FLUSH_MS)
     }
@@ -293,6 +301,7 @@ class GestureMonitorService : Service(), SensorEventListener {
         private const val SENSOR_BATCH_LATENCY_US = 250_000
         private const val POWER_STATE_CHECK_MS = 60_000L
         private const val STATS_FLUSH_MS = 15L * 60L * 1_000L
+        private const val GECKO_PREWARM_DELAY_MS = 2_500L
         const val ACTION_STOP = "nl.zennay.raiseai.STOP_MONITORING"
     }
 }
