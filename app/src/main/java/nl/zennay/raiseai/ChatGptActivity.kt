@@ -122,7 +122,11 @@ class ChatGptActivity : Activity() {
 
         runtime.webExtensionController.ensureBuiltIn(EXTENSION_URI, EXTENSION_ID).accept(
             { extension ->
-                WearBridge.attach(session, extension)
+                if (extension != null) {
+                    WearBridge.attach(session, extension)
+                } else {
+                    showStatus("Wear UI bridge ontbreekt · opnieuw proberen", 4_000L)
+                }
 
                 if (lease.needsInitialLoad) {
                     ChatSessionCache.markNavigationStarted(session)
