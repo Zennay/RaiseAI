@@ -48,6 +48,15 @@ class MainActivity : Activity(), SensorEventListener {
 
         setContentView(buildUi())
         requestNotificationPermissionIfNeeded()
+
+        if (intent.getBooleanExtra(EXTRA_OPEN_CHATGPT_LOGIN, false)) {
+            handler.post {
+                startActivity(
+                    Intent(this, ChatGptActivity::class.java)
+                        .putExtra(ChatGptActivity.EXTRA_TRY_WEBSITE_MIC, false)
+                )
+            }
+        }
     }
 
     override fun onResume() {
@@ -81,7 +90,7 @@ class MainActivity : Activity(), SensorEventListener {
         }, matchWrap())
 
         column.addView(TextView(this).apply {
-            text = "Watch 7 prototype · v1.0"
+            text = "Watch 7 · v1.1"
             setTextColor(Color.LTGRAY)
             textSize = 13f
             gravity = android.view.Gravity.CENTER
@@ -127,12 +136,12 @@ class MainActivity : Activity(), SensorEventListener {
             gravity = android.view.Gravity.CENTER
         }, matchWrap(top = 2, bottom = 6))
 
-        column.addView(button("Open RaiseGPT Wear UI") {
+        column.addView(button("Open Raise AI voice") {
             if (!ChatGptLauncher.launchFromActivity(this)) toast("ChatGPT could not be opened")
         }, matchWrap(bottom = 6))
 
         column.addView(TextView(this).apply {
-            text = "Bundled Wear browser with a compact chat layout, large website microphone and send controls. Log in once; no OpenAI API key is used."
+            text = "Voice-first Wear UI. Raise-to-mouth starts dictation, 4 seconds of silence sends automatically, and the loaded ChatGPT page is kept warm briefly for fast repeat use."
             setTextColor(Color.LTGRAY)
             textSize = 11f
             gravity = android.view.Gravity.CENTER
@@ -354,7 +363,7 @@ class MainActivity : Activity(), SensorEventListener {
             append("\n")
             append(if (Settings.canDrawOverlays(this@MainActivity)) "✓ Hands-free ChatGPT grant" else "○ Hands-free ChatGPT grant missing")
             append("\n")
-            append(if (AssistantSessionGuard(this@MainActivity).hasUsageAccess()) "✓ Assistant session guard" else "○ Session guard fallback: 45 sec")
+            append(if (AssistantSessionGuard(this@MainActivity).hasUsageAccess()) "✓ Assistant session guard" else "○ Session guard fallback: 30 sec")
             append("\n")
             append(if (CalibrationStore.isSleepDndPauseEnabled(this@MainActivity)) "✓ Sleep/DND pause" else "○ Sleep/DND pause off")
         }
@@ -406,6 +415,7 @@ class MainActivity : Activity(), SensorEventListener {
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
     companion object {
+        const val EXTRA_OPEN_CHATGPT_LOGIN = "open_chatgpt_login"
         private const val TRACE_DURATION_MS = 4_000L
     }
 }
