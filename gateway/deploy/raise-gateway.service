@@ -1,0 +1,21 @@
+[Unit]
+Description=Raise AI Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/raise-gateway
+EnvironmentFile=/etc/raise-gateway.env
+ExecStart=/usr/bin/node /opt/raise-gateway/src/server.mjs
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/raise-gateway
+
+[Install]
+WantedBy=multi-user.target

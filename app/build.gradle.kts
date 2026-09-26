@@ -12,8 +12,8 @@ android {
         applicationId = "nl.zennay.raiseai"
         minSdk = 30
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.3.2"
+        versionCode = 16
+        versionName = "1.4.0"
 
         // Target Galaxy Watch reports ro.product.cpu.abi=armeabi-v7a.
         // Keep the browser APK watch-specific instead of producing stale desktop/x86 variants.

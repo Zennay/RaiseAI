@@ -90,7 +90,7 @@ class MainActivity : Activity(), SensorEventListener {
         }, matchWrap())
 
         column.addView(TextView(this).apply {
-            text = "Watch 7 · v1.3.2"
+            text = "Watch 7 · v1.4.0"
             setTextColor(Color.LTGRAY)
             textSize = 13f
             gravity = android.view.Gravity.CENTER
@@ -130,21 +130,33 @@ class MainActivity : Activity(), SensorEventListener {
         }, matchWrap(bottom = 8))
 
         column.addView(TextView(this).apply {
-            text = "ChatGPT Web · no API"
+            text = "Native Raise AI · VPS routed"
             setTextColor(Color.WHITE)
             textSize = 13f
             gravity = android.view.Gravity.CENTER
         }, matchWrap(top = 2, bottom = 6))
 
-        column.addView(button("Open Raise AI voice") {
-            if (!ChatGptLauncher.launchFromActivity(this)) toast("ChatGPT could not be opened")
+        column.addView(button("Open native Raise AI") {
+            if (!NativeVoiceLauncher.launchFromActivity(this)) {
+                toast("Native Raise AI could not be opened")
+            }
         }, matchWrap(bottom = 6))
 
         column.addView(TextView(this).apply {
-            text = "Fullscreen voice-first Wear UI. Raise-to-mouth opens one large microphone surface, about 2 seconds of silence sends automatically, and ChatGPT replies are spoken aloud on the Watch."
+            text = if (GatewayConfig.isConfigured(this@MainActivity)) {
+                "✓ Secure VPS gateway configured"
+            } else {
+                "○ VPS gateway not configured yet"
+            }
             setTextColor(Color.LTGRAY)
             textSize = 11f
             gravity = android.view.Gravity.CENTER
+        }, matchWrap(bottom = 6))
+
+        column.addView(button("Open ChatGPT Web fallback") {
+            if (!ChatGptLauncher.launchFromActivity(this)) {
+                toast("ChatGPT fallback could not be opened")
+            }
         }, matchWrap(bottom = 12))
 
         column.addView(TextView(this).apply {
@@ -361,7 +373,7 @@ class MainActivity : Activity(), SensorEventListener {
             append("\n")
             append(if (enabled) "● Monitoring on" else "○ Monitoring off")
             append("\n")
-            append(if (Settings.canDrawOverlays(this@MainActivity)) "✓ Hands-free ChatGPT grant" else "○ Hands-free ChatGPT grant missing")
+            append(if (Settings.canDrawOverlays(this@MainActivity)) "✓ Hands-free Raise AI grant" else "○ Hands-free Raise AI grant missing")
             append("\n")
             append(if (AssistantSessionGuard(this@MainActivity).hasUsageAccess()) "✓ Assistant session guard" else "○ Session guard fallback: 30 sec")
             append("\n")

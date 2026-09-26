@@ -1,0 +1,141 @@
+import crypto from "node:crypto";
+import { classifyIntent } from "./router.mjs";
+
+const MAX_BODY = 16 * 1024;
+const MAX_TEXT = 4000;
+
+function json(res, status, body) {
+  const payload = Buffer.from(JSON.stringify(body));
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": payload.length,
+    "cache-control": "no-store"
+  });
+  res.end(payload);
+}
+
+function safeTokenEqual(actual, expected) {
+  if (!actual || !expected) return false;
+  const a = Buffer.from(actual);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function bearer(req) {
+  const value = req.headers.authorization ?? "";
+  return value.startsWith("Bearer ") ? value.slice(7) : "";
+}
+
+async function readJson(req) {
+  let size = 0;
+  const chunks = [];
+
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY) {
+      const err = new Error("payload_too_large");
+      err.statusCode = 413;
+      throw err;
+    }
+    chunks.push(chunk);
+  }
+
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  } catch {
+    const err = new Error("invalid_json");
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
+export function createHandler({
+  token,
+  execute = null,
+  now = () => Date.now()
+}) {
+  if (!token || token.length < 32) {
+    throw new Error("RAISE_GATEWAY_TOKEN must be at least 32 characters");
+  }
+
+  const buckets = new Map();
+
+  return async function handler(req, res) {
+    const requestId = crypto.randomUUID();
+
+    if (req.method === "GET" && req.url === "/health") {
+      return json(res, 200, {
+        ok: true,
+        service: "raise-gateway",
+        version: "0.1.0"
+      });
+    }
+
+    if (
+      req.method !== "POST" ||
+      (req.url !== "/v1/route" && req.url !== "/v1/assistant")
+    ) {
+      return json(res, 404, { error: "not_found", requestId });
+    }
+
+    if (!safeTokenEqual(bearer(req), token)) {
+      return json(res, 401, { error: "unauthorized", requestId });
+    }
+
+    const ip = req.socket.remoteAddress ?? "unknown";
+    const minute = Math.floor(now() / 60000);
+    const bucket = buckets.get(ip);
+
+    if (!bucket || bucket.minute !== minute) {
+      buckets.set(ip, { minute, count: 1 });
+    } else if (++bucket.count > 120) {
+      return json(res, 429, { error: "rate_limited", requestId });
+    }
+
+    try {
+      const body = await readJson(req);
+      const text = String(body.text ?? "").trim();
+
+      if (!text) {
+        return json(res, 400, { error: "text_required", requestId });
+      }
+
+      if (text.length > MAX_TEXT) {
+        return json(res, 413, { error: "text_too_long", requestId });
+      }
+
+      const decision = classifyIntent(text);
+      const connectorResult = execute
+        ? await execute(decision, text)
+        : null;
+
+      const execution = connectorResult ?? {
+        enabled: false,
+        reason: "connector_not_configured"
+      };
+
+      return json(res, 200, {
+        requestId,
+        status: execution.answer ? "answered" : "routed",
+        ...decision,
+        execution: {
+          enabled: Boolean(execution.enabled),
+          reason: execution.reason ?? null,
+          provider: execution.provider ?? null,
+          model: execution.model ?? null
+        },
+        answer: execution.answer ?? null
+      });
+    } catch (error) {
+      const publicError =
+        error.message === "invalid_json" || error.message === "payload_too_large"
+          ? error.message
+          : "internal_error";
+
+      return json(res, error.statusCode ?? 500, {
+        error: publicError,
+        requestId
+      });
+    }
+  };
+}

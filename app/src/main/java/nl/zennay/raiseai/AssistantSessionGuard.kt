@@ -32,7 +32,7 @@ class AssistantSessionGuard(private val context: Context) {
         if (foregroundPackage == ChatGptLauncher.SAMSUNG_BROWSER_PACKAGE) return true
 
         if (foregroundPackage == context.packageName) {
-            return WearBridge.shouldBlockGesture()
+            return NativeSessionState.isBusy() || WearBridge.shouldBlockGesture()
         }
 
         if (foregroundPackage != null) return false
