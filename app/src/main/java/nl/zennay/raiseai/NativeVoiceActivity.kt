@@ -220,9 +220,18 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             runCatching { GatewayClient(settings).send(text) }
                 .onSuccess { response ->
                     mainHandler.post {
+                        val backgroundAction =
+                            response.executionEnabled &&
+                                response.answer == null &&
+                                response.route in setOf("zcloud_task", "smart_home")
+
                         setState(
-                            if (response.executionEnabled) "executing" else "replying",
-                            if (response.executionEnabled) "Wordt uitgevoerd" else "Route klaar"
+                            if (backgroundAction) "executing" else "replying",
+                            when {
+                                backgroundAction -> "Wordt uitgevoerd"
+                                response.answer != null -> "Antwoord"
+                                else -> "Route klaar"
+                            }
                         )
 
                         detailText.text = response.answer ?: buildString {
