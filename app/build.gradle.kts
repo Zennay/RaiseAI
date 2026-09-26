@@ -10,8 +10,8 @@ android {
         applicationId = "nl.zennay.raiseai"
         minSdk = 30
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.0.0"
+        versionCode = 11
+        versionName = "1.1.0"
 
         // Galaxy Watch 7 uses arm64. Shipping only that GeckoView binary keeps the APK
         // far smaller than Mozilla's three-architecture AAR.
