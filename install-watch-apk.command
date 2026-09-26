@@ -195,9 +195,9 @@ echo "Installed package:"
   grep -E "versionName=|versionCode=" | head -2
 
 if [ "$(uname -s)" = "Darwin" ] &&
-   [ -x "$SCRIPT_DIR/install-mac-adb-autoconnect.command" ] &&
+   [ -f "$SCRIPT_DIR/install-mac-adb-autoconnect.command" ] &&
    [ ! -f "$STATE_DIR/autoconnect-installed" ]; then
-  "$SCRIPT_DIR/install-mac-adb-autoconnect.command" --quiet || true
+  bash "$SCRIPT_DIR/install-mac-adb-autoconnect.command" --quiet || true
 fi
 
 echo "Race AI installation complete."
