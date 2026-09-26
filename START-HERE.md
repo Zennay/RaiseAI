@@ -1,50 +1,94 @@
-# Raise AI v1.0 — START HERE
+# Raise AI v1.4 — START HERE
 
-## Install the new Wear UI
+Raise AI is now native-first:
 
-The tested Watch has no Android System WebView service, so v1.0 bundles Mozilla GeckoView. ChatGPT now opens inside Raise AI with a compact round-screen layout, a large prompt, microphone and send button.
+**raise-to-mouth → native Watch voice UI → secure VPS router → selected connector/provider → Watch**
 
-## Upgrade from v0.9
+ChatGPT Web and Gemini are retained as fallbacks; they are no longer the primary raise-to-mouth path.
 
-1. Double-click **`upgrade-watch.command`**.
-2. The first build downloads GeckoView and can take several minutes.
-3. Open Raise AI and tap **Open RaiseGPT Wear UI**.
-4. Allow microphone access and log in to ChatGPT once.
-5. Tap the large website microphone. Review the dictated text and press the green send button.
-6. Return to Raise AI and enable raise-to-talk.
-7. A fresh raise now reopens RaiseGPT; Gemini remains available from its separate button for Google Home.
+## 1. Install or upgrade the Watch app
 
-See **`CHATGPT-WEB-SETUP.md`** for login, microphone and security details.
+On the Mac already paired with the Galaxy Watch 7:
 
-## Upgrade from v0.6
-Your Watch is already paired. The fastest route is:
+1. Run `upgrade-watch.command` (or `setup-and-install-watch.command` for a fresh install).
+2. The build must pass the Watch ABI check for `armeabi-v7a`.
+3. Open Raise AI once and allow microphone/notification permissions.
+4. Keep the existing mouth calibration or recalibrate if needed.
+5. Do not remove ChatGPT/Gemini fallback setup yet.
 
-1. Unzip this folder.
-2. Double-click **`upgrade-watch.command`**.
-3. On the Watch confirm:
-   - **✓ Hands-free Gemini grant**
-   - **✓ Gemini session guard**
-   - **✓ Sleep/DND pause**
-4. Keep your existing mouth calibration, or recalibrate if needed.
-5. Enable raise-to-talk.
-6. Test: lower wrist → fresh raise → Gemini opens/listens.
-7. While Gemini is still open, another raise must **not** reopen/reset Gemini.
+## 2. Install the VPS gateway
 
-## What changed in v0.7
-- Re-arm gate: one trigger stays disarmed until your wrist clearly leaves the mouth pose.
-- Gemini session guard: Usage Access checks whether Gemini is still the foreground app.
-- 45-second fallback guard if Usage Access is unavailable.
-- Sleep/DND pause enabled by default; accelerometer monitoring pauses in quiet mode.
-- Lower-power ~10 Hz sensor sampling with batching where supported.
-- Runtime stats for active monitoring, sleep pause and blocked retriggers.
-- Auto-start attempt after reboot/app update when monitoring was enabled.
-- More reliable Watch detection and a self-contained `gradlew` bootstrap.
+On the VPS, from the RaiseAI repository:
 
-## Fresh install
-Use **`setup-and-install-watch.command`**. It finds the Wear OS device via the watch hardware feature instead of guessing from device order.
+```bash
+bash gateway/deploy/install-user-gateway.sh
+```
 
-## ADB grants used by this personal sideload build
-- `SYSTEM_ALERT_WINDOW`: lets a deliberate raise gesture launch Gemini while Raise AI is in the background. Raise AI does not draw overlays.
-- `GET_USAGE_STATS`: lets Raise AI see whether Gemini is still foreground so it can suppress retriggers. GitHub, Google account data and Gemini conversation content are not read by this permission.
+The installer is user-level: it does not require root. It creates:
 
-If the gesture vibrates but Gemini does not open, or Gemini still resets, run `pull-diagnostics.command` and send the output.
+- a persistent systemd user service;
+- a random Raise gateway token;
+- a private TLS key and self-hosted certificate;
+- an SPKI SHA-256 public-key pin;
+- `~/.config/raiseai/watch-gateway.properties` for Watch provisioning.
+
+It does **not** create or copy an OpenAI API key.
+
+## 3. Optional: enable AI provider calls
+
+Provider calls fail closed until a key exists on the VPS.
+
+Add `OPENAI_API_KEY=...` to:
+
+```
+~/.config/raiseai/gateway.env
+```
+
+Then restart:
+
+```bash
+systemctl --user restart raise-gateway
+```
+
+Defaults are cost-aware:
+
+- `quick_ai` → `gpt-5.4-nano`
+- `deep_ai` → `gpt-5.4-mini`
+- `current_info` uses web search only when `RAISE_ENABLE_WEB_SEARCH=1`
+
+Google Home and zCloud execution remain disabled until their own connectors are validated.
+
+## 4. Provision the Watch gateway profile
+
+Copy `watch-gateway.properties` from the VPS to the paired Mac using your normal secure SSH/SCP route.
+
+Then run:
+
+```bash
+bash provision-watch-gateway.command /path/to/watch-gateway.properties
+```
+
+The helper validates HTTPS, the gateway token length and the TLS public-key pin, finds the Wear OS device, and copies the profile into Raise AI's app-private storage. It does not print the token.
+
+The debug APK must already be installed because provisioning uses Android `run-as`.
+
+## 5. Test in this order
+
+1. Open **Native Raise AI** manually.
+2. Speak a short request and confirm the transcript appears.
+3. With no provider key, confirm the Watch reports the route as not configured rather than silently falling back or spending money.
+4. After adding the provider key, test a simple question; it should use the cheap lane.
+5. Test a deliberately complex question; it should use the deeper lane.
+6. Only then enable raise-to-talk and test **lower wrist → fresh raise → native listening**.
+7. Confirm another raise while listening/sending is blocked.
+8. Keep Gemini and ChatGPT Web as fallback until the native path is stable on the physical Watch.
+
+## Security boundary
+
+- OpenAI/provider keys: **VPS only**
+- Gateway token: VPS + app-private Watch storage
+- TLS private key: **VPS only**
+- TLS SPKI pin: public metadata, safe to provision to the Watch
+- No provider keys in Git, APK assets, Watch profile, logs, or request payloads
+
+If native routing fails, use the existing Gemini or ChatGPT Web fallback and collect diagnostics before changing the gesture detector.
