@@ -5,7 +5,8 @@
 - The production debug APK is now **armeabi-v7a-only**, matching the ABI reported by the target Galaxy Watch.
 - Every `assembleDebug` run automatically verifies the APK and fails unless the native library set is exactly `armeabi-v7a`.
 - This prevents x86/x86_64, arm64-only, or stale universal APKs from being handed off again.
-- `install-watch-apk.command` auto-finds/reconnects the Watch, compares Watch ABI with APK ABI before install, retries one dropped ADB connection, and verifies the installed version.
+- `install-watch-apk.command` auto-finds/reconnects the Watch, caches the last endpoint, compares Watch ABI with APK ABI before install, pins this Mac's Android debug signing key for signature-stable upgrades, and verifies the installed version.
+- On macOS, the first successful install also enables `install-mac-adb-autoconnect.command`: a LaunchAgent retries the already-paired Watch every 30 seconds and keeps a backup of the Mac ADB host key. Normal updates should therefore not require re-pairing; pairing is only needed if the Watch itself revokes/forgets the Mac (for example after a factory reset).
 
 ## v1.3: spoken replies + 2-second silence + stronger raise detection
 
