@@ -3,7 +3,15 @@ set -euo pipefail
 
 PACKAGE="nl.zennay.raiseai"
 EXPECTED_ABI="armeabi-v7a"
-SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+if [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+  SDK_DIR="$ANDROID_SDK_ROOT"
+elif [ -n "${ANDROID_HOME:-}" ]; then
+  SDK_DIR="$ANDROID_HOME"
+elif [ "$(uname -s)" = "Darwin" ] && [ -d "$HOME/Library/Android/sdk" ]; then
+  SDK_DIR="$HOME/Library/Android/sdk"
+else
+  SDK_DIR="$HOME/Android/Sdk"
+fi
 ADB="$SDK_DIR/platform-tools/adb"
 APK="${1:-}"
 
@@ -18,17 +26,18 @@ command -v unzip >/dev/null || { echo "unzip is required"; exit 1; }
 "$ADB" start-server >/dev/null
 
 try_mdns_connect() {
-  local endpoint
-  endpoint="$("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect[.]_tcp/ {print $3; exit}')"
-  if [ -n "$endpoint" ]; then
-    echo "Trying Watch reconnect via $endpoint…"
+  local endpoint=""
+  endpoint="$("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect[.]_tcp/ {print $3; exit}' || true)"
+  if [ -n "${endpoint:-}" ]; then
+    echo "Trying Watch reconnect via ${endpoint}..."
     "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
   fi
 }
 
 find_watch() {
+  local serial="" model="" device="" features=""
   "$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
-    [ -z "$serial" ] && continue
+    [ -z "${serial:-}" ] && continue
     model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
     device="$("$ADB" -s "$serial" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
     features="$("$ADB" -s "$serial" shell pm list features 2>/dev/null | tr -d '\r' || true)"
