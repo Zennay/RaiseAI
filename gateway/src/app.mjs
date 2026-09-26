@@ -49,7 +49,11 @@ async function readJson(req) {
   }
 }
 
-export function createHandler({ token, now = () => Date.now() }) {
+export function createHandler({
+  token,
+  execute = null,
+  now = () => Date.now()
+}) {
   if (!token || token.length < 32) {
     throw new Error("RAISE_GATEWAY_TOKEN must be at least 32 characters");
   }
@@ -101,15 +105,26 @@ export function createHandler({ token, now = () => Date.now() }) {
       }
 
       const decision = classifyIntent(text);
+      const connectorResult = execute
+        ? await execute(decision, text)
+        : null;
+
+      const execution = connectorResult ?? {
+        enabled: false,
+        reason: "connector_not_configured"
+      };
 
       return json(res, 200, {
         requestId,
-        status: "routed",
+        status: execution.answer ? "answered" : "routed",
         ...decision,
         execution: {
-          enabled: false,
-          reason: "connector_not_configured"
-        }
+          enabled: Boolean(execution.enabled),
+          reason: execution.reason ?? null,
+          provider: execution.provider ?? null,
+          model: execution.model ?? null
+        },
+        answer: execution.answer ?? null
       });
     } catch (error) {
       const publicError =
