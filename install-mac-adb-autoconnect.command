@@ -1,0 +1,115 @@
+#!/bin/bash
+set -euo pipefail
+
+QUIET="${1:-}"
+STATE_DIR="$HOME/.raiseai"
+BIN_DIR="$STATE_DIR/bin"
+LOG_DIR="$STATE_DIR/logs"
+ENDPOINT_FILE="$STATE_DIR/watch-endpoint"
+PLIST="$HOME/Library/LaunchAgents/nl.zennay.raiseai.adb-autoconnect.plist"
+HELPER="$BIN_DIR/raiseai-adb-autoconnect"
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  [ "$QUIET" = "--quiet" ] || echo "macOS only."
+  exit 0
+fi
+
+SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+ADB="$SDK_DIR/platform-tools/adb"
+[ -x "$ADB" ] || { echo "adb not found at: $ADB"; exit 1; }
+
+mkdir -p "$BIN_DIR" "$LOG_DIR" "$HOME/Library/LaunchAgents"
+
+cat > "$HELPER" <<EOF
+#!/bin/bash
+set -u
+ADB="$ADB"
+STATE_DIR="$STATE_DIR"
+ENDPOINT_FILE="$ENDPOINT_FILE"
+
+"$ADB" start-server >/dev/null 2>&1 || exit 0
+
+find_watch() {
+  local serial="" model=""
+  "$ADB" devices -l 2>/dev/null | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
+    [ -z "${serial:-}" ] && continue
+    model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+    if [ "$model" = "SM_L315F" ]; then
+      printf '%s\n' "$serial"
+      return 0
+    fi
+  done
+}
+
+TARGET="$(find_watch)"
+[ -n "${TARGET:-}" ] && exit 0
+
+if [ -f "$ENDPOINT_FILE" ]; then
+  CACHED="$(tr -d '\r\n' < "$ENDPOINT_FILE")"
+  if [ -n "${CACHED:-}" ]; then
+    "$ADB" connect "$CACHED" >/dev/null 2>&1 || true
+    sleep 1
+    TARGET="$(find_watch)"
+    [ -n "${TARGET:-}" ] && exit 0
+  fi
+fi
+
+ENDPOINT="$("$ADB" mdns services 2>/dev/null |
+  awk '/_adb-tls-connect[.]_tcp/ {print $3; exit}' || true)"
+if [ -n "${ENDPOINT:-}" ]; then
+  "$ADB" connect "$ENDPOINT" >/dev/null 2>&1 || true
+  sleep 1
+  TARGET="$(find_watch)"
+  if [ -n "${TARGET:-}" ]; then
+    mkdir -p "$STATE_DIR"
+    printf '%s\n' "$ENDPOINT" > "$ENDPOINT_FILE"
+  fi
+fi
+EOF
+
+chmod +x "$HELPER"
+
+cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>nl.zennay.raiseai.adb-autoconnect</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$HELPER</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>$LOG_DIR/adb-autoconnect.log</string>
+  <key>StandardErrorPath</key>
+  <string>$LOG_DIR/adb-autoconnect.err.log</string>
+</dict>
+</plist>
+EOF
+
+DOMAIN="gui/$(id -u)"
+launchctl bootout "$DOMAIN" "$PLIST" >/dev/null 2>&1 || true
+launchctl bootstrap "$DOMAIN" "$PLIST"
+launchctl kickstart -k "$DOMAIN/nl.zennay.raiseai.adb-autoconnect" >/dev/null 2>&1 || true
+
+touch "$STATE_DIR/autoconnect-installed"
+
+if [ -f "$HOME/.android/adbkey" ]; then
+  mkdir -p "$STATE_DIR/adb-key-backup"
+  cp -p "$HOME/.android/adbkey" "$STATE_DIR/adb-key-backup/adbkey"
+  [ ! -f "$HOME/.android/adbkey.pub" ] ||
+    cp -p "$HOME/.android/adbkey.pub" "$STATE_DIR/adb-key-backup/adbkey.pub"
+  chmod 600 "$STATE_DIR/adb-key-backup/adbkey" 2>/dev/null || true
+fi
+
+if [ "$QUIET" != "--quiet" ]; then
+  echo "Race AI ADB auto-connect installed."
+  echo "macOS will retry the paired Watch every 30 seconds."
+  echo "Pairing is still required only if the Watch revokes/forgets this Mac."
+fi
