@@ -90,7 +90,7 @@ class MainActivity : Activity(), SensorEventListener {
         }, matchWrap())
 
         column.addView(TextView(this).apply {
-            text = "Watch 7 · v1.3"
+            text = "Watch 7 · v1.3.2"
             setTextColor(Color.LTGRAY)
             textSize = 13f
             gravity = android.view.Gravity.CENTER

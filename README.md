@@ -1,6 +1,13 @@
-# Raise AI v1.3 — Galaxy Watch 7
+# Raise AI v1.3.2 — Galaxy Watch 7
 
-## New in v1.3: spoken replies + 2-second silence + stronger raise detection
+## v1.3.2: ABI-safe Galaxy Watch build
+
+- The production debug APK is now **armeabi-v7a-only**, matching the ABI reported by the target Galaxy Watch.
+- Every `assembleDebug` run automatically verifies the APK and fails unless the native library set is exactly `armeabi-v7a`.
+- This prevents x86/x86_64, arm64-only, or stale universal APKs from being handed off again.
+- `install-watch-apk.command` auto-finds/reconnects the Watch, compares Watch ABI with APK ABI before install, retries one dropped ADB connection, and verifies the installed version.
+
+## v1.3: spoken replies + 2-second silence + stronger raise detection
 
 - ChatGPT replies are read aloud through the Watch TextToSpeech engine.
 - Dictation finalizes after roughly **2 seconds without transcript activity**.
