@@ -85,6 +85,14 @@ ProtectSystem=strict
 WantedBy=default.target
 EOF
 
+if [ -z "${XDG_RUNTIME_DIR:-}" ] && [ -d "/run/user/$(id -u)" ]; then
+  export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
+   [ -S "${XDG_RUNTIME_DIR:-/nonexistent}/bus" ]; then
+  export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+
 systemctl --user daemon-reload
 systemctl --user enable --now raise-gateway.service
 
