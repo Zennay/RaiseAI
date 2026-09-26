@@ -19,6 +19,10 @@ class GatewayClient(private val settings: GatewaySettings) {
         val connection = URL(settings.baseUrl + "/v1/assistant")
             .openConnection() as HttpsURLConnection
 
+        settings.spkiSha256?.let { pin ->
+            connection.sslSocketFactory = PinnedTls.socketFactory(pin)
+        }
+
         connection.requestMethod = "POST"
         connection.connectTimeout = 2_500
         connection.readTimeout = 8_000

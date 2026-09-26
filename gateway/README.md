@@ -38,3 +38,18 @@ Optional overrides:
 - RAISE_ENABLE_WEB_SEARCH=1
 
 The API key belongs in the VPS environment file only. Do not write it to the Watch config, APK, repository, logs, or request payloads.
+## Persistent TLS deployment
+
+`deploy/install-user-gateway.sh` installs the gateway as a systemd **user** service on port 8787. It requires no root access.
+
+The installer creates a self-hosted TLS certificate for the VPS hostname and derives the SHA-256 pin of its Subject Public Key Info (SPKI). The Watch profile contains:
+
+- `url`: HTTPS gateway URL
+- `token`: Raise gateway bearer token
+- `spki_sha256`: public-key pin
+
+The Watch still performs normal hostname verification. The optional pin changes certificate trust from public-CA trust to an exact server public-key trust; it does not disable TLS checks.
+
+Provider API keys are deliberately excluded from the Watch profile.
+
+For a future public-CA/reverse-proxy deployment, omit `spki_sha256` and the Watch falls back to Android's normal system trust store.

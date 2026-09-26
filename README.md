@@ -1,4 +1,15 @@
-# Raise AI v1.3.2 — Galaxy Watch 7
+# Raise AI v1.4.0 — Galaxy Watch 7
+
+## v1.4: native voice + secure VPS router
+
+- Raise-to-mouth now opens a native Wear OS voice surface instead of putting Gecko/ChatGPT Web on the critical path.
+- Dutch speech recognition shows partial transcript text and submits the final utterance to the user's VPS gateway.
+- The gateway routes locally before spending API tokens: smart-home commands, zCloud project work, fresh/current information, cheap AI, and deeper AI are separate lanes.
+- Optional OpenAI Responses API execution is server-side only: quick AI defaults to `gpt-5.4-nano`, deeper requests to `gpt-5.4-mini`; web search is opt-in.
+- Watch → VPS uses HTTPS. A self-hosted certificate can be authenticated with an SPKI SHA-256 pin without disabling hostname verification.
+- The gateway token is provisioned into app-private Watch storage; provider API keys remain on the VPS and are never copied to the APK or Watch profile.
+- ChatGPT Web and Gemini remain explicit fallback paths while native end-to-end validation continues.
+- See `START-HERE.md` and `gateway/README.md` for v1.4 setup.
 
 ## v1.3.2: ABI-safe Galaxy Watch build
 
@@ -54,11 +65,11 @@
 - **Auto-start:** attempts to restart monitoring after reboot/app update if it was enabled.
 - **Installer fixes:** Wear-feature based watch detection, direct APK install, SDK path setup and a self-contained Gradle bootstrap.
 
-Small Wear OS prototype for a **raise-to-mouth → ChatGPT Web** interaction on Samsung Galaxy Watch 7, with a dedicated Wear layout and Gemini retained for Google Home.
+Raise AI is a personal Wear OS **raise-to-mouth → native voice → VPS router** assistant for Samsung Galaxy Watch 7. The VPS decides whether a request should use a low-cost AI model, a stronger model, current-information search, Google Home, or a zCloud worker.
 
-The project deliberately has no backend, database, OpenAI/Gemini API key, phone companion, analytics SDK, or account system. ChatGPT runs as the official website in bundled GeckoView and uses the user's normal website session.
+Provider secrets live only on the VPS. The Watch receives only the Raise gateway URL, a dedicated gateway token, and—when self-hosted TLS is used—the public-key pin. ChatGPT Web and Gemini remain available as fallbacks.
 
-**Start with `START-HERE.md`.** For ChatGPT login/microphone setup see `CHATGPT-WEB-SETUP.md`; for desktop-assisted login see `REMOTE-LOGIN.md`; for Gemini + Google Home see `GEMINI-HOME-SETUP.md`.
+**Start with `START-HERE.md`.** Gateway details live in `gateway/README.md`; legacy ChatGPT Web fallback setup remains in `CHATGPT-WEB-SETUP.md` / `REMOTE-LOGIN.md`; Gemini + Google Home fallback details remain in `GEMINI-HOME-SETUP.md`.
 
 ## What v0.9 fixed
 
