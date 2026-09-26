@@ -3,6 +3,7 @@ const EXECUTION = /\b(ga\s+door|werk\s+verder|fix|repareer|voer\s+uit|uitvoeren|
 const HOME = /\b(google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermostaat|verwarming|speaker|tv|televisie|woonkamer|slaapkamer|keuken)\b/i;
 const HOME_ACTION = /\b(aan|uit|zet|dim|verhoog|verlaag|speel|pauzeer|stop|volume|temperatuur)\b/i;
 const CURRENT = /\b(vandaag|nu|actueel|laatste|nieuwste|recent|weer|temperatuur|nieuws|verkeer|koers|prijs|stand|uitslag)\b/i;
+const DEEP = /\b(analyseer|vergelijk|architectuur|debug|onderzoek|strategie|trade-?off|optimaliseer|ontwerp|implementeer|waarom|stappenplan|code|programmeer)\b/i;
 
 export function classifyIntent(rawText) {
   const text = String(rawText ?? "").trim();
@@ -35,6 +36,16 @@ export function classifyIntent(rawText) {
       connector: "web_search",
       requiresConnector: true,
       reason: "freshness_required"
+    };
+  }
+
+  if (DEEP.test(text) || text.length > 220) {
+    return {
+      route: "deep_ai",
+      target: "ai.reasoning",
+      connector: "llm",
+      requiresConnector: true,
+      reason: DEEP.test(text) ? "complex_request" : "long_request"
     };
   }
 
