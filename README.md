@@ -1,6 +1,17 @@
-# Raise AI v1.0 — Galaxy Watch 7
+# Raise AI v1.1 — Galaxy Watch 7
 
-## New in v1.0: an actual Wear UI
+## New in v1.1: voice-first Raise AI
+
+- Raise-to-mouth now opens the existing ChatGPT Wear shell and asks it to start dictation immediately.
+- A native ↔ WebExtension state bridge prevents a second gesture from restarting the microphone while the current utterance is still listening/finalizing/sending.
+- After the first trigger, the gesture detector must still leave the calibrated mouth pose and re-arm before another trigger can fire.
+- The Wear UI is now a centered round-screen voice surface with a large animated microphone orb and a compact live transcript preview.
+- Dictation auto-sends after roughly **4 seconds without new transcript text**, giving natural pauses more room than short voice-input timeouts.
+- The Gecko engine is prewarmed while monitoring. After ChatGPT has been used, the loaded page is cached for up to 10 minutes instead of keeping a hidden web page alive all day.
+- `login-from-mac.command` provides a one-time desktop-assisted login route through ADB/scrcpy. The actual login and cookies remain on the Watch.
+- Gemini + Google Home remains available as a separate fallback; Raise AI does not proxy Home credentials or commands through its own backend.
+
+## v1.0: an actual Wear UI
 
 - Bundles Mozilla GeckoView, so Raise AI no longer depends on the missing Android System WebView or Samsung Internet UI.
 - Loads the official `chatgpt.com` website in-app and keeps the user's normal web login on the Watch.
@@ -22,7 +33,7 @@ Small Wear OS prototype for a **raise-to-mouth → ChatGPT Web** interaction on 
 
 The project deliberately has no backend, database, OpenAI/Gemini API key, phone companion, analytics SDK, or account system. ChatGPT runs as the official website in bundled GeckoView and uses the user's normal website session.
 
-**Start with `START-HERE.md`.** For ChatGPT login/microphone setup see `CHATGPT-WEB-SETUP.md`; for Gemini + Google Home see `GEMINI-HOME-SETUP.md`.
+**Start with `START-HERE.md`.** For ChatGPT login/microphone setup see `CHATGPT-WEB-SETUP.md`; for desktop-assisted login see `REMOTE-LOGIN.md`; for Gemini + Google Home see `GEMINI-HOME-SETUP.md`.
 
 ## What v0.9 fixed
 
