@@ -15,29 +15,46 @@ Routes:
 - zcloud_task -> long-running project/action work;
 - smart_home -> Google Home connector;
 - current_info -> freshness/search lane;
-- quick_ai -> fast/low-cost LLM lane.
+- quick_ai -> fast/low-cost LLM lane;
+- deep_ai -> deeper LLM lane.
 
-POST /v1/route and POST /v1/assistant currently expose the routing decision.
-They do not pretend a downstream connector ran.
+POST /v1/route and POST /v1/assistant expose the routing decision and, for configured AI lanes, the provider result.
+They never pretend a downstream connector ran.
 
-Secrets belong in /etc/raise-gateway.env, never in the Watch APK or repository.
+Secrets belong in ~/.config/raiseai/gateway.env on the VPS, never in the Watch APK or repository.
 
-## Cost-aware AI provider
+## AI provider: OpenRouter + GLM
 
-The OpenAI lane is optional and disabled until OPENAI_API_KEY exists on the VPS.
+The AI lane uses OpenRouter and is disabled until OPENROUTER_API_KEY exists on the VPS.
 
 Defaults:
-- quick_ai -> gpt-5.4-nano
-- deep_ai -> gpt-5.4-mini
-- current_info -> gpt-5.4-nano + web_search, but only when RAISE_ENABLE_WEB_SEARCH=1
+- quick_ai -> z-ai/glm-5.3-flash
+- deep_ai -> z-ai/glm-5.3-flash
+- fallback -> google/gemini-3.8-flash
+- current_info -> same model chain + OpenRouter web search, only when RAISE_ENABLE_WEB_SEARCH=1
 - smart_home and zcloud_task never fall through to the LLM provider
 
 Optional overrides:
-- RAISE_OPENAI_FAST_MODEL
-- RAISE_OPENAI_DEEP_MODEL
+- RAISE_OPENROUTER_FAST_MODEL
+- RAISE_OPENROUTER_DEEP_MODEL
+- RAISE_OPENROUTER_FALLBACK_MODELS (comma-separated OpenRouter model IDs)
 - RAISE_ENABLE_WEB_SEARCH=1
 
-The API key belongs in the VPS environment file only. Do not write it to the Watch config, APK, repository, logs, or request payloads.
+Example VPS configuration:
+
+```bash
+OPENROUTER_API_KEY=...
+RAISE_OPENROUTER_FAST_MODEL=z-ai/glm-5.3-flash
+RAISE_OPENROUTER_DEEP_MODEL=z-ai/glm-5.3-flash
+RAISE_OPENROUTER_FALLBACK_MODELS=google/gemini-3.8-flash
+```
+
+OpenRouter receives a prioritized model list. It tries GLM first and can fail over to the configured fallback model without any Watch-app change.
+
+The provider API key belongs in the VPS environment file only. Do not write it to the Watch config, APK, repository, logs, or request payloads.
+
+The legacy direct OpenAI provider module remains in the repository only for compatibility/history; it is no longer imported by the production gateway.
+
 ## Persistent TLS deployment
 
 `deploy/install-user-gateway.sh` installs the gateway as a systemd **user** service on port 8787. It requires no root access.

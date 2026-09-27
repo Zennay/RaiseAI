@@ -2,7 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { createHandler } from "./app.mjs";
-import { createOpenAIExecutor } from "./providers/openai.mjs";
+import { createOpenRouterExecutor } from "./providers/openrouter.mjs";
 
 const host = process.env.RAISE_HOST ?? "127.0.0.1";
 const port = Number(process.env.RAISE_PORT ?? "8787");
@@ -14,10 +14,12 @@ if (Boolean(tlsCert) !== Boolean(tlsKey)) {
   throw new Error("RAISE_TLS_CERT and RAISE_TLS_KEY must be set together");
 }
 
-const execute = createOpenAIExecutor({
-  apiKey: process.env.OPENAI_API_KEY ?? "",
-  fastModel: process.env.RAISE_OPENAI_FAST_MODEL ?? "gpt-5.4-nano",
-  deepModel: process.env.RAISE_OPENAI_DEEP_MODEL ?? "gpt-5.4-mini",
+const execute = createOpenRouterExecutor({
+  apiKey: process.env.OPENROUTER_API_KEY ?? "",
+  fastModel: process.env.RAISE_OPENROUTER_FAST_MODEL ?? "z-ai/glm-5.3-flash",
+  deepModel: process.env.RAISE_OPENROUTER_DEEP_MODEL ?? "z-ai/glm-5.3-flash",
+  fallbackModels:
+    process.env.RAISE_OPENROUTER_FALLBACK_MODELS ?? "google/gemini-3.8-flash",
   allowWebSearch: process.env.RAISE_ENABLE_WEB_SEARCH === "1"
 });
 
