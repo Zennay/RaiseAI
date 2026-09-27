@@ -1,6 +1,6 @@
-# Raise AI v1.4 — START HERE
+# Raise AI v1.5 — START HERE
 
-Raise AI is now native-first:
+Raise AI is native-first:
 
 **raise-to-mouth → native Watch voice UI → secure VPS router → selected connector/provider → Watch**
 
@@ -32,16 +32,23 @@ The installer is user-level: it does not require root. It creates:
 - an SPKI SHA-256 public-key pin;
 - `~/.config/raiseai/watch-gateway.properties` for Watch provisioning.
 
-It does **not** create or copy an OpenAI API key.
+It does **not** create or copy an OpenRouter API key.
 
-## 3. Optional: enable AI provider calls
+## 3. Enable GLM through OpenRouter
 
-Provider calls fail closed until a key exists on the VPS.
+Provider calls fail closed until an OpenRouter key exists on the VPS.
 
-Add `OPENAI_API_KEY=...` to:
+Add this to:
 
 ```
 ~/.config/raiseai/gateway.env
+```
+
+```bash
+OPENROUTER_API_KEY=sk-or-v1-...
+RAISE_OPENROUTER_FAST_MODEL=z-ai/glm-5.3-flash
+RAISE_OPENROUTER_DEEP_MODEL=z-ai/glm-5.3-flash
+RAISE_OPENROUTER_FALLBACK_MODELS=google/gemini-3.8-flash
 ```
 
 Then restart:
@@ -50,11 +57,15 @@ Then restart:
 systemctl --user restart raise-gateway
 ```
 
-Defaults are cost-aware:
+Defaults are cost-aware and Watch-first:
 
-- `quick_ai` → `gpt-5.4-nano`
-- `deep_ai` → `gpt-5.4-mini`
-- `current_info` uses web search only when `RAISE_ENABLE_WEB_SEARCH=1`
+- `quick_ai` → `z-ai/glm-5.3-flash`
+- `deep_ai` → `z-ai/glm-5.3-flash`
+- automatic model fallback → `google/gemini-3.8-flash`
+- `current_info` uses OpenRouter web search only when `RAISE_ENABLE_WEB_SEARCH=1`
+- `smart_home` and `zcloud_task` do not call an LLM
+
+The Watch does not know or store the OpenRouter key or provider model IDs.
 
 Google Home and zCloud execution remain disabled until their own connectors are validated.
 
@@ -76,16 +87,17 @@ The debug APK must already be installed because provisioning uses Android `run-a
 
 1. Open **Native Raise AI** manually.
 2. Speak a short request and confirm the transcript appears.
-3. With no provider key, confirm the Watch reports the route as not configured rather than silently falling back or spending money.
-4. After adding the provider key, test a simple question; it should use the cheap lane.
-5. Test a deliberately complex question; it should use the deeper lane.
-6. Only then enable raise-to-talk and test **lower wrist → fresh raise → native listening**.
-7. Confirm another raise while listening/sending is blocked.
-8. Keep Gemini and ChatGPT Web as fallback until the native path is stable on the physical Watch.
+3. With no provider key, confirm the Watch reports `openrouter_not_configured` rather than silently falling back or spending money.
+4. Add the OpenRouter key and ask a simple question; the response should report GLM 5.3 Flash as the serving model unless OpenRouter had to fail over.
+5. Test a deliberately complex question and confirm the `deep_ai` lane still uses the configured GLM model chain.
+6. Enable `RAISE_ENABLE_WEB_SEARCH=1` only if current-info queries should be allowed to incur search cost, then test a fresh-information question.
+7. Only then enable raise-to-talk and test **lower wrist → fresh raise → native listening**.
+8. Confirm another raise while listening/sending is blocked.
+9. Keep Gemini and ChatGPT Web as UI fallbacks until the native path is stable on the physical Watch.
 
 ## Security boundary
 
-- OpenAI/provider keys: **VPS only**
+- OpenRouter/provider keys: **VPS only**
 - Gateway token: VPS + app-private Watch storage
 - TLS private key: **VPS only**
 - TLS SPKI pin: public metadata, safe to provision to the Watch
