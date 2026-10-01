@@ -140,5 +140,23 @@ await check("zcloud_dependency_probe", async () => {
 
 const ok = checks.every(item => item.ok);
 const degraded = checks.some(item => item.degraded === true);
-console.log(JSON.stringify({ ok, degraded, host: baseUrl.hostname, checks }, null, 2));
+const report = {
+  ok,
+  degraded,
+  host: baseUrl.hostname,
+  expected_revision: expectedRevision,
+  checks
+};
+
+const reportPath = process.env.RAISE_SMOKE_REPORT ?? "";
+if (reportPath) {
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n", {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  fs.chmodSync(reportPath, 0o600);
+}
+
+console.log(JSON.stringify(report, null, 2));
 process.exit(ok ? 0 : 1);
