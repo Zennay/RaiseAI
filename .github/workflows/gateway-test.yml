@@ -28,6 +28,8 @@ jobs:
         run: |
           bash -n deploy/install-user-gateway.sh
           bash -n deploy/assert-idempotent-redeploy.sh
+          node --check deploy/readiness-policy.mjs
+          node --check deploy/wait-for-live.mjs
           node --check deploy/smoke-live.mjs
           node --check deploy/write-deploy-evidence.mjs
           node --check src/server.mjs
