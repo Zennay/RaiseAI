@@ -94,7 +94,9 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
 fi
 
 systemctl --user daemon-reload
-systemctl --user enable --now raise-gateway.service
+systemctl --user enable raise-gateway.service
+# restart (not just start) so a redeploy never keeps serving the previously loaded code
+systemctl --user restart raise-gateway.service
 
 cat > "$WATCH_PROFILE" <<EOF
 url=https://$PUBLIC_HOST:$PORT
@@ -103,7 +105,7 @@ spki_sha256=$SPKI_SHA256
 EOF
 chmod 600 "$WATCH_PROFILE"
 
-sleep 1
+sleep 2
 curl --fail --silent --show-error   --cacert "$CERT"   "https://$PUBLIC_HOST:$PORT/health"
 printf '\n'
 
