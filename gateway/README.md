@@ -105,3 +105,10 @@ A gateway deployment is gated by the live health endpoint, exact revision attest
 Every self-hosted gateway deploy writes `raise-gateway-deploy-evidence.json` and uploads it as the GitHub Actions artifact `raise-gateway-deploy-evidence-<run-id>`. The schema records the workflow run/attempt, commit, observed live revision, systemd active/sub-state and the deploy, first-smoke, idempotent-redeploy and repeat-smoke outcomes.
 
 The artifact is intentionally assembled from a fixed allowlist. Gateway bearer tokens, provider API keys, TLS private keys and the full server environment are never serialized. Evidence generation runs under `if: always()`, so failed deployments still leave a machine-readable record when the runner can execute the evidence step.
+
+
+### Revision-aware restart readiness
+
+The installer no longer assumes that a restarted service is live after a fixed sleep. It now runs `deploy/wait-for-live.mjs`, which polls the TLS `/health` endpoint for up to 30 seconds and only succeeds when the gateway reports `ok: true` **and** the exact expected deploy revision. This makes slower systemd restarts deterministic instead of flaky.
+
+Both the initial deploy and the repeat/idempotency deploy write a secret-safe readiness report. The deploy workflow uploads `raise-ready-initial.json` and `raise-ready-repeat.json` alongside the main deployment evidence artifact. These reports contain only host, expected/live revision, attempt count, elapsed time and the readiness reason; bearer tokens and provider credentials are never serialized.
