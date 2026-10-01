@@ -99,3 +99,9 @@ The deploy workflow deliberately runs the installer a second time with the same 
 ### Dependency-aware smoke policy
 
 A gateway deployment is gated by the live health endpoint, exact revision attestation and authentication behavior. The zCloud connector is probed separately because zCloud may be temporarily unavailable while the Raise gateway itself is correctly deployed. In the default deployment workflow, `zcloud_unavailable` is reported as a degraded dependency and does not roll back or fail the gateway deploy. Set `RAISE_REQUIRE_ZCLOUD=1` when a strict connector-availability gate is desired.
+
+### Machine-readable deployment evidence
+
+Every self-hosted gateway deploy writes `raise-gateway-deploy-evidence.json` and uploads it as the GitHub Actions artifact `raise-gateway-deploy-evidence-<run-id>`. The schema records the workflow run/attempt, commit, observed live revision, systemd active/sub-state and the deploy, first-smoke, idempotent-redeploy and repeat-smoke outcomes.
+
+The artifact is intentionally assembled from a fixed allowlist. Gateway bearer tokens, provider API keys, TLS private keys and the full server environment are never serialized. Evidence generation runs under `if: always()`, so failed deployments still leave a machine-readable record when the runner can execute the evidence step.
