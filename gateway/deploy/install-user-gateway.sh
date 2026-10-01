@@ -112,9 +112,9 @@ spki_sha256=$SPKI_SHA256
 EOF
 chmod 600 "$WATCH_PROFILE"
 
-sleep 2
-curl --fail --silent --show-error   --cacert "$CERT"   "https://$PUBLIC_HOST:$PORT/health"
-printf '\n'
+RAISE_EXPECTED_REVISION="$DEPLOY_REVISION" \
+RAISE_READY_URL="https://$PUBLIC_HOST:$PORT" \
+node "$SCRIPT_DIR/wait-for-live.mjs"
 
 echo "Raise gateway installed."
 echo "URL: https://$PUBLIC_HOST:$PORT"
