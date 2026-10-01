@@ -71,16 +71,26 @@ Provider API keys are deliberately excluded from the Watch profile.
 
 For a future public-CA/reverse-proxy deployment, omit `spki_sha256` and the Watch falls back to Android's normal system trust store.
 
+### Exact-revision deploy attestation
+
+Automated deployments set `RAISE_DEPLOY_REVISION` to the GitHub commit SHA. The gateway exposes that non-secret revision on `GET /health`, and the live smoke test compares it to `github.sha`. This means a green deploy workflow proves the service restarted onto the exact commit that triggered the run instead of merely proving that some gateway process is healthy.
+
 ## Live smoke test (VPS)
 
 After a deploy, run on the VPS as the gateway user:
 
 ```bash
-node gateway/deploy/smoke-live.mjs
+RAISE_EXPECTED_REVISION=<expected-commit-sha> node gateway/deploy/smoke-live.mjs
 ```
 
 It reads the token and TLS certificate from `~/.config/raiseai/` (never printed) and
-only exercises side-effect-free paths: `/health`, an unauthenticated request (must be
-401) and an authenticated custom zCloud task, which the connector must refuse
-(`zcloud_custom_task_not_supported`). A pass proves the live gateway reaches zCloud
-without starting or pushing any project. Exit code is non-zero on any failed check.
+only exercises side-effect-free paths: `/health` with exact revision matching, an
+unauthenticated request (must be 401) and an authenticated custom zCloud task, which
+the connector must refuse (`zcloud_custom_task_not_supported`). A pass proves the
+live gateway is the expected revision and reaches zCloud without starting or pushing
+any project. Exit code is non-zero on any failed check.
+
+
+### Idempotency proof
+
+The deploy workflow deliberately runs the installer a second time with the same revision. `deploy/assert-idempotent-redeploy.sh` verifies, without printing secrets, that the gateway bearer token, TLS public key and deploy revision are unchanged across the repeat deployment. A second exact-revision smoke then proves the restarted service is still healthy and serving the intended commit.

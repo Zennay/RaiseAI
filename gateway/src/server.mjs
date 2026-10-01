@@ -10,6 +10,7 @@ const port = Number(process.env.RAISE_PORT ?? "8787");
 const token = process.env.RAISE_GATEWAY_TOKEN ?? "";
 const tlsCert = process.env.RAISE_TLS_CERT ?? "";
 const tlsKey = process.env.RAISE_TLS_KEY ?? "";
+const revision = process.env.RAISE_DEPLOY_REVISION ?? "unknown";
 
 if (Boolean(tlsCert) !== Boolean(tlsKey)) {
   throw new Error("RAISE_TLS_CERT and RAISE_TLS_KEY must be set together");
@@ -32,7 +33,7 @@ const execute = async (decision, text) =>
   (await executeZCloud(decision, text)) ??
   (await executeOpenRouter(decision, text));
 
-const handler = createHandler({ token, execute });
+const handler = createHandler({ token, execute, revision });
 const server = tlsCert
   ? https.createServer({
       cert: fs.readFileSync(tlsCert),
@@ -50,6 +51,7 @@ server.listen(port, host, () => {
     event: "raise_gateway_started",
     host,
     port,
-    tls: Boolean(tlsCert)
+    tls: Boolean(tlsCert),
+    revision
   }));
 });

@@ -5,6 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GATEWAY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PUBLIC_HOST="${RAISE_PUBLIC_HOST:-$(hostname -f)}"
 PORT="${RAISE_PUBLIC_PORT:-8787}"
+DEPLOY_REVISION="${RAISE_DEPLOY_REVISION:-unknown}"
+
+if [[ ! "$DEPLOY_REVISION" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
+  echo "Invalid RAISE_DEPLOY_REVISION" >&2
+  exit 1
+fi
 
 CONFIG_DIR="$HOME/.config/raiseai"
 TLS_DIR="$CONFIG_DIR/tls"
@@ -59,6 +65,7 @@ upsert_env RAISE_PORT "$PORT"
 upsert_env RAISE_GATEWAY_TOKEN "$TOKEN"
 upsert_env RAISE_TLS_CERT "$CERT"
 upsert_env RAISE_TLS_KEY "$KEY"
+upsert_env RAISE_DEPLOY_REVISION "$DEPLOY_REVISION"
 
 rm -rf "$INSTALL_DIR/src"
 cp -a "$GATEWAY_ROOT/src" "$INSTALL_DIR/src"
@@ -112,5 +119,6 @@ printf '\n'
 echo "Raise gateway installed."
 echo "URL: https://$PUBLIC_HOST:$PORT"
 echo "SPKI SHA-256: $SPKI_SHA256"
+echo "Revision: $DEPLOY_REVISION"
 echo "Watch profile: $WATCH_PROFILE"
 echo "Provider API keys remain only in: $ENV_FILE"

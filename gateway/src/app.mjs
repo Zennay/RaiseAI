@@ -52,7 +52,8 @@ async function readJson(req) {
 export function createHandler({
   token,
   execute = null,
-  now = () => Date.now()
+  now = () => Date.now(),
+  revision = "unknown"
 }) {
   if (!token || token.length < 32) {
     throw new Error("RAISE_GATEWAY_TOKEN must be at least 32 characters");
@@ -67,7 +68,8 @@ export function createHandler({
       return json(res, 200, {
         ok: true,
         service: "raise-gateway",
-        version: "0.1.0"
+        version: "0.1.0",
+        revision
       });
     }
 

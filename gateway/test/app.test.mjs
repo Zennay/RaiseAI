@@ -5,8 +5,8 @@ import { createHandler } from "../src/app.mjs";
 
 const TOKEN = "test-token-abcdefghijklmnopqrstuvwxyz-123456";
 
-async function withServer(fn) {
-  const server = http.createServer(createHandler({ token: TOKEN }));
+async function withServer(fn, options = {}) {
+  const server = http.createServer(createHandler({ token: TOKEN, ...options }));
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
 
@@ -17,15 +17,26 @@ async function withServer(fn) {
   }
 }
 
-test("health is public and minimal", async () => {
+test("health is public and includes deploy revision", async () => {
   await withServer(async base => {
     const res = await fetch(base + "/health");
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), {
       ok: true,
       service: "raise-gateway",
-      version: "0.1.0"
+      version: "0.1.0",
+      revision: "test-revision-123"
     });
+  }, { revision: "test-revision-123" });
+});
+
+test("health revision defaults to unknown", async () => {
+  await withServer(async base => {
+    const res = await fetch(base + "/health");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.revision, "unknown");
+    assert.equal("token" in body, false);
   });
 });
 
