@@ -70,3 +70,17 @@ The Watch still performs normal hostname verification. The optional pin changes 
 Provider API keys are deliberately excluded from the Watch profile.
 
 For a future public-CA/reverse-proxy deployment, omit `spki_sha256` and the Watch falls back to Android's normal system trust store.
+
+## Live smoke test (VPS)
+
+After a deploy, run on the VPS as the gateway user:
+
+```bash
+node gateway/deploy/smoke-live.mjs
+```
+
+It reads the token and TLS certificate from `~/.config/raiseai/` (never printed) and
+only exercises side-effect-free paths: `/health`, an unauthenticated request (must be
+401) and an authenticated custom zCloud task, which the connector must refuse
+(`zcloud_custom_task_not_supported`). A pass proves the live gateway reaches zCloud
+without starting or pushing any project. Exit code is non-zero on any failed check.
