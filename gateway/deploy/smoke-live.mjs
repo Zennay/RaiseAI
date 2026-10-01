@@ -107,11 +107,30 @@ await check("unauthenticated_rejected", async () => {
   return { status };
 });
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 await check("zcloud_connector_custom_task_refused", async () => {
-  const { status, json } = await request("POST", "/v1/assistant", {
-    auth: true,
-    body: { text: "Ga door met Raise AI en fix de zaak" }
-  });
+  // zCloud's local API (port 8765) restarts periodically (self-heal probe),
+  // which briefly surfaces as reason "zcloud_unavailable" from the connector.
+  // Retry only that specific transient condition so a momentary zCloud
+  // restart doesn't fail an otherwise-healthy gateway deploy; any other
+  // reason/status still fails immediately on the first attempt.
+  const maxAttempts = 4;
+  let status, json;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    ({ status, json } = await request("POST", "/v1/assistant", {
+      auth: true,
+      body: { text: "Ga door met Raise AI en fix de zaak" }
+    }));
+    const transient = status === 200 && json?.execution?.reason === "zcloud_unavailable";
+    if (transient && attempt < maxAttempts) {
+      await sleep(2_000);
+      continue;
+    }
+    break;
+  }
   expect(status === 200, `expected 200, got ${status}`);
   expect(json?.route === "zcloud_task", `route was ${json?.route}`);
   expect(
