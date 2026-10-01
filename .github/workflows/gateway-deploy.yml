@@ -35,6 +35,7 @@ jobs:
         id: deploy
         env:
           RAISE_DEPLOY_REVISION: ${{ github.sha }}
+          RAISE_READY_REPORT: ${{ runner.temp }}/raise-ready-initial.json
         run: bash deploy/install-user-gateway.sh
 
       - name: Live smoke verification (exact revision, no side effects)
@@ -48,6 +49,7 @@ jobs:
         id: idempotency
         env:
           RAISE_DEPLOY_REVISION: ${{ github.sha }}
+          RAISE_READY_REPORT: ${{ runner.temp }}/raise-ready-repeat.json
         run: bash deploy/assert-idempotent-redeploy.sh
 
       - name: Live smoke after repeat deploy
@@ -78,9 +80,9 @@ jobs:
           node deploy/write-deploy-evidence.mjs
           {
             echo '### Machine-readable deploy evidence'
-            echo '```json'
+            echo '\`\`\`json'
             cat "$RAISE_EVIDENCE_PATH"
-            echo '```'
+            echo '\`\`\`'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload deploy evidence artifact
@@ -88,6 +90,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: raise-gateway-deploy-evidence-${{ github.run_id }}
-          path: ${{ runner.temp }}/raise-gateway-deploy-evidence.json
+          path: |
+            ${{ runner.temp }}/raise-gateway-deploy-evidence.json
+            ${{ runner.temp }}/raise-ready-initial.json
+            ${{ runner.temp }}/raise-ready-repeat.json
           if-no-files-found: error
           retention-days: 30
