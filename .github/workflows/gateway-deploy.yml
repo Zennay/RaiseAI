@@ -96,3 +96,10 @@ jobs:
             ${{ runner.temp }}/raise-ready-repeat.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Gate workflow on deploy evidence contract
+        if: always()
+        env:
+          RAISE_EVIDENCE_PATH: ${{ runner.temp }}/raise-gateway-deploy-evidence.json
+          RAISE_EXPECTED_REVISION: ${{ github.sha }}
+        run: node deploy/validate-deploy-evidence.mjs
