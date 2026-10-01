@@ -94,3 +94,8 @@ any project. Exit code is non-zero on any failed check.
 ### Idempotency proof
 
 The deploy workflow deliberately runs the installer a second time with the same revision. `deploy/assert-idempotent-redeploy.sh` verifies, without printing secrets, that the gateway bearer token, TLS public key and deploy revision are unchanged across the repeat deployment. A second exact-revision smoke then proves the restarted service is still healthy and serving the intended commit.
+
+
+### Dependency-aware smoke policy
+
+A gateway deployment is gated by the live health endpoint, exact revision attestation and authentication behavior. The zCloud connector is probed separately because zCloud may be temporarily unavailable while the Raise gateway itself is correctly deployed. In the default deployment workflow, `zcloud_unavailable` is reported as a degraded dependency and does not roll back or fail the gateway deploy. Set `RAISE_REQUIRE_ZCLOUD=1` when a strict connector-availability gate is desired.
