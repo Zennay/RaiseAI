@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 // Live smoke test for the deployed Raise gateway (run on the VPS).
 //
-// Only exercises paths WITHOUT side effects:
-//   - GET /health, including exact deployed-revision attestation when expected;
-//   - unauthenticated request is rejected (401);
-//   - authenticated zcloud_task request for a *custom* task, which the zCloud
-//     connector must refuse ("zcloud_custom_task_not_supported") without
-//     queueing anything. This proves the live gateway -> zCloud connector wiring
-//     (GET /api/runner-targets reachable, project resolved) without starting
-//     or pushing any project.
+// Hard deploy gates:
+//   - GET /health is healthy and serves the exact expected revision;
+//   - unauthenticated assistant requests are rejected (401).
+//
+// Dependency probe:
+//   - authenticated custom zCloud task must route to the zCloud connector;
+//   - normal refusal proves the connector is reachable;
+//   - zcloud_unavailable is reported as degraded but does not fail a gateway
+//     deployment unless RAISE_REQUIRE_ZCLOUD=1 is explicitly requested.
 //
 // The gateway token is read from the local env file and is never printed.
 import fs from "node:fs";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
+import { evaluateZCloudProbe } from "./smoke-policy.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
@@ -36,6 +38,7 @@ const baseUrl = new URL(process.env.RAISE_SMOKE_URL ?? profile.get("url") ?? "")
 const certFile = env.get("RAISE_TLS_CERT") ?? "";
 const expectedRevision =
   process.env.RAISE_EXPECTED_REVISION ?? env.get("RAISE_DEPLOY_REVISION") ?? "";
+const requireZCloud = process.env.RAISE_REQUIRE_ZCLOUD === "1";
 
 if (token.length < 32) throw new Error("gateway token missing or too short");
 if (!certFile) throw new Error("RAISE_TLS_CERT not configured");
@@ -114,21 +117,28 @@ await check("unauthenticated_rejected", async () => {
   return { status };
 });
 
-await check("zcloud_connector_custom_task_refused", async () => {
+await check("zcloud_dependency_probe", async () => {
   const { status, json } = await request("POST", "/v1/assistant", {
     auth: true,
     body: { text: "Ga door met Raise AI en fix de zaak" }
   });
-  expect(status === 200, `expected 200, got ${status}`);
-  expect(json?.route === "zcloud_task", `route was ${json?.route}`);
-  expect(
-    json?.execution?.reason === "zcloud_custom_task_not_supported",
-    `reason was ${json?.execution?.reason}`
-  );
-  expect(json?.execution?.provider === "zcloud", "provider was not zcloud");
-  return { status, route: json.route, reason: json.execution.reason };
+
+  const result = evaluateZCloudProbe({
+    status,
+    json,
+    requireZCloud
+  });
+
+  expect(result.ok, `zCloud dependency probe failed: ${result.reason}`);
+  return {
+    status,
+    route: json?.route ?? null,
+    reason: result.reason,
+    degraded: result.degraded
+  };
 });
 
 const ok = checks.every(item => item.ok);
-console.log(JSON.stringify({ ok, host: baseUrl.hostname, checks }, null, 2));
+const degraded = checks.some(item => item.degraded === true);
+console.log(JSON.stringify({ ok, degraded, host: baseUrl.hostname, checks }, null, 2));
 process.exit(ok ? 0 : 1);

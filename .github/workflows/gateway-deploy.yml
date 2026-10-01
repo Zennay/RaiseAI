@@ -56,4 +56,10 @@ jobs:
         run: |
           echo "workflow_run_id=${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
           echo "commit=${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
-          systemctl --user show raise-gateway.service -p ActiveState -p SubState -p ExecMainStartTimestamp >> "$GITHUB_STEP_SUMMARY" || true
+          export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+          if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+            export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          fi
+          systemctl --user show raise-gateway.service \
+            -p ActiveState -p SubState -p ExecMainStartTimestamp \
+            >> "$GITHUB_STEP_SUMMARY" || true
