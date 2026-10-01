@@ -32,34 +32,62 @@ jobs:
             "https://$(hostname -f):${RAISE_PORT:-8787}/health" || echo "baseline unreachable (expected on first install)"
 
       - name: Install / restart gateway (idempotent)
+        id: deploy
         env:
           RAISE_DEPLOY_REVISION: ${{ github.sha }}
         run: bash deploy/install-user-gateway.sh
 
       - name: Live smoke verification (exact revision, no side effects)
+        id: smoke_initial
         env:
           RAISE_EXPECTED_REVISION: ${{ github.sha }}
+          RAISE_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-initial.json
         run: node deploy/smoke-live.mjs
 
       - name: Prove repeat deploy is idempotent
+        id: idempotency
         env:
           RAISE_DEPLOY_REVISION: ${{ github.sha }}
         run: bash deploy/assert-idempotent-redeploy.sh
 
       - name: Live smoke after repeat deploy
+        id: smoke_repeat
         env:
           RAISE_EXPECTED_REVISION: ${{ github.sha }}
+          RAISE_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-repeat.json
         run: node deploy/smoke-live.mjs
 
-      - name: Record deploy evidence
+      - name: Record machine-readable deploy evidence
+        id: evidence
         if: always()
+        env:
+          RAISE_EVIDENCE_PATH: ${{ runner.temp }}/raise-gateway-deploy-evidence.json
+          RAISE_INITIAL_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-initial.json
+          RAISE_REPEAT_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-repeat.json
+          RAISE_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          RAISE_INITIAL_SMOKE_OUTCOME: ${{ steps.smoke_initial.outcome }}
+          RAISE_IDEMPOTENCY_OUTCOME: ${{ steps.idempotency.outcome }}
+          RAISE_REPEAT_SMOKE_OUTCOME: ${{ steps.smoke_repeat.outcome }}
         run: |
-          echo "workflow_run_id=${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
-          echo "commit=${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
           export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
           if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
             export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
           fi
-          systemctl --user show raise-gateway.service \
-            -p ActiveState -p SubState -p ExecMainStartTimestamp \
-            >> "$GITHUB_STEP_SUMMARY" || true
+          export RAISE_SYSTEMD_ACTIVE_STATE="$(systemctl --user show raise-gateway.service -p ActiveState --value 2>/dev/null || true)"
+          export RAISE_SYSTEMD_SUB_STATE="$(systemctl --user show raise-gateway.service -p SubState --value 2>/dev/null || true)"
+          node deploy/write-deploy-evidence.mjs
+          {
+            echo '### Machine-readable deploy evidence'
+            echo '```json'
+            cat "$RAISE_EVIDENCE_PATH"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload deploy evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raise-gateway-deploy-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/raise-gateway-deploy-evidence.json
+          if-no-files-found: error
+          retention-days: 30
