@@ -32,9 +32,13 @@ jobs:
             "https://$(hostname -f):${RAISE_PORT:-8787}/health" || echo "baseline unreachable (expected on first install)"
 
       - name: Install / restart gateway (idempotent)
+        env:
+          RAISE_DEPLOY_REVISION: ${{ github.sha }}
         run: bash deploy/install-user-gateway.sh
 
-      - name: Live smoke verification (no side effects)
+      - name: Live smoke verification (exact revision, no side effects)
+        env:
+          RAISE_EXPECTED_REVISION: ${{ github.sha }}
         run: node deploy/smoke-live.mjs
 
       - name: Record deploy evidence

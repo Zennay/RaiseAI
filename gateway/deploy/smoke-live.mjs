@@ -2,8 +2,8 @@
 // Live smoke test for the deployed Raise gateway (run on the VPS).
 //
 // Only exercises paths WITHOUT side effects:
-//   - GET /health
-//   - unauthenticated request is rejected (401)
+//   - GET /health, including exact deployed-revision attestation when expected;
+//   - unauthenticated request is rejected (401);
 //   - authenticated zcloud_task request for a *custom* task, which the zCloud
 //     connector must refuse ("zcloud_custom_task_not_supported") without
 //     queueing anything. This proves the live gateway -> zCloud connector wiring
@@ -34,9 +34,12 @@ const profile = readKeyValueFile(path.join(configDir, "watch-gateway.properties"
 const token = env.get("RAISE_GATEWAY_TOKEN") ?? "";
 const baseUrl = new URL(process.env.RAISE_SMOKE_URL ?? profile.get("url") ?? "");
 const certFile = env.get("RAISE_TLS_CERT") ?? "";
+const expectedRevision =
+  process.env.RAISE_EXPECTED_REVISION ?? env.get("RAISE_DEPLOY_REVISION") ?? "";
 
 if (token.length < 32) throw new Error("gateway token missing or too short");
 if (!certFile) throw new Error("RAISE_TLS_CERT not configured");
+if (!expectedRevision) throw new Error("expected deploy revision missing");
 
 const ca = fs.readFileSync(certFile);
 
@@ -93,10 +96,14 @@ function expect(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-await check("health", async () => {
+await check("health_revision", async () => {
   const { status, json } = await request("GET", "/health");
   expect(status === 200 && json?.ok === true, `unexpected health ${status}`);
-  return { status };
+  expect(
+    json?.revision === expectedRevision,
+    `live revision ${json?.revision ?? "missing"} != expected ${expectedRevision}`
+  );
+  return { status, revision: json.revision };
 });
 
 await check("unauthenticated_rejected", async () => {
