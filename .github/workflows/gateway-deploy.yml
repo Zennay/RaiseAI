@@ -41,6 +41,16 @@ jobs:
           RAISE_EXPECTED_REVISION: ${{ github.sha }}
         run: node deploy/smoke-live.mjs
 
+      - name: Prove repeat deploy is idempotent
+        env:
+          RAISE_DEPLOY_REVISION: ${{ github.sha }}
+        run: bash deploy/assert-idempotent-redeploy.sh
+
+      - name: Live smoke after repeat deploy
+        env:
+          RAISE_EXPECTED_REVISION: ${{ github.sha }}
+        run: node deploy/smoke-live.mjs
+
       - name: Record deploy evidence
         if: always()
         run: |

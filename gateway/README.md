@@ -89,3 +89,8 @@ unauthenticated request (must be 401) and an authenticated custom zCloud task, w
 the connector must refuse (`zcloud_custom_task_not_supported`). A pass proves the
 live gateway is the expected revision and reaches zCloud without starting or pushing
 any project. Exit code is non-zero on any failed check.
+
+
+### Idempotency proof
+
+The deploy workflow deliberately runs the installer a second time with the same revision. `deploy/assert-idempotent-redeploy.sh` verifies, without printing secrets, that the gateway bearer token, TLS public key and deploy revision are unchanged across the repeat deployment. A second exact-revision smoke then proves the restarted service is still healthy and serving the intended commit.

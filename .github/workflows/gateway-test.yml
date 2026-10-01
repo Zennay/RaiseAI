@@ -9,6 +9,7 @@ on:
     paths:
       - "gateway/**"
       - ".github/workflows/gateway-test.yml"
+      - ".github/workflows/gateway-deploy.yml"
 
 jobs:
   gateway:
@@ -21,4 +22,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm test
+      - name: Gateway unit tests
+        run: npm test
+      - name: Deployment script syntax
+        run: |
+          bash -n deploy/install-user-gateway.sh
+          bash -n deploy/assert-idempotent-redeploy.sh
+          node --check deploy/smoke-live.mjs
+          node --check src/server.mjs
