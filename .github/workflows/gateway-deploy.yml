@@ -1,0 +1,45 @@
+name: Raise gateway deploy + live smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-deploy.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: raise-gateway-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-verify:
+    runs-on: [self-hosted, vps-bb300bba]
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baseline health (pre-deploy, best-effort)
+        id: baseline
+        continue-on-error: true
+        run: |
+          source "$HOME/.config/raiseai/gateway.env" 2>/dev/null || true
+          curl --fail --silent --show-error --max-time 5 \
+            --cacert "${RAISE_TLS_CERT:-/dev/null}" \
+            "https://$(hostname -f):${RAISE_PORT:-8787}/health" || echo "baseline unreachable (expected on first install)"
+
+      - name: Install / restart gateway (idempotent)
+        run: bash deploy/install-user-gateway.sh
+
+      - name: Live smoke verification (no side effects)
+        run: node deploy/smoke-live.mjs
+
+      - name: Record deploy evidence
+        if: always()
+        run: |
+          echo "workflow_run_id=${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          systemctl --user show raise-gateway.service -p ActiveState -p SubState -p ExecMainStartTimestamp >> "$GITHUB_STEP_SUMMARY" || true
