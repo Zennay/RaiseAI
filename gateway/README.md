@@ -112,3 +112,15 @@ The artifact is intentionally assembled from a fixed allowlist. Gateway bearer t
 The installer no longer assumes that a restarted service is live after a fixed sleep. It now runs `deploy/wait-for-live.mjs`, which polls the TLS `/health` endpoint for up to 30 seconds and only succeeds when the gateway reports `ok: true` **and** the exact expected deploy revision. This makes slower systemd restarts deterministic instead of flaky.
 
 Both the initial deploy and the repeat/idempotency deploy write a secret-safe readiness report. The deploy workflow uploads `raise-ready-initial.json` and `raise-ready-repeat.json` alongside the main deployment evidence artifact. These reports contain only host, expected/live revision, attempt count, elapsed time and the readiness reason; bearer tokens and provider credentials are never serialized.
+
+
+### Evidence-gated workflow success
+
+The deploy workflow validates its own machine-readable evidence before a run may finish green. `deploy/validate-deploy-evidence.mjs` requires:
+
+- the workflow commit and observed live revision to match the expected GitHub SHA;
+- `raise-gateway.service` to be `active/running`;
+- deploy, initial smoke, idempotent redeploy and repeat smoke outcomes to be successful;
+- both smoke reports to have `ok: true`.
+
+A degraded downstream zCloud dependency is still allowed under the normal dependency-aware smoke policy; the evidence gate is deliberately about proving the gateway deployment itself. The artifact is uploaded before validation, so a failing run retains diagnostic evidence without exposing gateway/provider secrets.
