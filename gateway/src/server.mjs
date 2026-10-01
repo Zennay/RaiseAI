@@ -2,6 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { createHandler } from "./app.mjs";
+import { createZCloudExecutor } from "./connectors/zcloud.mjs";
 import { createOpenRouterExecutor } from "./providers/openrouter.mjs";
 
 const host = process.env.RAISE_HOST ?? "127.0.0.1";
@@ -14,7 +15,11 @@ if (Boolean(tlsCert) !== Boolean(tlsKey)) {
   throw new Error("RAISE_TLS_CERT and RAISE_TLS_KEY must be set together");
 }
 
-const execute = createOpenRouterExecutor({
+const executeZCloud = createZCloudExecutor({
+  baseUrl: process.env.RAISE_ZCLOUD_URL ?? "http://127.0.0.1:8765"
+});
+
+const executeOpenRouter = createOpenRouterExecutor({
   apiKey: process.env.OPENROUTER_API_KEY ?? "",
   fastModel: process.env.RAISE_OPENROUTER_FAST_MODEL ?? "z-ai/glm-5.3-flash",
   deepModel: process.env.RAISE_OPENROUTER_DEEP_MODEL ?? "z-ai/glm-5.3-flash",
@@ -22,6 +27,10 @@ const execute = createOpenRouterExecutor({
     process.env.RAISE_OPENROUTER_FALLBACK_MODELS ?? "google/gemini-3.8-flash",
   allowWebSearch: process.env.RAISE_ENABLE_WEB_SEARCH === "1"
 });
+
+const execute = async (decision, text) =>
+  (await executeZCloud(decision, text)) ??
+  (await executeOpenRouter(decision, text));
 
 const handler = createHandler({ token, execute });
 const server = tlsCert
