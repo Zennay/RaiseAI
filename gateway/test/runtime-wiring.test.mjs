@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attestRuntimeWiring } from "../deploy/attest-runtime-wiring.mjs";
+import {
+  attestRuntimeWiring,
+  userSystemdEnvironment
+} from "../deploy/attest-runtime-wiring.mjs";
 
 const home = "/home/ubuntu";
 const installDir = home + "/.local/share/raise-gateway";
@@ -63,4 +66,30 @@ test("report contains no environment-file contents or provider secrets", () => {
   assert.equal(serialized.includes("OPENROUTER_API_KEY"), false);
   assert.equal(serialized.includes("RAISE_GATEWAY_TOKEN"), false);
   assert.equal(serialized.includes("EnvironmentFiles"), false);
+});
+
+
+test("derives the user systemd bus for headless runners", () => {
+  const env = userSystemdEnvironment({
+    env: { HOME: home },
+    uid: 1000,
+    exists: value => value === "/run/user/1000/bus"
+  });
+
+  assert.equal(env.XDG_RUNTIME_DIR, "/run/user/1000");
+  assert.equal(env.DBUS_SESSION_BUS_ADDRESS, "unix:path=/run/user/1000/bus");
+});
+
+test("preserves an explicitly configured user systemd bus", () => {
+  const env = userSystemdEnvironment({
+    env: {
+      XDG_RUNTIME_DIR: "/custom/runtime",
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/custom/bus"
+    },
+    uid: 1000,
+    exists: () => false
+  });
+
+  assert.equal(env.XDG_RUNTIME_DIR, "/custom/runtime");
+  assert.equal(env.DBUS_SESSION_BUS_ADDRESS, "unix:path=/custom/bus");
 });
