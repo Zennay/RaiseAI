@@ -83,6 +83,24 @@ function summarizeRuntime(report, stepOutcome) {
   };
 }
 
+function summarizeWatchProfile(report, stepOutcome) {
+  return {
+    outcome: outcome(stepOutcome),
+    ok: typeof report?.ok === "boolean" ? report.ok : null,
+    reason: textOrNull(report?.reason),
+    checks: {
+      https_url: report?.checks?.https_url === true,
+      port_match: report?.checks?.port_match === true,
+      token_match: report?.checks?.token_match === true,
+      spki_match: report?.checks?.spki_match === true,
+      certificate_host_match: report?.checks?.certificate_host_match === true,
+      certificate_currently_valid:
+        report?.checks?.certificate_currently_valid === true,
+      profile_mode_600: report?.checks?.profile_mode_600 === true
+    }
+  };
+}
+
 function liveRevision(initialSmoke, repeatSmoke) {
   for (const report of [repeatSmoke, initialSmoke]) {
     const health = report?.checks?.find(
@@ -101,13 +119,15 @@ export function buildDeployEvidence({
   repeatPayload = null,
   initialRuntime = null,
   repeatRuntime = null,
+  initialWatchProfile = null,
+  repeatWatchProfile = null,
   now = () => new Date()
 } = {}) {
   const commit = textOrNull(env.GITHUB_SHA);
   const live = liveRevision(initialSmoke, repeatSmoke);
 
   return {
-    schema_version: 2,
+    schema_version: 3,
     generated_at: now().toISOString(),
     workflow: {
       run_id: integerOrNull(env.GITHUB_RUN_ID),
@@ -138,6 +158,10 @@ export function buildDeployEvidence({
         initialRuntime,
         env.RAISE_INITIAL_RUNTIME_OUTCOME
       ),
+      initial_watch_profile: summarizeWatchProfile(
+        initialWatchProfile,
+        env.RAISE_INITIAL_WATCH_PROFILE_OUTCOME
+      ),
       initial_smoke: summarizeSmoke(initialSmoke, env.RAISE_INITIAL_SMOKE_OUTCOME),
       idempotent_redeploy: {
         outcome: outcome(env.RAISE_IDEMPOTENCY_OUTCOME)
@@ -149,6 +173,10 @@ export function buildDeployEvidence({
       repeat_runtime: summarizeRuntime(
         repeatRuntime,
         env.RAISE_REPEAT_RUNTIME_OUTCOME
+      ),
+      repeat_watch_profile: summarizeWatchProfile(
+        repeatWatchProfile,
+        env.RAISE_REPEAT_WATCH_PROFILE_OUTCOME
       ),
       repeat_smoke: summarizeSmoke(repeatSmoke, env.RAISE_REPEAT_SMOKE_OUTCOME)
     }
@@ -163,6 +191,8 @@ export function writeDeployEvidence({
   repeatPayload = readReport(env.RAISE_REPEAT_PAYLOAD_REPORT),
   initialRuntime = readReport(env.RAISE_INITIAL_RUNTIME_REPORT),
   repeatRuntime = readReport(env.RAISE_REPEAT_RUNTIME_REPORT),
+  initialWatchProfile = readReport(env.RAISE_INITIAL_WATCH_PROFILE_REPORT),
+  repeatWatchProfile = readReport(env.RAISE_REPEAT_WATCH_PROFILE_REPORT),
   now
 } = {}) {
   const output = textOrNull(env.RAISE_EVIDENCE_PATH);
@@ -176,6 +206,8 @@ export function writeDeployEvidence({
     repeatPayload,
     initialRuntime,
     repeatRuntime,
+    initialWatchProfile,
+    repeatWatchProfile,
     now
   });
   fs.mkdirSync(path.dirname(output), { recursive: true });

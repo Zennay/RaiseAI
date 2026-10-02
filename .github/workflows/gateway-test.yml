@@ -33,6 +33,7 @@ jobs:
           node --check deploy/smoke-live.mjs
           node --check deploy/attest-payload.mjs
           node --check deploy/attest-runtime-wiring.mjs
+          node --check deploy/attest-watch-profile.mjs
           node --check deploy/write-deploy-evidence.mjs
           node --check deploy/validate-deploy-evidence.mjs
           node --check src/server.mjs

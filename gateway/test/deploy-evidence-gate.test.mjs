@@ -6,7 +6,7 @@ const revision = "9fdf2c7d73766ef02692d5d62708a113686de210";
 
 function goodEvidence({ degraded = false } = {}) {
   return {
-    schema_version: 2,
+    schema_version: 3,
     workflow: {
       run_id: 36941194825,
       run_attempt: 1,
@@ -45,6 +45,20 @@ function goodEvidence({ degraded = false } = {}) {
           environment_file: true
         }
       },
+      initial_watch_profile: {
+        outcome: "success",
+        ok: true,
+        reason: "watch_profile_match",
+        checks: {
+          https_url: true,
+          port_match: true,
+          token_match: true,
+          spki_match: true,
+          certificate_host_match: true,
+          certificate_currently_valid: true,
+          profile_mode_600: true
+        }
+      },
       initial_smoke: { outcome: "success", ok: true, degraded, checks: [] },
       idempotent_redeploy: { outcome: "success" },
       repeat_payload: {
@@ -64,6 +78,20 @@ function goodEvidence({ degraded = false } = {}) {
           working_directory: true,
           exec_start: true,
           environment_file: true
+        }
+      },
+      repeat_watch_profile: {
+        outcome: "success",
+        ok: true,
+        reason: "watch_profile_match",
+        checks: {
+          https_url: true,
+          port_match: true,
+          token_match: true,
+          spki_match: true,
+          certificate_host_match: true,
+          certificate_currently_valid: true,
+          profile_mode_600: true
         }
       },
       repeat_smoke: { outcome: "success", ok: true, degraded, checks: [] }
@@ -123,6 +151,16 @@ test("rejects missing or partial runtime wiring proof", () => {
   const errors = validateDeployEvidence(evidence, { expectedRevision: revision });
   assert.equal(errors.includes("initial runtime wiring attestation did not succeed"), true);
   assert.equal(errors.includes("repeat runtime wiring attestation did not succeed"), true);
+});
+
+test("rejects mismatched Watch provisioning proof", () => {
+  const evidence = goodEvidence();
+  evidence.verification.initial_watch_profile.checks.token_match = false;
+  evidence.verification.repeat_watch_profile.checks.spki_match = false;
+
+  const errors = validateDeployEvidence(evidence, { expectedRevision: revision });
+  assert.equal(errors.includes("initial Watch profile attestation did not succeed"), true);
+  assert.equal(errors.includes("repeat Watch profile attestation did not succeed"), true);
 });
 
 test("rejects incomplete deploy, smoke and idempotency outcomes", () => {

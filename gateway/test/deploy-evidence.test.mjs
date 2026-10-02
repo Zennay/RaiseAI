@@ -30,6 +30,22 @@ function passingRuntime() {
   };
 }
 
+function passingWatchProfile() {
+  return {
+    ok: true,
+    reason: "watch_profile_match",
+    checks: {
+      https_url: true,
+      port_match: true,
+      token_match: true,
+      spki_match: true,
+      certificate_host_match: true,
+      certificate_currently_valid: true,
+      profile_mode_600: true
+    }
+  };
+}
+
 function passingSmoke({ degraded = false } = {}) {
   return {
     ok: true,
@@ -71,10 +87,12 @@ test("deploy evidence captures run, live revision, service and verification stat
       RAISE_DEPLOY_OUTCOME: "success",
       RAISE_INITIAL_PAYLOAD_OUTCOME: "success",
       RAISE_INITIAL_RUNTIME_OUTCOME: "success",
+      RAISE_INITIAL_WATCH_PROFILE_OUTCOME: "success",
       RAISE_INITIAL_SMOKE_OUTCOME: "success",
       RAISE_IDEMPOTENCY_OUTCOME: "success",
       RAISE_REPEAT_PAYLOAD_OUTCOME: "success",
       RAISE_REPEAT_RUNTIME_OUTCOME: "success",
+      RAISE_REPEAT_WATCH_PROFILE_OUTCOME: "success",
       RAISE_REPEAT_SMOKE_OUTCOME: "success"
     },
     initialSmoke: passingSmoke(),
@@ -83,10 +101,12 @@ test("deploy evidence captures run, live revision, service and verification stat
     repeatPayload: passingPayload(),
     initialRuntime: passingRuntime(),
     repeatRuntime: passingRuntime(),
+    initialWatchProfile: passingWatchProfile(),
+    repeatWatchProfile: passingWatchProfile(),
     now: () => new Date("2026-10-01T23:18:00.000Z")
   });
 
-  assert.equal(evidence.schema_version, 2);
+  assert.equal(evidence.schema_version, 3);
   assert.equal(evidence.workflow.run_id, 36939040577);
   assert.equal(evidence.workflow.run_attempt, 2);
   assert.equal(evidence.workflow.commit, revision);
@@ -99,6 +119,8 @@ test("deploy evidence captures run, live revision, service and verification stat
   assert.equal(evidence.verification.initial_payload.source_digest, "a".repeat(64));
   assert.equal(evidence.verification.initial_runtime.ok, true);
   assert.equal(evidence.verification.initial_runtime.checks.exec_start, true);
+  assert.equal(evidence.verification.initial_watch_profile.ok, true);
+  assert.equal(evidence.verification.initial_watch_profile.checks.token_match, true);
   assert.equal(evidence.verification.idempotent_redeploy.outcome, "success");
   assert.equal(evidence.verification.repeat_payload.ok, true);
   assert.equal(evidence.verification.repeat_runtime.ok, true);
@@ -116,16 +138,20 @@ test("deploy evidence never serializes unrelated server secrets", () => {
       RAISE_DEPLOY_OUTCOME: "success",
       RAISE_INITIAL_PAYLOAD_OUTCOME: "success",
       RAISE_INITIAL_RUNTIME_OUTCOME: "success",
+      RAISE_INITIAL_WATCH_PROFILE_OUTCOME: "success",
       RAISE_INITIAL_SMOKE_OUTCOME: "success",
       RAISE_IDEMPOTENCY_OUTCOME: "success",
       RAISE_REPEAT_PAYLOAD_OUTCOME: "success",
       RAISE_REPEAT_RUNTIME_OUTCOME: "success",
+      RAISE_REPEAT_WATCH_PROFILE_OUTCOME: "success",
       RAISE_REPEAT_SMOKE_OUTCOME: "success"
     },
     initialPayload: passingPayload(),
     repeatPayload: passingPayload(),
     initialRuntime: passingRuntime(),
     repeatRuntime: passingRuntime(),
+    initialWatchProfile: passingWatchProfile(),
+    repeatWatchProfile: passingWatchProfile(),
     repeatSmoke: passingSmoke()
   });
 
@@ -144,10 +170,12 @@ test("failed or skipped stages still yield machine-readable evidence", () => {
       RAISE_DEPLOY_OUTCOME: "failure",
       RAISE_INITIAL_PAYLOAD_OUTCOME: "skipped",
       RAISE_INITIAL_RUNTIME_OUTCOME: "skipped",
+      RAISE_INITIAL_WATCH_PROFILE_OUTCOME: "skipped",
       RAISE_INITIAL_SMOKE_OUTCOME: "skipped",
       RAISE_IDEMPOTENCY_OUTCOME: "skipped",
       RAISE_REPEAT_PAYLOAD_OUTCOME: "skipped",
       RAISE_REPEAT_RUNTIME_OUTCOME: "skipped",
+      RAISE_REPEAT_WATCH_PROFILE_OUTCOME: "skipped",
       RAISE_REPEAT_SMOKE_OUTCOME: "skipped"
     }
   });
@@ -155,9 +183,11 @@ test("failed or skipped stages still yield machine-readable evidence", () => {
   assert.equal(evidence.verification.deploy.outcome, "failure");
   assert.equal(evidence.verification.initial_payload.outcome, "skipped");
   assert.equal(evidence.verification.initial_runtime.outcome, "skipped");
+  assert.equal(evidence.verification.initial_watch_profile.outcome, "skipped");
   assert.equal(evidence.verification.initial_smoke.outcome, "skipped");
   assert.equal(evidence.verification.repeat_payload.outcome, "skipped");
   assert.equal(evidence.verification.repeat_runtime.outcome, "skipped");
+  assert.equal(evidence.verification.repeat_watch_profile.outcome, "skipped");
   assert.equal(evidence.attestation.live_revision, null);
   assert.equal(evidence.attestation.exact_revision_match, null);
 });

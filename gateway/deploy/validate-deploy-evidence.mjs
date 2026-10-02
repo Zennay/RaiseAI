@@ -27,6 +27,21 @@ function runtimeAttestationOk(report) {
   );
 }
 
+function watchProfileAttestationOk(report) {
+  const checks = report?.checks ?? {};
+  return (
+    report?.outcome === SUCCESS &&
+    report?.ok === true &&
+    checks.https_url === true &&
+    checks.port_match === true &&
+    checks.token_match === true &&
+    checks.spki_match === true &&
+    checks.certificate_host_match === true &&
+    checks.certificate_currently_valid === true &&
+    checks.profile_mode_600 === true
+  );
+}
+
 export function validateDeployEvidence(
   evidence,
   { expectedRevision = process.env.RAISE_EXPECTED_REVISION ?? process.env.GITHUB_SHA ?? "" } = {}
@@ -37,7 +52,7 @@ export function validateDeployEvidence(
   push(errors, evidence && typeof evidence === "object", "evidence must be an object");
   if (!evidence || typeof evidence !== "object") return errors;
 
-  push(errors, evidence.schema_version === 2, "unsupported evidence schema_version");
+  push(errors, evidence.schema_version === 3, "unsupported evidence schema_version");
   push(errors, Number.isInteger(evidence.workflow?.run_id), "workflow.run_id missing");
   push(errors, Number.isInteger(evidence.workflow?.run_attempt), "workflow.run_attempt missing");
 
@@ -72,6 +87,11 @@ export function validateDeployEvidence(
   );
   push(
     errors,
+    watchProfileAttestationOk(verification.initial_watch_profile),
+    "initial Watch profile attestation did not succeed"
+  );
+  push(
+    errors,
     verification.initial_smoke?.outcome === SUCCESS && verification.initial_smoke?.ok === true,
     "initial live smoke did not succeed"
   );
@@ -92,6 +112,11 @@ export function validateDeployEvidence(
     errors,
     runtimeAttestationOk(verification.repeat_runtime),
     "repeat runtime wiring attestation did not succeed"
+  );
+  push(
+    errors,
+    watchProfileAttestationOk(verification.repeat_watch_profile),
+    "repeat Watch profile attestation did not succeed"
   );
   push(
     errors,
