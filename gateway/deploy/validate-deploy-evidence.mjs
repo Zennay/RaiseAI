@@ -13,6 +13,20 @@ function push(errors, condition, message) {
   if (!condition) errors.push(message);
 }
 
+function runtimeAttestationOk(report) {
+  const checks = report?.checks ?? {};
+  return (
+    report?.outcome === SUCCESS &&
+    report?.ok === true &&
+    report?.active_state === "active" &&
+    report?.sub_state === "running" &&
+    checks.fragment_path === true &&
+    checks.working_directory === true &&
+    checks.exec_start === true &&
+    checks.environment_file === true
+  );
+}
+
 export function validateDeployEvidence(
   evidence,
   { expectedRevision = process.env.RAISE_EXPECTED_REVISION ?? process.env.GITHUB_SHA ?? "" } = {}
@@ -53,11 +67,7 @@ export function validateDeployEvidence(
   );
   push(
     errors,
-    verification.initial_runtime?.outcome === SUCCESS &&
-      verification.initial_runtime?.ok === true &&
-      verification.initial_runtime?.active_state === "active" &&
-      verification.initial_runtime?.sub_state === "running" &&
-      Object.values(verification.initial_runtime?.checks ?? {}).every(value => value === true),
+    runtimeAttestationOk(verification.initial_runtime),
     "initial runtime wiring attestation did not succeed"
   );
   push(
@@ -80,11 +90,7 @@ export function validateDeployEvidence(
   );
   push(
     errors,
-    verification.repeat_runtime?.outcome === SUCCESS &&
-      verification.repeat_runtime?.ok === true &&
-      verification.repeat_runtime?.active_state === "active" &&
-      verification.repeat_runtime?.sub_state === "running" &&
-      Object.values(verification.repeat_runtime?.checks ?? {}).every(value => value === true),
+    runtimeAttestationOk(verification.repeat_runtime),
     "repeat runtime wiring attestation did not succeed"
   );
   push(
