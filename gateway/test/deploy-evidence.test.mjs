@@ -139,7 +139,7 @@ test("deploy evidence never serializes unrelated server secrets", () => {
       RAISE_INITIAL_PAYLOAD_OUTCOME: "success",
       RAISE_INITIAL_RUNTIME_OUTCOME: "success",
       RAISE_INITIAL_WATCH_PROFILE_OUTCOME: "success",
-      RAISE_INITIAL_SMOKE_OUTCOME: "success"
+      RAISE_INITIAL_SMOKE_OUTCOME: "success",
       RAISE_IDEMPOTENCY_OUTCOME: "success",
       RAISE_REPEAT_PAYLOAD_OUTCOME: "success",
       RAISE_REPEAT_RUNTIME_OUTCOME: "success",
