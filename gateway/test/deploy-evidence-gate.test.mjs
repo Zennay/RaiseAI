@@ -32,6 +32,19 @@ function goodEvidence({ degraded = false } = {}) {
         source_digest: "a".repeat(64),
         installed_digest: "a".repeat(64)
       },
+      initial_runtime: {
+        outcome: "success",
+        ok: true,
+        reason: "runtime_wiring_match",
+        active_state: "active",
+        sub_state: "running",
+        checks: {
+          fragment_path: true,
+          working_directory: true,
+          exec_start: true,
+          environment_file: true
+        }
+      },
       initial_smoke: { outcome: "success", ok: true, degraded, checks: [] },
       idempotent_redeploy: { outcome: "success" },
       repeat_payload: {
@@ -39,6 +52,19 @@ function goodEvidence({ degraded = false } = {}) {
         ok: true,
         source_digest: "a".repeat(64),
         installed_digest: "a".repeat(64)
+      },
+      repeat_runtime: {
+        outcome: "success",
+        ok: true,
+        reason: "runtime_wiring_match",
+        active_state: "active",
+        sub_state: "running",
+        checks: {
+          fragment_path: true,
+          working_directory: true,
+          exec_start: true,
+          environment_file: true
+        }
       },
       repeat_smoke: { outcome: "success", ok: true, degraded, checks: [] }
     }
@@ -87,6 +113,16 @@ test("rejects mismatched payload attestation", () => {
   const errors = validateDeployEvidence(evidence, { expectedRevision: revision });
   assert.equal(errors.includes("initial payload attestation did not succeed"), true);
   assert.equal(errors.includes("repeat payload attestation did not succeed"), true);
+});
+
+test("rejects missing or partial runtime wiring proof", () => {
+  const evidence = goodEvidence();
+  evidence.verification.initial_runtime.checks.exec_start = false;
+  evidence.verification.repeat_runtime.checks = {};
+
+  const errors = validateDeployEvidence(evidence, { expectedRevision: revision });
+  assert.equal(errors.includes("initial runtime wiring attestation did not succeed"), true);
+  assert.equal(errors.includes("repeat runtime wiring attestation did not succeed"), true);
 });
 
 test("rejects incomplete deploy, smoke and idempotency outcomes", () => {
