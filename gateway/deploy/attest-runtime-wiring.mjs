@@ -59,6 +59,28 @@ export function attestRuntimeWiring({
   };
 }
 
+export function userSystemdEnvironment({
+  env = process.env,
+  uid = typeof process.getuid === "function" ? process.getuid() : null,
+  exists = fs.existsSync
+} = {}) {
+  const next = { ...env };
+  const runtimeDir =
+    env.XDG_RUNTIME_DIR ||
+    (Number.isInteger(uid) ? `/run/user/${uid}` : "");
+
+  if (runtimeDir) next.XDG_RUNTIME_DIR = runtimeDir;
+
+  const busAddress =
+    env.DBUS_SESSION_BUS_ADDRESS ||
+    (runtimeDir && exists(path.join(runtimeDir, "bus"))
+      ? `unix:path=${runtimeDir}/bus`
+      : "");
+
+  if (busAddress) next.DBUS_SESSION_BUS_ADDRESS = busAddress;
+  return next;
+}
+
 function systemctlShow() {
   return execFileSync(
     "systemctl",
@@ -74,7 +96,11 @@ function systemctlShow() {
       "--property=SubState",
       "--no-pager"
     ],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: userSystemdEnvironment()
+    }
   );
 }
 
