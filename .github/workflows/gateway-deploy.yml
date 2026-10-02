@@ -50,6 +50,12 @@ jobs:
           RAISE_RUNTIME_REPORT: ${{ runner.temp }}/raise-runtime-initial.json
         run: node deploy/attest-runtime-wiring.mjs
 
+      - name: Attest Watch provisioning profile
+        id: watch_profile_initial
+        env:
+          RAISE_WATCH_PROFILE_REPORT: ${{ runner.temp }}/raise-watch-profile-initial.json
+        run: node deploy/attest-watch-profile.mjs
+
       - name: Live smoke verification (exact revision, no side effects)
         id: smoke_initial
         env:
@@ -76,6 +82,12 @@ jobs:
           RAISE_RUNTIME_REPORT: ${{ runner.temp }}/raise-runtime-repeat.json
         run: node deploy/attest-runtime-wiring.mjs
 
+      - name: Attest Watch profile after repeat deploy
+        id: watch_profile_repeat
+        env:
+          RAISE_WATCH_PROFILE_REPORT: ${{ runner.temp }}/raise-watch-profile-repeat.json
+        run: node deploy/attest-watch-profile.mjs
+
       - name: Live smoke after repeat deploy
         id: smoke_repeat
         env:
@@ -92,15 +104,19 @@ jobs:
           RAISE_REPEAT_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-repeat.json
           RAISE_INITIAL_RUNTIME_REPORT: ${{ runner.temp }}/raise-runtime-initial.json
           RAISE_REPEAT_RUNTIME_REPORT: ${{ runner.temp }}/raise-runtime-repeat.json
+          RAISE_INITIAL_WATCH_PROFILE_REPORT: ${{ runner.temp }}/raise-watch-profile-initial.json
+          RAISE_REPEAT_WATCH_PROFILE_REPORT: ${{ runner.temp }}/raise-watch-profile-repeat.json
           RAISE_INITIAL_PAYLOAD_REPORT: ${{ runner.temp }}/raise-payload-initial.json
           RAISE_REPEAT_PAYLOAD_REPORT: ${{ runner.temp }}/raise-payload-repeat.json
           RAISE_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           RAISE_INITIAL_PAYLOAD_OUTCOME: ${{ steps.payload_initial.outcome }}
           RAISE_INITIAL_RUNTIME_OUTCOME: ${{ steps.runtime_initial.outcome }}
+          RAISE_INITIAL_WATCH_PROFILE_OUTCOME: ${{ steps.watch_profile_initial.outcome }}
           RAISE_INITIAL_SMOKE_OUTCOME: ${{ steps.smoke_initial.outcome }}
           RAISE_IDEMPOTENCY_OUTCOME: ${{ steps.idempotency.outcome }}
           RAISE_REPEAT_PAYLOAD_OUTCOME: ${{ steps.payload_repeat.outcome }}
           RAISE_REPEAT_RUNTIME_OUTCOME: ${{ steps.runtime_repeat.outcome }}
+          RAISE_REPEAT_WATCH_PROFILE_OUTCOME: ${{ steps.watch_profile_repeat.outcome }}
           RAISE_REPEAT_SMOKE_OUTCOME: ${{ steps.smoke_repeat.outcome }}
         run: |
           export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -130,6 +146,8 @@ jobs:
             ${{ runner.temp }}/raise-payload-repeat.json
             ${{ runner.temp }}/raise-runtime-initial.json
             ${{ runner.temp }}/raise-runtime-repeat.json
+            ${{ runner.temp }}/raise-watch-profile-initial.json
+            ${{ runner.temp }}/raise-watch-profile-repeat.json
           if-no-files-found: error
           retention-days: 30
 
