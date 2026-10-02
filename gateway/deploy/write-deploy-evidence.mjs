@@ -67,6 +67,22 @@ function summarizePayload(report, stepOutcome) {
   };
 }
 
+function summarizeRuntime(report, stepOutcome) {
+  return {
+    outcome: outcome(stepOutcome),
+    ok: typeof report?.ok === "boolean" ? report.ok : null,
+    reason: textOrNull(report?.reason),
+    active_state: textOrNull(report?.active_state),
+    sub_state: textOrNull(report?.sub_state),
+    checks: {
+      fragment_path: report?.checks?.fragment_path === true,
+      working_directory: report?.checks?.working_directory === true,
+      exec_start: report?.checks?.exec_start === true,
+      environment_file: report?.checks?.environment_file === true
+    }
+  };
+}
+
 function liveRevision(initialSmoke, repeatSmoke) {
   for (const report of [repeatSmoke, initialSmoke]) {
     const health = report?.checks?.find(
@@ -83,6 +99,8 @@ export function buildDeployEvidence({
   repeatSmoke = null,
   initialPayload = null,
   repeatPayload = null,
+  initialRuntime = null,
+  repeatRuntime = null,
   now = () => new Date()
 } = {}) {
   const commit = textOrNull(env.GITHUB_SHA);
@@ -116,6 +134,10 @@ export function buildDeployEvidence({
         initialPayload,
         env.RAISE_INITIAL_PAYLOAD_OUTCOME
       ),
+      initial_runtime: summarizeRuntime(
+        initialRuntime,
+        env.RAISE_INITIAL_RUNTIME_OUTCOME
+      ),
       initial_smoke: summarizeSmoke(initialSmoke, env.RAISE_INITIAL_SMOKE_OUTCOME),
       idempotent_redeploy: {
         outcome: outcome(env.RAISE_IDEMPOTENCY_OUTCOME)
@@ -123,6 +145,10 @@ export function buildDeployEvidence({
       repeat_payload: summarizePayload(
         repeatPayload,
         env.RAISE_REPEAT_PAYLOAD_OUTCOME
+      ),
+      repeat_runtime: summarizeRuntime(
+        repeatRuntime,
+        env.RAISE_REPEAT_RUNTIME_OUTCOME
       ),
       repeat_smoke: summarizeSmoke(repeatSmoke, env.RAISE_REPEAT_SMOKE_OUTCOME)
     }
@@ -135,6 +161,8 @@ export function writeDeployEvidence({
   repeatSmoke = readReport(env.RAISE_REPEAT_SMOKE_REPORT),
   initialPayload = readReport(env.RAISE_INITIAL_PAYLOAD_REPORT),
   repeatPayload = readReport(env.RAISE_REPEAT_PAYLOAD_REPORT),
+  initialRuntime = readReport(env.RAISE_INITIAL_RUNTIME_REPORT),
+  repeatRuntime = readReport(env.RAISE_REPEAT_RUNTIME_REPORT),
   now
 } = {}) {
   const output = textOrNull(env.RAISE_EVIDENCE_PATH);
@@ -146,6 +174,8 @@ export function writeDeployEvidence({
     repeatSmoke,
     initialPayload,
     repeatPayload,
+    initialRuntime,
+    repeatRuntime,
     now
   });
   fs.mkdirSync(path.dirname(output), { recursive: true });

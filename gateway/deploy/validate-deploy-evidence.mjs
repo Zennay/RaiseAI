@@ -13,6 +13,20 @@ function push(errors, condition, message) {
   if (!condition) errors.push(message);
 }
 
+function runtimeAttestationOk(report) {
+  const checks = report?.checks ?? {};
+  return (
+    report?.outcome === SUCCESS &&
+    report?.ok === true &&
+    report?.active_state === "active" &&
+    report?.sub_state === "running" &&
+    checks.fragment_path === true &&
+    checks.working_directory === true &&
+    checks.exec_start === true &&
+    checks.environment_file === true
+  );
+}
+
 export function validateDeployEvidence(
   evidence,
   { expectedRevision = process.env.RAISE_EXPECTED_REVISION ?? process.env.GITHUB_SHA ?? "" } = {}
@@ -53,6 +67,11 @@ export function validateDeployEvidence(
   );
   push(
     errors,
+    runtimeAttestationOk(verification.initial_runtime),
+    "initial runtime wiring attestation did not succeed"
+  );
+  push(
+    errors,
     verification.initial_smoke?.outcome === SUCCESS && verification.initial_smoke?.ok === true,
     "initial live smoke did not succeed"
   );
@@ -68,6 +87,11 @@ export function validateDeployEvidence(
       verification.repeat_payload?.source_digest &&
       verification.repeat_payload?.source_digest === verification.repeat_payload?.installed_digest,
     "repeat payload attestation did not succeed"
+  );
+  push(
+    errors,
+    runtimeAttestationOk(verification.repeat_runtime),
+    "repeat runtime wiring attestation did not succeed"
   );
   push(
     errors,
