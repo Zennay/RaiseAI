@@ -1,0 +1,38 @@
+{
+  "exact_head_evidence_source": "GitHub connector verified before VPS dispatch",
+  "execution_runner": "vps-bb300bba",
+  "fresh_oom_evidence": [],
+  "host": "vps-bb300bba",
+  "post_pid": "718454",
+  "post_state": "active",
+  "pre_pid": "718454",
+  "pre_state": "active",
+  "project": "zssh",
+  "protected_runs": [
+    {
+      "observation": "read-only external GitHub connector evidence",
+      "run_id": 37002559195
+    },
+    {
+      "observation": "read-only external GitHub connector evidence",
+      "run_id": 37002559068
+    },
+    {
+      "observation": "read-only external GitHub connector evidence",
+      "run_id": 37002559132
+    }
+  ],
+  "queue_id": "zssh-ftmo-pr439-runner-recovery-20261002",
+  "recovery_action": "preserve-active-worker",
+  "runner_processes": [
+    "718454       1 Fri Oct  2 09:42:57 2026    05:02:26 /bin/bash /opt/ftmo-runner/runsvc.sh",
+    " 718470  718460 Fri Oct  2 09:42:58 2026    05:02:25 /opt/ftmo-runner/bin/Runner.Listener run --startuptype service",
+    "1064065  718470 Fri Oct  2 14:43:37 2026       01:46 /opt/ftmo-runner/bin/Runner.Worker spawnclient 154 161"
+  ],
+  "scheduled_exact_head_run": 37003675884,
+  "schema_version": 1,
+  "service": "actions.runner.Zennay-Ftmo.vps-bb300bba-ftmo.service",
+  "target_sha": "683768c80816096057dd8bd52a77f96e44b1b9d5",
+  "worker_before": "1",
+  "workflow_run_id": "37022076400"
+}
