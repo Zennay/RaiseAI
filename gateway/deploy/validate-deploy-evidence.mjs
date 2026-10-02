@@ -53,6 +53,15 @@ export function validateDeployEvidence(
   );
   push(
     errors,
+    verification.initial_runtime?.outcome === SUCCESS &&
+      verification.initial_runtime?.ok === true &&
+      verification.initial_runtime?.active_state === "active" &&
+      verification.initial_runtime?.sub_state === "running" &&
+      Object.values(verification.initial_runtime?.checks ?? {}).every(value => value === true),
+    "initial runtime wiring attestation did not succeed"
+  );
+  push(
+    errors,
     verification.initial_smoke?.outcome === SUCCESS && verification.initial_smoke?.ok === true,
     "initial live smoke did not succeed"
   );
@@ -68,6 +77,15 @@ export function validateDeployEvidence(
       verification.repeat_payload?.source_digest &&
       verification.repeat_payload?.source_digest === verification.repeat_payload?.installed_digest,
     "repeat payload attestation did not succeed"
+  );
+  push(
+    errors,
+    verification.repeat_runtime?.outcome === SUCCESS &&
+      verification.repeat_runtime?.ok === true &&
+      verification.repeat_runtime?.active_state === "active" &&
+      verification.repeat_runtime?.sub_state === "running" &&
+      Object.values(verification.repeat_runtime?.checks ?? {}).every(value => value === true),
+    "repeat runtime wiring attestation did not succeed"
   );
   push(
     errors,
