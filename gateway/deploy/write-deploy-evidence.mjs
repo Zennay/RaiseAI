@@ -51,6 +51,22 @@ function summarizeSmoke(report, stepOutcome) {
   };
 }
 
+function summarizePayload(report, stepOutcome) {
+  return {
+    outcome: outcome(stepOutcome),
+    ok: typeof report?.ok === "boolean" ? report.ok : null,
+    source_digest: textOrNull(report?.source_digest),
+    installed_digest: textOrNull(report?.installed_digest),
+    source_file_count: Number.isInteger(report?.source_file_count)
+      ? report.source_file_count
+      : null,
+    installed_file_count: Number.isInteger(report?.installed_file_count)
+      ? report.installed_file_count
+      : null,
+    reason: textOrNull(report?.reason)
+  };
+}
+
 function liveRevision(initialSmoke, repeatSmoke) {
   for (const report of [repeatSmoke, initialSmoke]) {
     const health = report?.checks?.find(
@@ -65,13 +81,15 @@ export function buildDeployEvidence({
   env = process.env,
   initialSmoke = null,
   repeatSmoke = null,
+  initialPayload = null,
+  repeatPayload = null,
   now = () => new Date()
 } = {}) {
   const commit = textOrNull(env.GITHUB_SHA);
   const live = liveRevision(initialSmoke, repeatSmoke);
 
   return {
-    schema_version: 1,
+    schema_version: 2,
     generated_at: now().toISOString(),
     workflow: {
       run_id: integerOrNull(env.GITHUB_RUN_ID),
@@ -94,10 +112,18 @@ export function buildDeployEvidence({
       deploy: {
         outcome: outcome(env.RAISE_DEPLOY_OUTCOME)
       },
+      initial_payload: summarizePayload(
+        initialPayload,
+        env.RAISE_INITIAL_PAYLOAD_OUTCOME
+      ),
       initial_smoke: summarizeSmoke(initialSmoke, env.RAISE_INITIAL_SMOKE_OUTCOME),
       idempotent_redeploy: {
         outcome: outcome(env.RAISE_IDEMPOTENCY_OUTCOME)
       },
+      repeat_payload: summarizePayload(
+        repeatPayload,
+        env.RAISE_REPEAT_PAYLOAD_OUTCOME
+      ),
       repeat_smoke: summarizeSmoke(repeatSmoke, env.RAISE_REPEAT_SMOKE_OUTCOME)
     }
   };
@@ -107,12 +133,21 @@ export function writeDeployEvidence({
   env = process.env,
   initialSmoke = readReport(env.RAISE_INITIAL_SMOKE_REPORT),
   repeatSmoke = readReport(env.RAISE_REPEAT_SMOKE_REPORT),
+  initialPayload = readReport(env.RAISE_INITIAL_PAYLOAD_REPORT),
+  repeatPayload = readReport(env.RAISE_REPEAT_PAYLOAD_REPORT),
   now
 } = {}) {
   const output = textOrNull(env.RAISE_EVIDENCE_PATH);
   if (!output) throw new Error("RAISE_EVIDENCE_PATH is required");
 
-  const evidence = buildDeployEvidence({ env, initialSmoke, repeatSmoke, now });
+  const evidence = buildDeployEvidence({
+    env,
+    initialSmoke,
+    repeatSmoke,
+    initialPayload,
+    repeatPayload,
+    now
+  });
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(evidence, null, 2) + "\n", {
     encoding: "utf8",

@@ -6,7 +6,7 @@ const revision = "9fdf2c7d73766ef02692d5d62708a113686de210";
 
 function goodEvidence({ degraded = false } = {}) {
   return {
-    schema_version: 1,
+    schema_version: 2,
     workflow: {
       run_id: 36941194825,
       run_attempt: 1,
@@ -26,8 +26,20 @@ function goodEvidence({ degraded = false } = {}) {
     },
     verification: {
       deploy: { outcome: "success" },
+      initial_payload: {
+        outcome: "success",
+        ok: true,
+        source_digest: "a".repeat(64),
+        installed_digest: "a".repeat(64)
+      },
       initial_smoke: { outcome: "success", ok: true, degraded, checks: [] },
       idempotent_redeploy: { outcome: "success" },
+      repeat_payload: {
+        outcome: "success",
+        ok: true,
+        source_digest: "a".repeat(64),
+        installed_digest: "a".repeat(64)
+      },
       repeat_smoke: { outcome: "success", ok: true, degraded, checks: [] }
     }
   };
@@ -65,6 +77,16 @@ test("rejects stale live revision and an inactive service", () => {
   assert.equal(errors.includes("live revision does not match expected revision"), true);
   assert.equal(errors.includes("gateway service is not active"), true);
   assert.equal(errors.includes("gateway service is not running"), true);
+});
+
+test("rejects mismatched payload attestation", () => {
+  const evidence = goodEvidence();
+  evidence.verification.initial_payload.installed_digest = "b".repeat(64);
+  evidence.verification.repeat_payload.ok = false;
+
+  const errors = validateDeployEvidence(evidence, { expectedRevision: revision });
+  assert.equal(errors.includes("initial payload attestation did not succeed"), true);
+  assert.equal(errors.includes("repeat payload attestation did not succeed"), true);
 });
 
 test("rejects incomplete deploy, smoke and idempotency outcomes", () => {

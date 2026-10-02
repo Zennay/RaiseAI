@@ -23,7 +23,7 @@ export function validateDeployEvidence(
   push(errors, evidence && typeof evidence === "object", "evidence must be an object");
   if (!evidence || typeof evidence !== "object") return errors;
 
-  push(errors, evidence.schema_version === 1, "unsupported evidence schema_version");
+  push(errors, evidence.schema_version === 2, "unsupported evidence schema_version");
   push(errors, Number.isInteger(evidence.workflow?.run_id), "workflow.run_id missing");
   push(errors, Number.isInteger(evidence.workflow?.run_attempt), "workflow.run_attempt missing");
 
@@ -45,6 +45,14 @@ export function validateDeployEvidence(
   push(errors, verification.deploy?.outcome === SUCCESS, "deploy step did not succeed");
   push(
     errors,
+    verification.initial_payload?.outcome === SUCCESS &&
+      verification.initial_payload?.ok === true &&
+      verification.initial_payload?.source_digest &&
+      verification.initial_payload?.source_digest === verification.initial_payload?.installed_digest,
+    "initial payload attestation did not succeed"
+  );
+  push(
+    errors,
     verification.initial_smoke?.outcome === SUCCESS && verification.initial_smoke?.ok === true,
     "initial live smoke did not succeed"
   );
@@ -52,6 +60,14 @@ export function validateDeployEvidence(
     errors,
     verification.idempotent_redeploy?.outcome === SUCCESS,
     "idempotent redeploy did not succeed"
+  );
+  push(
+    errors,
+    verification.repeat_payload?.outcome === SUCCESS &&
+      verification.repeat_payload?.ok === true &&
+      verification.repeat_payload?.source_digest &&
+      verification.repeat_payload?.source_digest === verification.repeat_payload?.installed_digest,
+    "repeat payload attestation did not succeed"
   );
   push(
     errors,

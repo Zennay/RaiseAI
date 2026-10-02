@@ -38,6 +38,12 @@ jobs:
           RAISE_READY_REPORT: ${{ runner.temp }}/raise-ready-initial.json
         run: bash deploy/install-user-gateway.sh
 
+      - name: Attest installed gateway payload
+        id: payload_initial
+        env:
+          RAISE_PAYLOAD_REPORT: ${{ runner.temp }}/raise-payload-initial.json
+        run: node deploy/attest-payload.mjs
+
       - name: Live smoke verification (exact revision, no side effects)
         id: smoke_initial
         env:
@@ -51,6 +57,12 @@ jobs:
           RAISE_DEPLOY_REVISION: ${{ github.sha }}
           RAISE_READY_REPORT: ${{ runner.temp }}/raise-ready-repeat.json
         run: bash deploy/assert-idempotent-redeploy.sh
+
+      - name: Attest payload after repeat deploy
+        id: payload_repeat
+        env:
+          RAISE_PAYLOAD_REPORT: ${{ runner.temp }}/raise-payload-repeat.json
+        run: node deploy/attest-payload.mjs
 
       - name: Live smoke after repeat deploy
         id: smoke_repeat
@@ -66,9 +78,13 @@ jobs:
           RAISE_EVIDENCE_PATH: ${{ runner.temp }}/raise-gateway-deploy-evidence.json
           RAISE_INITIAL_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-initial.json
           RAISE_REPEAT_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-repeat.json
+          RAISE_INITIAL_PAYLOAD_REPORT: ${{ runner.temp }}/raise-payload-initial.json
+          RAISE_REPEAT_PAYLOAD_REPORT: ${{ runner.temp }}/raise-payload-repeat.json
           RAISE_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          RAISE_INITIAL_PAYLOAD_OUTCOME: ${{ steps.payload_initial.outcome }}
           RAISE_INITIAL_SMOKE_OUTCOME: ${{ steps.smoke_initial.outcome }}
           RAISE_IDEMPOTENCY_OUTCOME: ${{ steps.idempotency.outcome }}
+          RAISE_REPEAT_PAYLOAD_OUTCOME: ${{ steps.payload_repeat.outcome }}
           RAISE_REPEAT_SMOKE_OUTCOME: ${{ steps.smoke_repeat.outcome }}
         run: |
           export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -94,6 +110,8 @@ jobs:
             ${{ runner.temp }}/raise-gateway-deploy-evidence.json
             ${{ runner.temp }}/raise-ready-initial.json
             ${{ runner.temp }}/raise-ready-repeat.json
+            ${{ runner.temp }}/raise-payload-initial.json
+            ${{ runner.temp }}/raise-payload-repeat.json
           if-no-files-found: error
           retention-days: 30
 

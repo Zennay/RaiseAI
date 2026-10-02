@@ -124,3 +124,12 @@ The deploy workflow validates its own machine-readable evidence before a run may
 - both smoke reports to have `ok: true`.
 
 A degraded downstream zCloud dependency is still allowed under the normal dependency-aware smoke policy; the evidence gate is deliberately about proving the gateway deployment itself. The artifact is uploaded before validation, so a failing run retains diagnostic evidence without exposing gateway/provider secrets.
+
+
+### Installed payload attestation
+
+A green VPS deployment now proves more than the revision string exposed by `/health`. The workflow hashes the exact deploy payload — `gateway/src/**` plus `gateway/package.json` — from the GitHub checkout and compares it with the files actually installed under `~/.local/share/raise-gateway`.
+
+`deploy/attest-payload.mjs` runs after the first install/restart and again after the deliberate idempotent redeploy. Both reports are uploaded with the deployment artifact and folded into deployment evidence schema v2. The evidence gate requires both attestations to succeed and requires the source and installed SHA-256 digests to match.
+
+The payload report contains only aggregate digests, file counts and a reason code. It never serializes file contents, gateway tokens, provider keys, TLS private keys or the gateway environment.
