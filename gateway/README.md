@@ -102,7 +102,7 @@ A gateway deployment is gated by the live health endpoint, exact revision attest
 
 ### Machine-readable deployment evidence
 
-Every self-hosted gateway deploy writes `raise-gateway-deploy-evidence.json` and uploads it as the GitHub Actions artifact `raise-gateway-deploy-evidence-<run-id>`. The schema records the workflow run/attempt, commit, observed live revision, systemd active/sub-state and the deploy, first-smoke, idempotent-redeploy and repeat-smoke outcomes.
+Every self-hosted gateway deploy writes `raise-gateway-deploy-evidence.json` and uploads it as the GitHub Actions artifact `raise-gateway-deploy-evidence-<run-id>`. Evidence schema v2 records the workflow run/attempt, commit, observed live revision, systemd active/sub-state, both installed-payload attestations, and the deploy, first-smoke, idempotent-redeploy and repeat-smoke outcomes.
 
 The artifact is intentionally assembled from a fixed allowlist. Gateway bearer tokens, provider API keys, TLS private keys and the full server environment are never serialized. Evidence generation runs under `if: always()`, so failed deployments still leave a machine-readable record when the runner can execute the evidence step.
 
