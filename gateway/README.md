@@ -133,3 +133,17 @@ A green VPS deployment now proves more than the revision string exposed by `/hea
 `deploy/attest-payload.mjs` runs after the first install/restart and again after the deliberate idempotent redeploy. Both reports are uploaded with the deployment artifact and folded into deployment evidence schema v2. The evidence gate requires both attestations to succeed and requires the source and installed SHA-256 digests to match.
 
 The payload report contains only aggregate digests, file counts and a reason code. It never serializes file contents, gateway tokens, provider keys, TLS private keys or the gateway environment.
+
+### Loaded runtime wiring attestation
+
+Payload equality is not enough if systemd is accidentally wired to another directory, entrypoint or environment file. The deploy workflow therefore runs `deploy/attest-runtime-wiring.mjs` after the first deploy and again after the deliberate repeat deploy.
+
+The attestation reads systemd's **loaded** `raise-gateway.service` properties and requires all of the following:
+
+- the loaded fragment is `~/.config/systemd/user/raise-gateway.service`;
+- the working directory is `~/.local/share/raise-gateway`;
+- `ExecStart` is `/usr/bin/node ~/.local/share/raise-gateway/src/server.mjs`;
+- the service references `~/.config/raiseai/gateway.env`;
+- the loaded service is `active/running`.
+
+Only booleans, service state and a reason code are written to the report; environment-file contents and provider/gateway credentials are never read into the artifact. Both initial and repeat runtime attestations are included in evidence schema v2 and are mandatory for a green deploy evidence gate.
