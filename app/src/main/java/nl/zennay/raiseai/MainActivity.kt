@@ -362,7 +362,9 @@ class MainActivity : Activity(), SensorEventListener {
             durationMs = durationMs,
             sampleCount = traceSampleCount,
             detectorTriggered = traceDetectorTriggered,
-            maxSimilarity = traceMaxSimilarity
+            maxSimilarity = traceMaxSimilarity,
+            appVersion = BuildConfig.VERSION_NAME,
+            detectorConfig = traceDetector?.configurationId() ?: "missing"
         )
 
         traceLabel = null
