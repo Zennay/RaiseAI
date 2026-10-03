@@ -10,7 +10,16 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(analyzer)
 
 
-def trial(label, session_id, triggered, *, duration_ms=4000, sample_count=40):
+def trial(
+    label,
+    session_id,
+    triggered,
+    *,
+    duration_ms=4000,
+    sample_count=40,
+    app_version="1.5.0",
+    detector_config="raise-detector-v1;similarity=0.955",
+):
     return {
         "label": label,
         "session_id": session_id,
@@ -18,6 +27,8 @@ def trial(label, session_id, triggered, *, duration_ms=4000, sample_count=40):
         "sample_count": sample_count,
         "detector_triggered": triggered,
         "max_similarity": 0.98 if triggered else 0.88,
+        "app_version": app_version,
+        "detector_config": detector_config,
     }
 
 
@@ -65,11 +76,32 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
         self.assertEqual(report["results"]["mouth_raise_trials"], 0)
         self.assertEqual(report["rejected_trial_count"], 1)
 
+
+    def test_rejects_mixed_app_versions(self):
+        trials = [trial("mouth_raise", 1, True, app_version="1.5.0")]
+        trials += [trial("normal_move", 2, False, app_version="1.5.1")]
+        with self.assertRaisesRegex(analyzer.TrialError, "mix app versions"):
+            analyzer.build_report(
+                trials,
+                required_raises=1,
+                required_non_triggers=1,
+            )
+
+    def test_rejects_mixed_detector_configurations(self):
+        trials = [trial("mouth_raise", 1, True, detector_config="raise-detector-v1;similarity=0.955")]
+        trials += [trial("normal_move", 2, False, detector_config="raise-detector-v1;similarity=0.970")]
+        with self.assertRaisesRegex(analyzer.TrialError, "mix detector configurations"):
+            analyzer.build_report(
+                trials,
+                required_raises=1,
+                required_non_triggers=1,
+            )
+
     def test_read_trials_rejects_duplicate_session(self):
         content = (
-            "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity\n"
-            "mouth_raise,1,4000,40,true,0.98\n"
-            "view_time,1,4000,40,false,0.80\n"
+            "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,detector_config\n"
+            "mouth_raise,1,4000,40,true,0.98,1.5.0,raise-detector-v1;similarity=0.955\n"
+            "view_time,1,4000,40,false,0.80,1.5.0,raise-detector-v1;similarity=0.955\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "sensor-trials.csv"
