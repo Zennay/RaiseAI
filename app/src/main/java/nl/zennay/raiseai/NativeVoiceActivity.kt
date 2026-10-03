@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -209,16 +210,30 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
         val settings = GatewayConfig.load(this)
         if (settings == null) {
+            WatchE2eEvidence.recordFailure(
+                context = this,
+                inputLengthChars = text.length,
+                latencyMs = 0L,
+                errorCode = "gateway_not_configured"
+            )
             showError("VPS-gateway is nog niet gekoppeld")
             detailText.text = "Native voice werkt; gateway-config ontbreekt nog."
             return
         }
 
         setState("sending", "Naar je VPS…")
+        val requestStartedMs = SystemClock.elapsedRealtime()
 
         io.execute {
             runCatching { GatewayClient(settings).send(text) }
                 .onSuccess { response ->
+                    val latencyMs = SystemClock.elapsedRealtime() - requestStartedMs
+                    WatchE2eEvidence.recordSuccess(
+                        context = applicationContext,
+                        inputLengthChars = text.length,
+                        latencyMs = latencyMs,
+                        response = response
+                    )
                     mainHandler.post {
                         val backgroundAction =
                             response.executionEnabled &&
@@ -246,6 +261,13 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                     }
                 }
                 .onFailure { error ->
+                    val latencyMs = SystemClock.elapsedRealtime() - requestStartedMs
+                    WatchE2eEvidence.recordFailure(
+                        context = applicationContext,
+                        inputLengthChars = text.length,
+                        latencyMs = latencyMs,
+                        error = error
+                    )
                     mainHandler.post {
                         showError("VPS niet bereikbaar")
                         detailText.text = error.message ?: "Onbekende netwerkfout"
