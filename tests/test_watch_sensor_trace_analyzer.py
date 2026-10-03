@@ -1,5 +1,6 @@
 import importlib.util
 import pathlib
+import sys
 import tempfile
 import unittest
 
@@ -7,6 +8,7 @@ MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "analyze-w
 SPEC = importlib.util.spec_from_file_location("watch_trace_analyzer", MODULE_PATH)
 analyzer = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
+sys.modules[SPEC.name] = analyzer
 SPEC.loader.exec_module(analyzer)
 
 
