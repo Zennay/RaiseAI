@@ -24,9 +24,12 @@ on:
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "pull-diagnostics.command"
+      - "pull-watch-data.command"
       - "provision-watch-gateway.command"
       - "tools/validate-watch-e2e-evidence.py"
+      - "tools/analyze-watch-sensor-traces.py"
       - "tests/test_watch_e2e_evidence_validator.py"
+      - "tests/test_watch_sensor_trace_analyzer.py"
       - ".github/workflows/watch-app-test.yml"
 
 concurrency:
