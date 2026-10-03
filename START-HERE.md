@@ -101,10 +101,11 @@ python3 tools/validate-watch-e2e-evidence.py \
   watch-diagnostics-*/watch-e2e-evidence.json \
   --expect-route quick_ai \
   --max-latency-ms 15000 \
+  --max-age-seconds 300 \
   --require-answer
 ```
 
-`pull-diagnostics.command` also runs the basic schema/latency gate automatically when Python 3 is available.
+`pull-diagnostics.command` also runs the basic schema/latency/freshness gate automatically when Python 3 is available. By default it rejects evidence older than 300 seconds; override only for deliberate diagnostics with `RAISE_E2E_MAX_AGE_SECONDS`.
 11. Treat the physical Watch → VPS gate as proven only when the validator exits 0 for the intended route and the evidence reports a plausible latency.
 12. Keep Gemini and ChatGPT Web as UI fallbacks until the native path is stable on the physical Watch.
 
