@@ -1,3 +1,4 @@
+import datetime as dt
 import importlib.util
 import pathlib
 import unittest
@@ -33,7 +34,9 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
             expect_route="quick_ai",
             expect_status="ok",
             max_latency_ms=2_000,
+            max_age_seconds=300,
             require_answer=True,
+            now_utc=dt.datetime(2026, 10, 3, 23, 42, tzinfo=dt.timezone.utc),
         )
         self.assertTrue(result["valid"])
         self.assertEqual(result["route"], "quick_ai")
@@ -53,6 +56,30 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
     def test_rejects_route_mismatch(self):
         with self.assertRaisesRegex(validator.EvidenceError, "does not match expected"):
             validator.validate_evidence(success_payload(route="deep_ai"), expect_route="quick_ai")
+
+    def test_rejects_stale_evidence(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "evidence age"):
+            validator.validate_evidence(
+                success_payload(recorded_at_utc="2026-10-03T23:30:00Z"),
+                max_age_seconds=300,
+                now_utc=dt.datetime(2026, 10, 3, 23, 40, tzinfo=dt.timezone.utc),
+            )
+
+    def test_accepts_small_future_clock_skew(self):
+        result = validator.validate_evidence(
+            success_payload(recorded_at_utc="2026-10-03T23:40:45Z"),
+            max_age_seconds=300,
+            now_utc=dt.datetime(2026, 10, 3, 23, 40, tzinfo=dt.timezone.utc),
+        )
+        self.assertTrue(result["valid"])
+
+    def test_rejects_large_future_timestamp(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "in the future"):
+            validator.validate_evidence(
+                success_payload(recorded_at_utc="2026-10-03T23:42:00Z"),
+                max_age_seconds=300,
+                now_utc=dt.datetime(2026, 10, 3, 23, 40, tzinfo=dt.timezone.utc),
+            )
 
     def test_failure_evidence_is_not_a_passing_gate(self):
         failure = {
