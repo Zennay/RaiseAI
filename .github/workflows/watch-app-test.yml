@@ -1,0 +1,59 @@
+name: Raise Watch app CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/**
+    paths:
+      - "app/**"
+      - "gradlew"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "pull-diagnostics.command"
+      - "provision-watch-gateway.command"
+      - ".github/workflows/watch-app-test.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "gradlew"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "pull-diagnostics.command"
+      - "provision-watch-gateway.command"
+      - ".github/workflows/watch-app-test.yml"
+
+concurrency:
+  group: raise-watch-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  watch-app:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner toolchain
+        run: |
+          java -version
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+
+      - name: Script syntax
+        run: |
+          bash -n pull-diagnostics.command
+          bash -n provision-watch-gateway.command
+          bash -n install-watch-apk.command
+          bash -n upgrade-watch.command
+
+      - name: Unit tests and Watch APK
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Upload debug Watch APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RaiseAI-Watch7-v1.5.0-${{ github.run_id }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
