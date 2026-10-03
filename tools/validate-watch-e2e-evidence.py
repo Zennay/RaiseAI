@@ -2,8 +2,9 @@
 """Validate secret-safe Raise AI Watch E2E evidence.
 
 This validator is intentionally strict: evidence is accepted only when the
-schema is exact, no unexpected fields are present, and the recorded request
-matches the requested validation constraints.
+schema is exact, no unexpected fields are present, the record is fresh enough
+when requested, and the recorded request matches the requested validation
+constraints.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ SUCCESS_KEYS = COMMON_KEYS | {
     "answer_present",
 }
 FAILURE_KEYS = COMMON_KEYS | {"error_code"}
+MAX_FUTURE_SKEW_SECONDS = 60
 
 
 class EvidenceError(ValueError):
@@ -50,7 +52,7 @@ def _parse_timestamp(value: Any) -> dt.datetime:
     except ValueError as exc:
         raise EvidenceError("recorded_at_utc must be ISO-8601") from exc
     _require(parsed.tzinfo is not None, "recorded_at_utc must include a timezone")
-    return parsed
+    return parsed.astimezone(dt.timezone.utc)
 
 
 def validate_evidence(
@@ -59,7 +61,9 @@ def validate_evidence(
     expect_route: str | None = None,
     expect_status: str | None = None,
     max_latency_ms: int | None = None,
+    max_age_seconds: int | None = None,
     require_answer: bool = False,
+    now_utc: dt.datetime | None = None,
 ) -> dict[str, Any]:
     _require(isinstance(payload, dict), "evidence root must be a JSON object")
     _require(payload.get("schema_version") == 1, "schema_version must equal 1")
@@ -74,7 +78,21 @@ def validate_evidence(
     _require(not unexpected, f"unexpected evidence fields: {', '.join(unexpected)}")
     _require(not missing, f"missing evidence fields: {', '.join(missing)}")
 
-    _parse_timestamp(payload["recorded_at_utc"])
+    recorded_at = _parse_timestamp(payload["recorded_at_utc"])
+
+    if max_age_seconds is not None:
+        _require(max_age_seconds >= 0, "max_age_seconds must be non-negative")
+        now = now_utc or dt.datetime.now(dt.timezone.utc)
+        _require(now.tzinfo is not None, "now_utc must include a timezone")
+        age_seconds = (now.astimezone(dt.timezone.utc) - recorded_at).total_seconds()
+        _require(
+            age_seconds >= -MAX_FUTURE_SKEW_SECONDS,
+            f"recorded_at_utc is more than {MAX_FUTURE_SKEW_SECONDS}s in the future",
+        )
+        _require(
+            age_seconds <= max_age_seconds,
+            f"evidence age {max(0, int(age_seconds))}s exceeds maximum {max_age_seconds}s",
+        )
 
     input_length = payload["input_length_chars"]
     latency_ms = payload["latency_ms"]
@@ -114,6 +132,7 @@ def validate_evidence(
         "input_length_chars": input_length,
         "answer_present": payload["answer_present"],
         "execution_enabled": payload["execution_enabled"],
+        "recorded_at_utc": payload["recorded_at_utc"],
     }
 
 
@@ -123,6 +142,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--expect-route", choices=sorted(KNOWN_ROUTES))
     parser.add_argument("--expect-status")
     parser.add_argument("--max-latency-ms", type=int)
+    parser.add_argument(
+        "--max-age-seconds",
+        type=int,
+        help="reject evidence older than this many seconds (allows up to 60s future clock skew)",
+    )
     parser.add_argument("--require-answer", action="store_true")
     return parser.parse_args(argv)
 
@@ -136,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             expect_route=args.expect_route,
             expect_status=args.expect_status,
             max_latency_ms=args.max_latency_ms,
+            max_age_seconds=args.max_age_seconds,
             require_answer=args.require_answer,
         )
     except (OSError, json.JSONDecodeError, EvidenceError) as exc:
