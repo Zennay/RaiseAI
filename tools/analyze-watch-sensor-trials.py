@@ -19,6 +19,8 @@ REQUIRED_COLUMNS = {
     "sample_count",
     "detector_triggered",
     "max_similarity",
+    "app_version",
+    "detector_config",
 }
 
 
@@ -77,6 +79,13 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
             if not -1.0 <= max_similarity <= 1.0:
                 raise TrialError(f"line {line}: max_similarity must be between -1 and 1")
 
+            app_version = (row.get("app_version") or "").strip()
+            detector_config = (row.get("detector_config") or "").strip()
+            if not app_version:
+                raise TrialError(f"line {line}: app_version must be non-empty")
+            if not detector_config or "," in detector_config:
+                raise TrialError(f"line {line}: detector_config must be a non-empty comma-free id")
+
             rows.append(
                 {
                     "label": label,
@@ -85,6 +94,8 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
                     "sample_count": sample_count,
                     "detector_triggered": _parse_bool(row["detector_triggered"], line=line),
                     "max_similarity": max_similarity,
+                    "app_version": app_version,
+                    "detector_config": detector_config,
                 }
             )
 
@@ -118,6 +129,13 @@ def build_report(
     raises = [trial for trial in qualifying if trial["label"] == "mouth_raise"]
     non_triggers = [trial for trial in qualifying if trial["label"] in NON_TRIGGER_LABELS]
 
+    app_versions = sorted({trial["app_version"] for trial in qualifying})
+    detector_configs = sorted({trial["detector_config"] for trial in qualifying})
+    if len(app_versions) > 1:
+        raise TrialError(f"qualifying trials mix app versions: {', '.join(app_versions)}")
+    if len(detector_configs) > 1:
+        raise TrialError("qualifying trials mix detector configurations")
+
     detected_raises = sum(1 for trial in raises if trial["detector_triggered"])
     false_triggers = sum(1 for trial in non_triggers if trial["detector_triggered"])
     detection_rate = detected_raises / len(raises) if raises else 0.0
@@ -130,6 +148,10 @@ def build_report(
     return {
         "schema_version": 1,
         "v1_gate_passed": ready,
+        "evidence_identity": {
+            "app_version": app_versions[0] if app_versions else None,
+            "detector_config": detector_configs[0] if detector_configs else None,
+        },
         "requirements": {
             "mouth_raise_trials": required_raises,
             "non_trigger_trials": required_non_triggers,
