@@ -1,4 +1,12 @@
-# Raise AI v1.4.0 — Galaxy Watch 7
+# Raise AI v1.5.0 — Galaxy Watch 7
+
+## v1.5: evidence-gated physical Watch E2E
+
+- Native Watch → VPS requests now persist a compact `watch-e2e-evidence.json` record with route, status, latency and execution flags but no transcript, response text or credentials.
+- `pull-diagnostics.command` pulls that evidence from app-private storage and runs a strict local validation when Python 3 is available.
+- `tools/validate-watch-e2e-evidence.py` fails closed on request failures, unknown routes, schema drift, unexpected fields, route/status mismatch or excessive latency.
+- CI regression-tests the evidence contract and still builds the real Galaxy Watch APK on the self-hosted `vps-bb300bba` runner.
+- The version shown on the Watch is read from Gradle build metadata instead of being hardcoded in the activity.
 
 ## v1.4: native voice + secure VPS router
 
