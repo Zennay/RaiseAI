@@ -32,7 +32,9 @@ else
   read -r -p "Watch serial/address: " TARGET
 fi
 
-OUT="$PWD/watch-sensor-traces-$(date +%Y%m%d-%H%M%S).csv"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+OUT="$PWD/watch-sensor-traces-$STAMP.csv"
+TRIALS_OUT="$PWD/watch-sensor-trials-$STAMP.csv"
 if "$ADB" -s "$TARGET" shell run-as nl.zennay.raiseai cat files/sensor-traces.csv > "$OUT" 2>/dev/null; then
   if [ -s "$OUT" ]; then
     echo "Saved: $OUT"
@@ -47,12 +49,34 @@ else
   exit 1
 fi
 
+if "$ADB" -s "$TARGET" shell run-as nl.zennay.raiseai cat files/sensor-trials.csv > "$TRIALS_OUT" 2>/dev/null; then
+  if [ -s "$TRIALS_OUT" ]; then
+    echo "Saved: $TRIALS_OUT"
+  else
+    rm -f "$TRIALS_OUT"
+  fi
+else
+  rm -f "$TRIALS_OUT"
+fi
+
 if command -v python3 >/dev/null 2>&1; then
-  echo "V1 reliability evidence progress:"
+  echo "V1 capture progress:"
   python3 tools/analyze-watch-sensor-traces.py "$OUT" || true
+
+  if [ -s "$TRIALS_OUT" ]; then
+    echo "V1 detector reliability:"
+    python3 tools/analyze-watch-sensor-trials.py "$TRIALS_OUT" || true
+  else
+    echo "No sensor trial outcomes recorded yet. Install this build and use the Record buttons."
+  fi
+
   if [ "${RAISE_REQUIRE_V1_TRACE_GATE:-0}" = "1" ]; then
     python3 tools/analyze-watch-sensor-traces.py "$OUT" --require-v1-gate
   fi
+  if [ "${RAISE_REQUIRE_V1_TRIAL_GATE:-0}" = "1" ]; then
+    [ -s "$TRIALS_OUT" ] || { echo "V1 trial gate requested but no trial evidence exists"; exit 1; }
+    python3 tools/analyze-watch-sensor-trials.py "$TRIALS_OUT" --require-v1-gate
+  fi
 else
-  echo "python3 unavailable; trace CSV saved but V1 readiness was not analyzed"
+  echo "python3 unavailable; Watch CSV evidence was saved but not analyzed"
 fi
