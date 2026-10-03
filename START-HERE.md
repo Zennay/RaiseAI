@@ -93,7 +93,11 @@ The debug APK must already be installed because provisioning uses Android `run-a
 6. Enable `RAISE_ENABLE_WEB_SEARCH=1` only if current-info queries should be allowed to incur search cost, then test a fresh-information question.
 7. Only then enable raise-to-talk and test **lower wrist → fresh raise → native listening**.
 8. Confirm another raise while listening/sending is blocked.
-9. Keep Gemini and ChatGPT Web as UI fallbacks until the native path is stable on the physical Watch.
+9. Run `./pull-diagnostics.command` immediately after the physical test. When at least one native gateway request has completed, the bundle includes `watch-e2e-evidence.json`.
+10. Treat the physical Watch → VPS gate as proven only when that evidence reports `outcome=success` with the expected route/status and a plausible `latency_ms`.
+11. Keep Gemini and ChatGPT Web as UI fallbacks until the native path is stable on the physical Watch.
+
+The Watch evidence file is deliberately content-free: it records route, status, execution flags, latency and input length, but never stores the transcript, response text, gateway token, TLS key material or provider credentials.
 
 ## Security boundary
 

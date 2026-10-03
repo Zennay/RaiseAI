@@ -35,5 +35,11 @@ $ADB -s "$TARGET" shell dumpsys activity services nl.zennay.raiseai > "$OUT/serv
 $ADB -s "$TARGET" shell dumpsys battery > "$OUT/battery.txt" || true
 $ADB -s "$TARGET" shell pm path com.google.android.wearable.assistant > "$OUT/google-assistant-package.txt" 2>&1 || true
 $ADB -s "$TARGET" exec-out run-as nl.zennay.raiseai cat files/sensor-traces.csv > "$OUT/sensor-traces.csv" 2>/dev/null || true
+if ! $ADB -s "$TARGET" exec-out run-as nl.zennay.raiseai cat files/watch-e2e-evidence.json > "$OUT/watch-e2e-evidence.json" 2>/dev/null; then
+  rm -f "$OUT/watch-e2e-evidence.json"
+fi
 
 echo "Saved diagnostics to: $OUT"
+if [ -s "$OUT/watch-e2e-evidence.json" ]; then
+  echo "Watch E2E evidence included: $OUT/watch-e2e-evidence.json"
+fi
