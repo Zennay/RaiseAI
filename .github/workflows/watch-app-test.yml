@@ -14,8 +14,10 @@ on:
       - "provision-watch-gateway.command"
       - "tools/validate-watch-e2e-evidence.py"
       - "tools/analyze-watch-sensor-traces.py"
+      - "tools/analyze-watch-sensor-trials.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
+      - "tests/test_watch_sensor_trial_analyzer.py"
       - ".github/workflows/watch-app-test.yml"
   pull_request:
     paths:
@@ -65,12 +67,13 @@ jobs:
           bash -n provision-watch-gateway.command
           bash -n install-watch-apk.command
           bash -n upgrade-watch.command
-          python3 -m py_compile tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py
+          python3 -m py_compile tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py
 
       - name: Watch evidence contracts
         run: |
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
+          python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
 
       - name: Unit tests and Watch APK
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
