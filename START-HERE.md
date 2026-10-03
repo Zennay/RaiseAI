@@ -94,8 +94,19 @@ The debug APK must already be installed because provisioning uses Android `run-a
 7. Only then enable raise-to-talk and test **lower wrist → fresh raise → native listening**.
 8. Confirm another raise while listening/sending is blocked.
 9. Run `./pull-diagnostics.command` immediately after the physical test. When at least one native gateway request has completed, the bundle includes `watch-e2e-evidence.json`.
-10. Treat the physical Watch → VPS gate as proven only when that evidence reports `outcome=success` with the expected route/status and a plausible `latency_ms`.
-11. Keep Gemini and ChatGPT Web as UI fallbacks until the native path is stable on the physical Watch.
+10. Validate the evidence explicitly. For a normal AI-answer smoke test:
+
+```bash
+python3 tools/validate-watch-e2e-evidence.py \
+  watch-diagnostics-*/watch-e2e-evidence.json \
+  --expect-route quick_ai \
+  --max-latency-ms 15000 \
+  --require-answer
+```
+
+`pull-diagnostics.command` also runs the basic schema/latency gate automatically when Python 3 is available.
+11. Treat the physical Watch → VPS gate as proven only when the validator exits 0 for the intended route and the evidence reports a plausible latency.
+12. Keep Gemini and ChatGPT Web as UI fallbacks until the native path is stable on the physical Watch.
 
 The Watch evidence file is deliberately content-free: it records route, status, execution flags, latency and input length, but never stores the transcript, response text, gateway token, TLS key material or provider credentials.
 
