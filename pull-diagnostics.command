@@ -42,4 +42,13 @@ fi
 echo "Saved diagnostics to: $OUT"
 if [ -s "$OUT/watch-e2e-evidence.json" ]; then
   echo "Watch E2E evidence included: $OUT/watch-e2e-evidence.json"
+  if command -v python3 >/dev/null 2>&1; then
+    if python3 tools/validate-watch-e2e-evidence.py "$OUT/watch-e2e-evidence.json" --max-latency-ms "${RAISE_E2E_MAX_LATENCY_MS:-15000}"; then
+      echo "Watch E2E evidence: basic gate PASS"
+    else
+      echo "Watch E2E evidence: gate NOT PASSED"
+    fi
+  else
+    echo "python3 unavailable; evidence saved but not validated locally"
+  fi
 fi
