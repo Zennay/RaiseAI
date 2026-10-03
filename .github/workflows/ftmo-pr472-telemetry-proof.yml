@@ -1,0 +1,77 @@
+name: FTMO PR472 telemetry proof via RaiseAI runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ftmo-pr472-telemetry-proof.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ftmo-pr472-telemetry-proof-raiseai
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    env:
+      TARGET_SHA: fc6ef3cc04ebc5324380316c33260765f36824e0
+      FTMO_AUTONOMOUS_CLOUD_BUDGET_USD: "0.00"
+      FTMO_ALLOW_PAID_AWS: ""
+    steps:
+      - name: Fetch exact FTMO PR472 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          src="$RUNNER_TEMP/ftmo-pr472-raise-proof"
+          rm -rf "$src"
+          gh repo clone Zennay/Ftmo "$src" -- --filter=blob:none --no-checkout >/dev/null
+          git -C "$src" checkout --detach "$TARGET_SHA" >/dev/null
+          test "$(git -C "$src" rev-parse HEAD)" = "$TARGET_SHA"
+
+      - name: Install isolated FTMO environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/ftmo-pr472-raise-proof"
+          venv="$RUNNER_TEMP/ftmo-pr472-raise-venv"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install -q -r "$src/requirements-ci.txt"
+          "$venv/bin/python" -m pip install -q -e "$src"
+
+      - name: Prove telemetry overlay and live sealed status
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/ftmo-pr472-raise-proof"
+          venv="$RUNNER_TEMP/ftmo-pr472-raise-venv"
+          cd "$src"
+          "$venv/bin/python" -m compileall -q src/prop_trading_ai/cli/v1_project_telemetry.py
+          "$venv/bin/python" -m pytest -q tests/test_project_telemetry.py tests/test_project_telemetry_runtime_status.py
+          status="/opt/ftmo-autonomous/.scratch/autonomy/status.json"
+          before="$(sha256sum "$status" | awk '{print $1}')"
+          "$venv/bin/python" - "$status" <<'PY'
+          import sys
+          from pathlib import Path
+          from prop_trading_ai.cli.v1_project_telemetry import _autonomous_runtime_summary
+          summary = _autonomous_runtime_summary(Path(sys.argv[1]))
+          assert summary is not None
+          assert summary["generation_number"] == 30
+          assert summary["stage"] == "provider_foundation"
+          assert summary["action"] == "provider_foundation_window_not_elapsed"
+          assert summary["provider_window_ready_at_utc"] == "2026-12-25T21:00:00+00:00"
+          assert summary["development_access_allowed"] is False
+          assert summary["walk_forward_access_allowed"] is False
+          assert summary["final_holdout_access_allowed"] is False
+          assert summary["live_trading_allowed"] is False
+          assert summary["broker_order_submission_allowed"] is False
+          print(summary)
+          PY
+          after="$(sha256sum "$status" | awk '{print $1}')"
+          test "$before" = "$after"
+          echo "FTMO_PR472_RAISEAI_PROOF_GREEN=1"
