@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   proof:
-    runs-on: self-hosted
+    runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 20
     env:
       TARGET_SHA: fc6ef3cc04ebc5324380316c33260765f36824e0
