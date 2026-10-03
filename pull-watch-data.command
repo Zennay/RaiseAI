@@ -46,3 +46,13 @@ else
   echo "Could not read debug app data. Make sure the debug build is installed and the watch is connected."
   exit 1
 fi
+
+if command -v python3 >/dev/null 2>&1; then
+  echo "V1 reliability evidence progress:"
+  python3 tools/analyze-watch-sensor-traces.py "$OUT" || true
+  if [ "${RAISE_REQUIRE_V1_TRACE_GATE:-0}" = "1" ]; then
+    python3 tools/analyze-watch-sensor-traces.py "$OUT" --require-v1-gate
+  fi
+else
+  echo "python3 unavailable; trace CSV saved but V1 readiness was not analyzed"
+fi
