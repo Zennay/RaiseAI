@@ -4,7 +4,7 @@
 
 - Native Watch → VPS requests now persist a compact `watch-e2e-evidence.json` record with route, status, latency and execution flags but no transcript, response text or credentials.
 - `pull-diagnostics.command` pulls that evidence from app-private storage and runs a strict local validation when Python 3 is available.
-- `tools/validate-watch-e2e-evidence.py` fails closed on request failures, unknown routes, schema drift, unexpected fields, route/status mismatch or excessive latency.
+- `tools/validate-watch-e2e-evidence.py` fails closed on request failures, unknown routes, schema drift, unexpected fields, stale/future evidence, route/status mismatch or excessive latency. `pull-diagnostics.command` requires evidence from the last 5 minutes by default so an old successful Watch request cannot satisfy a new physical test.
 - CI regression-tests the evidence contract and still builds the real Galaxy Watch APK on the self-hosted `vps-bb300bba` runner.
 - The version shown on the Watch is read from Gradle build metadata instead of being hardcoded in the activity.
 
