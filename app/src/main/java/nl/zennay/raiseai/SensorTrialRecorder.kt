@@ -14,16 +14,18 @@ object SensorTrialRecorder {
         durationMs: Long,
         sampleCount: Int,
         detectorTriggered: Boolean,
-        maxSimilarity: Float
+        maxSimilarity: Float,
+        appVersion: String,
+        detectorConfig: String
     ) {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
             file.writeText(
-                "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity\n"
+                "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,detector_config\n"
             )
         }
         file.appendText(
-            "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity\n"
+            "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity,$appVersion,$detectorConfig\n"
         )
     }
 
