@@ -83,8 +83,8 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
             detector_config = (row.get("detector_config") or "").strip()
             if not app_version:
                 raise TrialError(f"line {line}: app_version must be non-empty")
-            if not detector_config or "," in detector_config:
-                raise TrialError(f"line {line}: detector_config must be a non-empty comma-free id")
+            if not detector_config or detector_config == "missing" or "," in detector_config:
+                raise TrialError(f"line {line}: detector_config must be a concrete comma-free id")
 
             rows.append(
                 {
