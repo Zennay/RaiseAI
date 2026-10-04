@@ -1,0 +1,141 @@
+name: Emergency recover zCloud runtime and soak workers
+# One-shot cross-runner recovery carrier for zCloud P0 runtime/worker debugging.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-runtime-worker-recovery-20261004.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raiseai-zcloud-runtime-worker-recovery-20261004
+  cancel-in-progress: true
+
+jobs:
+  recover-and-soak:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 12
+    steps:
+      - name: Cancel superseded stuck zCloud deploys
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+            for run in 37237440248 37237691366; do
+              gh api -X POST "repos/Zennay/zCloud/actions/runs/$run/cancel" >/dev/null 2>&1 || true
+            done
+            echo "ZCLOUD_STALE_DEPLOY_CANCEL_REQUESTED=1"
+          else
+            echo "ZCLOUD_STALE_DEPLOY_CANCEL_SKIPPED_NO_GH_AUTH=1"
+          fi
+
+      - name: Restore dashboard service and self-heal
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n rm -f /home/ubuntu/zennay-cloud/.disable-self-heal
+          sudo -n systemctl reset-failed zennay-cloud.service || true
+          sudo -n systemctl restart zennay-cloud.service
+          for _ in $(seq 1 30); do
+            if sudo -n systemctl is-active --quiet zennay-cloud.service               && curl -fsS --max-time 4 http://127.0.0.1:8765/ >/dev/null               && curl -fsS --max-time 8 http://127.0.0.1:8765/api/status >/dev/null; then
+              echo "ZCLOUD_DASHBOARD_RECOVERY_GREEN=1"
+              break
+            fi
+            sleep 1
+          done
+          sudo -n systemctl is-active --quiet zennay-cloud.service
+          curl -fsS --max-time 4 http://127.0.0.1:8765/ >/dev/null
+          curl -fsS --max-time 8 http://127.0.0.1:8765/api/status >/tmp/zcloud-status.json
+          sudo -n systemctl start zcloud-self-heal.timer 2>/dev/null || true
+          sudo -n systemctl --no-pager --full status zennay-cloud.service | tail -80 || true
+
+      - name: Reconcile and force dynamic workers
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 10 http://127.0.0.1:8765/api/runner-targets | tee /tmp/zcloud-runner-targets-before.json
+          curl -fsS --max-time 10 -X POST -H 'Content-Type: application/json'             -d '{}' http://127.0.0.1:8765/api/dynamic-workers/force-push             | tee /tmp/zcloud-force-push.json
+          sleep 5
+          curl -fsS --max-time 10 http://127.0.0.1:8765/api/runner-live | tee /tmp/zcloud-runner-live-after-push.json
+
+      - name: Five-minute dashboard and worker soak
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, time, urllib.request, urllib.error
+          BASE="http://127.0.0.1:8765"
+          samples=[]
+          hard_failures=0
+          observed_live=set()
+          observed_ready=set()
+          for idx in range(20):
+              sample={"index":idx}
+              try:
+                  with urllib.request.urlopen(BASE+"/", timeout=4) as r:
+                      sample["dashboard_http"]=r.status
+                  with urllib.request.urlopen(BASE+"/api/runner-targets", timeout=8) as r:
+                      targets=json.load(r)
+                  with urllib.request.urlopen(BASE+"/api/runner-live", timeout=8) as r:
+                      live=json.load(r)
+                  selected=(targets.get("global_allocation") or {}).get("workers") or []
+                  keys=[str(w.get("worker_key") or "") for w in selected if w.get("worker_key")]
+                  configs=targets.get("projects") or {}
+                  ready=[k for k in keys if (configs.get(k) or {}).get("assignment_ready") is True]
+                  live_keys=[]
+                  runners=live.get("chatgpt_runners") or {}
+                  for key in keys:
+                      base=key.split("::w",1)[0]
+                      for worker in ((runners.get(base) or {}).get("workers") or []):
+                          if worker.get("worker_id")==key and worker.get("state")=="live" and int(worker.get("age_seconds") or 999999)<=90:
+                              live_keys.append(key)
+                              break
+                  observed_ready.update(ready)
+                  observed_live.update(live_keys)
+                  sample.update({"selected":keys,"ready":ready,"live":live_keys})
+                  if keys and (set(ready)!=set(keys) or set(live_keys)!=set(keys)):
+                      hard_failures += 1
+                  else:
+                      hard_failures = 0
+              except Exception as exc:
+                  sample["error"]=repr(exc)
+                  hard_failures += 1
+              samples.append(sample)
+              print("ZCLOUD_SOAK_SAMPLE "+json.dumps(sample,sort_keys=True), flush=True)
+              if hard_failures >= 4:
+                  raise SystemExit("dashboard/worker state unhealthy for four consecutive 15s samples")
+              if idx < 19:
+                  time.sleep(15)
+          final=samples[-1]
+          if final.get("dashboard_http") != 200:
+              raise SystemExit("dashboard not healthy at end of soak")
+          selected=set(final.get("selected") or [])
+          if selected and (set(final.get("ready") or []) != selected or set(final.get("live") or []) != selected):
+              raise SystemExit("not every final allocated worker is assignment-ready and live")
+          if selected and not selected.issubset(observed_ready & observed_live):
+              raise SystemExit("not every allocated worker proved ready+live during soak")
+          print("ZCLOUD_WORKER_SOAK_GREEN=1")
+          PY
+
+      - name: Capture final worker debug
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          echo "=== dashboard ==="
+          curl -i --max-time 8 http://127.0.0.1:8765/ | head -30
+          echo "=== targets ==="
+          curl -fsS --max-time 8 http://127.0.0.1:8765/api/runner-targets
+          echo
+          echo "=== live ==="
+          curl -fsS --max-time 8 http://127.0.0.1:8765/api/runner-live
+          echo
+          echo "=== worker-debug ==="
+          curl -fsS --max-time 8 http://127.0.0.1:8765/api/worker-debug
+          echo
+          echo "=== service ==="
+          sudo -n systemctl --no-pager --full status zennay-cloud.service | tail -120
