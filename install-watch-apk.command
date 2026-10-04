@@ -31,6 +31,24 @@ fi
 [ -f "$APK" ] || { echo "APK not found: $APK"; exit 1; }
 command -v unzip >/dev/null || { echo "unzip is required"; exit 1; }
 
+sha256_file() {
+  local path="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$path" | awk '{print tolower($1)}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print tolower($1)}'
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+  else
+    return 1
+  fi
+}
+
 "$ADB" start-server >/dev/null
 
 find_watch() {
@@ -209,6 +227,16 @@ if ! INSTALL_OUTPUT="$(install_once 2>&1)"; then
   install_once
 else
   printf '%s\n' "$INSTALL_OUTPUT"
+fi
+
+if [ -n "${RAISE_INSTALLED_APK_SHA256_FILE:-}" ]; then
+  INSTALLED_APK_SHA256="$(sha256_file "$INSTALL_APK" || true)"
+  if [ "${#INSTALLED_APK_SHA256}" -ne 64 ] || printf '%s' "$INSTALLED_APK_SHA256" | grep -Eq '[^0-9a-f]'; then
+    echo "ERROR: Could not attest the exact APK bytes used for installation."
+    exit 1
+  fi
+  mkdir -p "$(dirname "$RAISE_INSTALLED_APK_SHA256_FILE")"
+  printf '%s\n' "$INSTALLED_APK_SHA256" > "$RAISE_INSTALLED_APK_SHA256_FILE"
 fi
 
 if [ -n "${RAISE_INSTALLED_WATCH_SERIAL_FILE:-}" ]; then
