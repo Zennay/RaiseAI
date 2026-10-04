@@ -94,8 +94,6 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
 
       - name: Unit tests and Watch APK
-        env:
-          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx1280m\ -Dfile.encoding=UTF-8 -Dorg.gradle.workers.max=1
         run: |
           ./gradlew --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx1280m -Dfile.encoding=UTF-8" \
