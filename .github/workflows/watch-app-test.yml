@@ -104,6 +104,35 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
 
+      - name: Evidence identity negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle=(
+            ./gradlew --no-daemon
+            -Dorg.gradle.jvmargs="-Xmx1280m -Dfile.encoding=UTF-8"
+            -Dorg.gradle.workers.max=1
+            :app:verifyEvidenceBuildIdentity
+          )
+
+          wrong_revision="0000000000000000000000000000000000000000"
+          if RAISE_BUILD_REVISION="$wrong_revision" "${gradle[@]}"; then
+            echo "Identity gate unexpectedly accepted a revision that does not match HEAD."
+            exit 1
+          fi
+          echo "Negative control passed: mismatched revision rejected."
+
+          trap 'git checkout -- VERSION.txt' EXIT
+          printf '\n' >> VERSION.txt
+          if "${gradle[@]}"; then
+            echo "Identity gate unexpectedly accepted a dirty working tree."
+            exit 1
+          fi
+          git checkout -- VERSION.txt
+          trap - EXIT
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          echo "Negative control passed: dirty working tree rejected."
+
       - name: Unit tests and Watch APK
         run: |
           ./gradlew --no-daemon \
@@ -131,7 +160,7 @@ jobs:
 
           gradle = Path("app/build.gradle.kts").read_text()
           version_name = Path("VERSION.txt").read_text().strip()
-          match = re.search(r"versionCode\\s*=\\s*(\\d+)", gradle)
+          match = re.search(r"versionCode\s*=\s*(\d+)", gradle)
           if not match:
               raise SystemExit("versionCode not found in app/build.gradle.kts")
           version_code = int(match.group(1))
