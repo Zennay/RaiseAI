@@ -136,17 +136,20 @@ def build_report(
     raises = [trial for trial in qualifying if trial["label"] == "mouth_raise"]
     non_triggers = [trial for trial in qualifying if trial["label"] in NON_TRIGGER_LABELS]
 
-    app_versions = sorted({trial["app_version"] for trial in qualifying})
-    source_revisions = sorted({trial["source_revision"] for trial in qualifying})
-    detector_configs = sorted({trial["detector_config"] for trial in qualifying})
+    # Evidence identity is a file-level invariant, not a scoring-quality filter.
+    # A short/incomplete trial from another build must fail closed instead of being
+    # silently excluded before provenance validation.
+    app_versions = sorted({trial["app_version"] for trial in trials})
+    source_revisions = sorted({trial["source_revision"] for trial in trials})
+    detector_configs = sorted({trial["detector_config"] for trial in trials})
     if len(app_versions) > 1:
-        raise TrialError(f"qualifying trials mix app versions: {', '.join(app_versions)}")
+        raise TrialError(f"trials mix app versions: {', '.join(app_versions)}")
     if len(source_revisions) > 1:
-        raise TrialError("qualifying trials mix source revisions")
+        raise TrialError("trials mix source revisions")
     if len(detector_configs) > 1:
-        raise TrialError("qualifying trials mix detector configurations")
+        raise TrialError("trials mix detector configurations")
 
-    if expect_app_version is not None and app_versions and app_versions[0] != expect_app_version:
+    if expect_app_version is not None and app_versions[0] != expect_app_version:
         raise TrialError(
             f"trial app_version {app_versions[0]!r} does not match expected {expect_app_version!r}"
         )
@@ -154,7 +157,7 @@ def build_report(
         expected_revision = expect_source_revision.strip().lower()
         if len(expected_revision) != 40 or any(char not in "0123456789abcdef" for char in expected_revision):
             raise TrialError("expected source revision must be a 40-character Git SHA")
-        if source_revisions and source_revisions[0] != expected_revision:
+        if source_revisions[0] != expected_revision:
             raise TrialError(
                 f"trial source_revision {source_revisions[0]!r} does not match expected {expected_revision!r}"
             )

@@ -106,6 +106,35 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
                 required_non_triggers=1,
             )
 
+    def test_rejects_mixed_source_revision_even_when_mismatched_trial_is_too_short(self):
+        trials = [trial("mouth_raise", 1, True)]
+        trials += [
+            trial(
+                "normal_move",
+                2,
+                False,
+                duration_ms=1000,
+                sample_count=10,
+                source_revision="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            )
+        ]
+        with self.assertRaisesRegex(analyzer.TrialError, "mix source revisions"):
+            analyzer.build_report(
+                trials,
+                required_raises=1,
+                required_non_triggers=0,
+            )
+
+    def test_rejects_wrong_expected_identity_even_when_only_trial_is_too_short(self):
+        trials = [trial("mouth_raise", 1, True, duration_ms=1000, sample_count=10)]
+        with self.assertRaisesRegex(analyzer.TrialError, "does not match expected"):
+            analyzer.build_report(
+                trials,
+                required_raises=0,
+                required_non_triggers=0,
+                expect_source_revision="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            )
+
     def test_rejects_source_revision_that_does_not_match_session(self):
         trials = [trial("mouth_raise", 1, True)]
         trials += [trial("normal_move", 2, False)]
