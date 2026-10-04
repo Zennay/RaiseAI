@@ -1,0 +1,35 @@
+name: Clear superseded zCloud rollout queue
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-rollout-queue-cleanup-20261004.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel only superseded zCloud runs
+        env:
+          GH_TOKEN: ${{ secrets.ZCLOUD_GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "ZCLOUD_GITHUB_TOKEN unavailable; use cross-repo API with default token not permitted"
+            exit 1
+          fi
+          for run_id in 37238798801 37239126698 37239126759 37239126696 37239126688; do
+            state="$(gh api "repos/Zennay/zCloud/actions/runs/$run_id" --jq '.status + ":" + (.conclusion // "")' 2>/dev/null || true)"
+            echo "RUN $run_id state=${state:-unresolved}"
+            case "$state" in
+              queued:*|pending:*|in_progress:*|waiting:*)
+                gh api --method POST "repos/Zennay/zCloud/actions/runs/$run_id/cancel" >/dev/null
+                echo "SUPERSEDED_ZCLOUD_RUN_CANCEL_REQUESTED=$run_id"
+                ;;
+              *) ;;
+            esac
+          done
