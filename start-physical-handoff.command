@@ -71,6 +71,18 @@ PY
   exit 1
 }
 
+actual_apk_sha="$(python3 - "$APK" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
+[ "$actual_apk_sha" = "$expected_apk_sha" ] || {
+  echo "APK SHA-256 mismatch."
+  exit 1
+}
+
 bundle_ref="$(
   git bundle list-heads "$BUNDLE" |
     awk -v sha="$revision" 'tolower($1) == sha {print $2; exit}'
