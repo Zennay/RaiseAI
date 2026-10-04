@@ -13,14 +13,37 @@ ADB="$(find_adb || true)"
 [ -n "$ADB" ] || { echo "ADB not found"; exit 1; }
 
 DEVICES="$($ADB devices | awk 'NR>1 && $2=="device" {print $1}')"
-TARGET=""
-while IFS= read -r serial; do
-  [ -z "$serial" ] && continue
-  c="$($ADB -s "$serial" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
-  if printf '%s' "$c" | grep -qi watch; then TARGET="$serial"; break; fi
-done <<EOF_DEVICES
+TARGET="${ANDROID_SERIAL:-}"
+if [ -n "$TARGET" ]; then
+  printf '%s\n' "$DEVICES" | grep -Fxq "$TARGET" || {
+    echo "Prepared Watch is not connected over ADB: $TARGET"
+    exit 1
+  }
+  model="$($ADB -s "$TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+  characteristics="$($ADB -s "$TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+  features="$($ADB -s "$TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+  if [ "$model" != "SM_L315F" ] &&
+     ! printf '%s' "$characteristics" | grep -qi watch &&
+     ! printf '%s\n' "$features" | grep -q 'android.hardware.type.watch'; then
+    echo "ANDROID_SERIAL does not identify a Wear OS watch: $TARGET"
+    exit 1
+  fi
+else
+  while IFS= read -r serial; do
+    [ -z "$serial" ] && continue
+    model="$($ADB -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+    characteristics="$($ADB -s "$serial" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+    features="$($ADB -s "$serial" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+    if [ "$model" = "SM_L315F" ] ||
+       printf '%s' "$characteristics" | grep -qi watch ||
+       printf '%s\n' "$features" | grep -q 'android.hardware.type.watch'; then
+      TARGET="$serial"
+      break
+    fi
+  done <<EOF_DEVICES
 $DEVICES
 EOF_DEVICES
+fi
 [ -n "$TARGET" ] || { echo "No ADB Wear OS watch connected"; exit 1; }
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
