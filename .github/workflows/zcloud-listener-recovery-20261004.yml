@@ -234,8 +234,18 @@ jobs:
               if still_matches(pid):
                   run(["sudo", "-n", "kill", "-KILL", str(pid)])
 
-          if service_state() != "active":
-              run(["sudo", "-n", "systemctl", "start", SERVICE])
+          # A listener can remain systemd-active while no longer accepting jobs.
+          # Restart it only when there is no active Runner.Worker anywhere in the
+          # zCloud runner root; active jobs are always preserved.
+          rows = process_rows()
+          active_workers = [row for row in rows if row["kind"] == "worker"]
+          if not active_workers:
+              run(["sudo", "-n", "systemctl", "restart", SERVICE])
+              print("ZCLOUD_CANONICAL_LISTENER_RESTARTED_IDLE")
+          elif service_state() != "active":
+              raise SystemExit(
+                  "zCloud runner service is inactive while Runner.Worker exists; refusing restart"
+              )
 
           verify_deadline = time.monotonic() + 30
           while True:
