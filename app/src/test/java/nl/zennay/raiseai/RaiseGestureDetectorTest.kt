@@ -1,10 +1,21 @@
 package nl.zennay.raiseai
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RaiseGestureDetectorTest {
+    @Test
+    fun configurationIdChangesWhenDetectionThresholdChanges() {
+        val baseline = RaiseGestureDetector()
+        val tuned = RaiseGestureDetector().apply {
+            similarityThreshold = baseline.similarityThreshold + 0.01f
+        }
+
+        assertNotEquals(baseline.configurationId(), tuned.configurationId())
+    }
+
     @Test
     fun stillMouthPoseDoesNotTrigger() {
         val detector = RaiseGestureDetector().apply { similarityThreshold = 0.95f; holdMs = 100 }

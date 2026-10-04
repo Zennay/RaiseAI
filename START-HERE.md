@@ -111,6 +111,29 @@ python3 tools/validate-watch-e2e-evidence.py \
 
 The Watch evidence file is deliberately content-free: it records route, status, execution flags, latency and input length, but never stores the transcript, response text, gateway token, TLS key material or provider credentials.
 
+## 6. Run the V1 gesture reliability evidence session
+
+The three **Record** buttons now run a 4-second detector trial without launching the assistant. The app temporarily suppresses the live gesture service during the trial, samples at the same ~10 Hz request used by the service, and records whether the same `RaiseGestureDetector` triggered.
+
+Collect at least:
+
+- 30 `mouth_raise` trials;
+- 100 non-trigger trials across `view_time` and `normal_move`.
+
+Then export and score them:
+
+```bash
+./pull-watch-data.command
+```
+
+The export includes raw `sensor-traces.csv` plus `sensor-trials.csv` with per-trial detector outcomes. To make the command fail unless the roadmap gate is actually met:
+
+```bash
+RAISE_REQUIRE_V1_TRIAL_GATE=1 ./pull-watch-data.command
+```
+
+The V1 gate passes only when there are at least 30 qualifying mouth raises and 100 qualifying non-trigger trials, intentional-raise detection is at least 90%, and false-trigger rate is at most 5%. Short/incomplete trials are excluded from the denominator.
+
 ## Security boundary
 
 - OpenRouter/provider keys: **VPS only**

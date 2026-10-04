@@ -40,6 +40,22 @@ class RaiseGestureDetector {
     var cooldownMs = 2_500L
     var rearmHoldMs = 500L
 
+    fun configurationId(): String = listOf(
+        "raise-detector-v1",
+        "similarity=$similarityThreshold",
+        "rearmSimilarity=$rearmSimilarityThreshold",
+        "movement=$movementThreshold",
+        "holdMs=$holdMs",
+        "movementWindowMs=$movementWindowMs",
+        "movementBurstMs=$movementBurstMs",
+        "movementHits=$requiredMovementHits",
+        "approachStart=$approachStartSimilarityThreshold",
+        "approachWindowMs=$approachWindowMs",
+        "minimumApproachRise=$minimumApproachRise",
+        "cooldownMs=$cooldownMs",
+        "rearmHoldMs=$rearmHoldMs"
+    ).joinToString(";")
+
     fun onAccelerometer(x: Float, y: Float, z: Float, timeMs: Long, mouthPose: MouthPose?): DetectionDebug {
         if (!initialized) {
             // Establish the current wrist orientation as the baseline. Do not count sensor

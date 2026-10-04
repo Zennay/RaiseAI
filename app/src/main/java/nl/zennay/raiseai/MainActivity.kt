@@ -39,6 +39,12 @@ class MainActivity : Activity(), SensorEventListener {
     private var traceLabel: String? = null
     private var traceSessionId = 0L
     private var traceStartedMs = 0L
+    private var traceDetector: RaiseGestureDetector? = null
+    private var traceMouthPose: MouthPose? = null
+    private var traceDetectorTriggered = false
+    private var traceMaxSimilarity = -1f
+    private var traceSampleCount = 0
+    private var traceMonitoringWasEnabled = false
     private val finishTraceRunnable = Runnable { finishTraceCapture() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -205,6 +211,7 @@ class MainActivity : Activity(), SensorEventListener {
 
         column.addView(button("Clear recorded samples") {
             SensorTraceRecorder.clear(this)
+            SensorTrialRecorder.clear(this)
             CalibrationStore.clearTriggerStats(this)
             toast("Test data cleared")
             refreshUi()
@@ -310,29 +317,72 @@ class MainActivity : Activity(), SensorEventListener {
             toast("No accelerometer found")
             return
         }
+        val pose = CalibrationStore.loadPose(this) ?: run {
+            toast("Calibrate your mouth pose before reliability trials")
+            return
+        }
+
+        traceMonitoringWasEnabled = CalibrationStore.isMonitoringEnabled(this)
+        if (traceMonitoringWasEnabled) {
+            stopService(Intent(this, GestureMonitorService::class.java))
+        }
 
         traceLabel = label
         traceSessionId = System.currentTimeMillis()
         traceStartedMs = SystemClock.elapsedRealtime()
+        traceDetector = RaiseGestureDetector()
+        traceMouthPose = pose
+        traceDetectorTriggered = false
+        traceMaxSimilarity = -1f
+        traceSampleCount = 0
         setCaptureControlsEnabled(false)
         statusText.text = when (label) {
-            "mouth_raise" -> "Recording… raise naturally to your mouth"
-            "view_time" -> "Recording… check the time naturally"
-            else -> "Recording… move your arm normally"
+            "mouth_raise" -> "Reliability trial… raise naturally to your mouth"
+            "view_time" -> "Reliability trial… check the time naturally"
+            else -> "Reliability trial… move your arm normally"
         }
 
-        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME)
+        // Match the foreground service's ~10 Hz sampling request so trial outcomes
+        // exercise the same detector timing without launching the assistant.
+        sensorManager.registerListener(this, sensor, TRACE_SENSOR_SAMPLING_US)
         handler.removeCallbacks(finishTraceRunnable)
         handler.postDelayed(finishTraceRunnable, TRACE_DURATION_MS)
     }
 
     private fun finishTraceCapture(showToast: Boolean = true) {
-        if (traceLabel == null) return
+        val label = traceLabel ?: return
         handler.removeCallbacks(finishTraceRunnable)
         sensorManager.unregisterListener(this)
+
+        val durationMs = (SystemClock.elapsedRealtime() - traceStartedMs).coerceAtLeast(0L)
+        SensorTrialRecorder.append(
+            context = this,
+            label = label,
+            sessionId = traceSessionId,
+            durationMs = durationMs,
+            sampleCount = traceSampleCount,
+            detectorTriggered = traceDetectorTriggered,
+            maxSimilarity = traceMaxSimilarity,
+            appVersion = BuildConfig.VERSION_NAME,
+            detectorConfig = traceDetector?.configurationId() ?: "missing"
+        )
+
         traceLabel = null
+        traceDetector = null
+        traceMouthPose = null
+        traceSampleCount = 0
+
+        if (traceMonitoringWasEnabled && CalibrationStore.isMonitoringEnabled(this)) {
+            startForegroundService(Intent(this, GestureMonitorService::class.java))
+        }
+        traceMonitoringWasEnabled = false
+
         setCaptureControlsEnabled(true)
-        if (showToast) toast("Recorded. Total samples: ${SensorTraceRecorder.sampleCount(this)}")
+        if (showToast) {
+            toast(if (traceDetectorTriggered) "Trial recorded · detector TRIGGERED" else "Trial recorded · no trigger")
+        }
+        traceDetectorTriggered = false
+        traceMaxSimilarity = -1f
         refreshUi()
     }
 
@@ -360,6 +410,18 @@ class MainActivity : Activity(), SensorEventListener {
                 y = event.values[1],
                 z = event.values[2]
             )
+            traceSampleCount++
+            val result = traceDetector?.onAccelerometer(
+                event.values[0],
+                event.values[1],
+                event.values[2],
+                event.timestamp / 1_000_000L,
+                traceMouthPose
+            )
+            if (result != null) {
+                if (result.triggered) traceDetectorTriggered = true
+                if (result.similarity > traceMaxSimilarity) traceMaxSimilarity = result.similarity
+            }
         }
     }
 
@@ -383,17 +445,32 @@ class MainActivity : Activity(), SensorEventListener {
 
         val triggers = CalibrationStore.triggerCount(this)
         val samples = SensorTraceRecorder.sampleCount(this)
+        val trials = SensorTrialRecorder.trialCount(this)
+        val trialProgress = SensorTrialRecorder.progress(this)
         val lastSimilarity = CalibrationStore.lastTriggerSimilarity(this)
         val assistantPath = CalibrationStore.lastAssistantPath(this)
         val activeMinutes = CalibrationStore.activeMonitoringMs(this) / 60_000L
         val sleepMinutes = CalibrationStore.sleepPausedMs(this) / 60_000L
         val sessionBlocks = CalibrationStore.sessionBlockCount(this)
         statsText.text = buildString {
-            append("Triggers: $triggers · Samples: $samples")
+            append("Triggers: $triggers · Samples: $samples · Trials: $trials")
             if (triggers > 0) append("\nLast match: ${"%.3f".format(lastSimilarity)}")
             append("\nAssistant route: $assistantPath")
             append("\nActive: ${activeMinutes}m · Sleep paused: ${sleepMinutes}m")
             append("\nAssistant retriggers blocked: $sessionBlocks")
+            append(
+                "\nV1 trials: mouth ${trialProgress.mouthTrials}/30 " +
+                    "(${"%.0f".format(trialProgress.detectionRate * 100)}% detected) · " +
+                    "non-trigger ${trialProgress.nonTriggerTrials}/100 " +
+                    "(${"%.0f".format(trialProgress.falseTriggerRate * 100)}% false)"
+            )
+            if (trialProgress.mixedEvidenceIdentity) {
+                append("\n⚠ Mixed app/detector trial revisions — clear test data")
+            } else if (trialProgress.v1GatePassed) {
+                append("\n✓ V1 reliability gate measured")
+            } else if (trialProgress.rejectedTrials > 0) {
+                append("\nRejected/incomplete trials: ${trialProgress.rejectedTrials}")
+            }
         }
     }
 
@@ -429,5 +506,6 @@ class MainActivity : Activity(), SensorEventListener {
     companion object {
         const val EXTRA_OPEN_CHATGPT_LOGIN = "open_chatgpt_login"
         private const val TRACE_DURATION_MS = 4_000L
+        private const val TRACE_SENSOR_SAMPLING_US = 100_000
     }
 }
