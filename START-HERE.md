@@ -20,6 +20,16 @@ The flow is fail-closed and keeps one evidence directory under `~/.raiseai/evide
 2. **verify-e2e** accepts only a fresh `quick_ai` response from the exact prepared app version and Git revision;
 3. **verify-v1** is allowed only after E2E passes and requires the full 30 intentional raises / 100 non-trigger dataset from that same exact app version + source revision, with ≥90% detection and ≤5% false triggers.
 
+For a published physical-handoff artifact, install the exact prebuilt APK instead of rebuilding it by exporting both the artifact path and the SHA-256 recorded in `BUILD-IDENTITY.txt`:
+
+```bash
+RAISE_PREBUILT_APK=/path/to/RaiseAI-v1.5.2-debug.apk \
+RAISE_EXPECT_APK_SHA256=<64-char-sha256> \
+bash ./physical-validation.command all /path/to/watch-gateway.properties
+```
+
+The orchestrator verifies the APK digest, exact embedded Git source revision and Watch ABI before install, and stores the installed APK SHA-256 in the physical session manifest.
+
 The manual commands remain available when debugging an individual stage:
 
 ```bash
