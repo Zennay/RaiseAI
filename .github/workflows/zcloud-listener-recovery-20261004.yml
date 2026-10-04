@@ -1,6 +1,6 @@
 name: Recover duplicate zCloud Actions listener safely
 # Operational retrigger 2026-10-04 21:34 UTC for zCloud PWQ-10; full /proc ancestry fix
-# Triggered after zCloud deterministic reset follow-up; keep this workflow checkout-free.
+# Operational retrigger 2026-10-04 22:20 UTC after zCloud runner queue went fully idle/offline; keep checkout-free.
 
 on:
   push:
