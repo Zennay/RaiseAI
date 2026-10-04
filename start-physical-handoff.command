@@ -67,6 +67,33 @@ case "$expected_bundle_sha" in
 esac
 [ "${#expected_bundle_sha}" -eq 64 ] || { echo "source_bundle_sha256 must be 64 hex characters"; exit 1; }
 
+if [ "$VERIFY_ONLY" -eq 0 ]; then
+  canonical_revision="${RAISE_CANONICAL_MAIN_REVISION_OVERRIDE:-}"
+  if [ -z "$canonical_revision" ]; then
+    canonical_revision="$(
+      git ls-remote https://github.com/Zennay/RaiseAI.git refs/heads/main 2>/dev/null |
+        awk 'NR == 1 {print tolower($1)}'
+    )"
+  else
+    canonical_revision="$(printf '%s' "$canonical_revision" | tr 'A-F' 'a-f')"
+  fi
+
+  case "$canonical_revision" in
+    *[!0-9a-f]*|'') echo "Unable to resolve a valid canonical RaiseAI main revision."; exit 1 ;;
+  esac
+  [ "${#canonical_revision}" -eq 40 ] || {
+    echo "Canonical RaiseAI main revision must be 40 hex characters."
+    exit 1
+  }
+  [ "$revision" = "$canonical_revision" ] || {
+    echo "Physical handoff is stale relative to canonical RaiseAI main."
+    echo "  handoff: $revision"
+    echo "  main:    $canonical_revision"
+    echo "Publish a fresh exact-main handoff before collecting physical evidence."
+    exit 1
+  }
+fi
+
 actual_bundle_sha="$(python3 - "$BUNDLE" <<'PY'
 import hashlib
 import sys
