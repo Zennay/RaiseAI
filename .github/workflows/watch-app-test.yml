@@ -11,6 +11,8 @@ on:
       - "settings.gradle.kts"
       - "pull-diagnostics.command"
       - "provision-watch-gateway.command"
+      - "tools/validate-watch-e2e-evidence.py"
+      - "tests/test_watch_e2e_evidence_validator.py"
       - ".github/workflows/watch-app-test.yml"
   pull_request:
     paths:
@@ -20,6 +22,8 @@ on:
       - "settings.gradle.kts"
       - "pull-diagnostics.command"
       - "provision-watch-gateway.command"
+      - "tools/validate-watch-e2e-evidence.py"
+      - "tests/test_watch_e2e_evidence_validator.py"
       - ".github/workflows/watch-app-test.yml"
 
 concurrency:
@@ -44,6 +48,7 @@ jobs:
       - name: Runner toolchain
         run: |
           java -version
+          python3 --version
           echo "ANDROID_HOME=${ANDROID_HOME:-}"
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
 
@@ -53,6 +58,10 @@ jobs:
           bash -n provision-watch-gateway.command
           bash -n install-watch-apk.command
           bash -n upgrade-watch.command
+          python3 -m py_compile tools/validate-watch-e2e-evidence.py
+
+      - name: Watch E2E evidence contract
+        run: python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
 
       - name: Unit tests and Watch APK
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
