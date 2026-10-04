@@ -86,6 +86,14 @@ class StartPhysicalHandoffTest(unittest.TestCase):
         self.assertIn("Reusing exact clean restored source:", second.stdout)
         self.assertIn("VERIFY-ONLY PASS", second.stdout)
 
+    def test_tampered_apk_fails_before_bundled_verifier(self):
+        self.apk.write_bytes(b"tampered-raiseai-test-apk")
+
+        result = self.starter()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("APK SHA-256 mismatch.", result.stdout)
+        self.assertFalse(self.restore.exists())
+
     def test_existing_non_git_restore_fails_closed(self):
         path = self.root / "not-a-checkout"
         path.mkdir()
