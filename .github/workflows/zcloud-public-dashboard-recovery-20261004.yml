@@ -1,0 +1,85 @@
+name: Recover public zCloud dashboard ingress
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-public-dashboard-recovery-20261004.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raiseai-zcloud-public-dashboard-recovery
+  cancel-in-progress: true
+
+jobs:
+  recover:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 6
+    steps:
+      - name: Inspect listener and firewall
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== service ==="
+          sudo -n systemctl --no-pager --full status zennay-cloud.service || true
+          echo "=== unit ==="
+          sudo -n systemctl cat zennay-cloud.service || true
+          echo "=== listener ==="
+          sudo -n ss -ltnp '( sport = :8765 )' || true
+          echo "=== ufw ==="
+          sudo -n ufw status verbose || true
+          echo "=== nft input ==="
+          sudo -n nft list ruleset 2>/dev/null | grep -E -C 3 '8765|hook input|policy' || true
+          echo "=== local ==="
+          curl -fsS --max-time 8 http://127.0.0.1:8765/ >/dev/null
+          echo "LOCAL_ZCLOUD_DASHBOARD_GREEN=1"
+
+      - name: Ensure public bind and host firewall rule
+        shell: bash
+        run: |
+          set -euo pipefail
+          listener="$(sudo -n ss -H -ltn '( sport = :8765 )' || true)"
+          echo "LISTENER_BEFORE=$listener"
+          if ! grep -Eq '(^|[[:space:]])(0\.0\.0\.0:8765|\*:8765|\[::\]:8765)([[:space:]]|$)' <<<"$listener"; then
+            echo "ZCLOUD_PUBLIC_BIND_RECOVERY=required"
+            sudo -n install -d -m 0755 /etc/systemd/system/zennay-cloud.service.d
+            printf '%s\n' '[Service]' 'Environment=ZENNAY_BIND=0.0.0.0' 'Environment=ZENNAY_PORT=8765'               | sudo -n tee /etc/systemd/system/zennay-cloud.service.d/20-public-dashboard.conf >/dev/null
+            sudo -n systemctl daemon-reload
+            timeout 25s sudo -n systemctl restart zennay-cloud.service
+          else
+            echo "ZCLOUD_PUBLIC_BIND_RECOVERY=already_public"
+          fi
+
+          if sudo -n ufw status 2>/dev/null | head -1 | grep -q 'Status: active'; then
+            if ! sudo -n ufw status | grep -Eq '(^|[[:space:]])8765(/tcp)?([[:space:]]|$)'; then
+              sudo -n ufw allow 8765/tcp comment 'zCloud dashboard'
+              echo "ZCLOUD_UFW_8765=added"
+            else
+              echo "ZCLOUD_UFW_8765=already_allowed"
+            fi
+          else
+            echo "ZCLOUD_UFW=inactive_or_unavailable"
+          fi
+
+          for _ in $(seq 1 20); do
+            if curl -fsS --max-time 5 http://127.0.0.1:8765/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS --max-time 8 http://127.0.0.1:8765/ >/dev/null
+          listener="$(sudo -n ss -H -ltn '( sport = :8765 )' || true)"
+          echo "LISTENER_AFTER=$listener"
+          grep -Eq '(^|[[:space:]])(0\.0\.0\.0:8765|\*:8765|\[::\]:8765)([[:space:]]|$)' <<<"$listener"
+          echo "ZCLOUD_PUBLIC_LISTENER_GREEN=1"
+
+      - name: Final host evidence
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          sudo -n systemctl --no-pager --full status zennay-cloud.service | tail -80
+          sudo -n ss -ltnp '( sport = :8765 )'
+          sudo -n ufw status verbose
