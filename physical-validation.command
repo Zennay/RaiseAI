@@ -264,13 +264,15 @@ verify_v1() {
   [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
   require_command python3
 
-  local e2e_passed
+  local e2e_passed version revision
   e2e_passed="$(json_get "$session/session.json" e2e_passed)"
   [ "$e2e_passed" = "true" ] || {
     echo "Refusing V1 gate before this session's fresh E2E gate has passed."
     echo "Run verify-e2e first."
     exit 1
   }
+  version="$(json_get "$session/session.json" app_version)"
+  revision="$(json_get "$session/session.json" source_revision)"
 
   RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
 
@@ -279,7 +281,10 @@ verify_v1() {
   [ -n "$trials" ] || { echo "No trial evidence was exported"; exit 1; }
 
   result="$session/v1-result.json"
-  python3 tools/analyze-watch-sensor-trials.py "$trials" --require-v1-gate | tee "$result"
+  python3 tools/analyze-watch-sensor-trials.py "$trials" \
+    --expect-app-version "$version" \
+    --expect-source-revision "$revision" \
+    --require-v1-gate | tee "$result"
 
   json_set "$session/session.json" v1_gate_passed true
   json_set "$session/session.json" v1_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
