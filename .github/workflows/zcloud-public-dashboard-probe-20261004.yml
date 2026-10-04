@@ -1,0 +1,38 @@
+name: Probe public zCloud dashboard externally
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-public-dashboard-probe-20261004.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe dashboard and API from outside VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="http://51.91.103.193:8765"
+          for attempt in 1 2 3 4 5; do
+            root_code="$(curl -sS -o /tmp/zcloud-root -w '%{http_code}' --connect-timeout 5 --max-time 10 "$base/")"
+            api_code="$(curl -sS -o /tmp/zcloud-status -w '%{http_code}' --connect-timeout 5 --max-time 15 "$base/api/status")"
+            echo "PUBLIC_ZCLOUD_PROBE attempt=$attempt root=$root_code api=$api_code"
+            test "$root_code" = "200"
+            test "$api_code" = "200"
+            grep -q '<title>zCloud' /tmp/zcloud-root
+            python3 - <<'PY'
+          import json
+          data=json.load(open("/tmp/zcloud-status"))
+          if not isinstance(data,dict) or "projects" not in data:
+              raise SystemExit("invalid public zCloud status payload")
+          print("PUBLIC_ZCLOUD_STATUS_JSON_GREEN=1")
+          PY
+            if [ "$attempt" -lt 5 ]; then sleep 5; fi
+          done
+          echo "PUBLIC_ZCLOUD_DASHBOARD_GREEN=1"
