@@ -1,0 +1,31 @@
+name: External zCloud dashboard probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-zcloud-dashboard-external.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe public zCloud dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== ROOT ==="
+          curl -v --connect-timeout 5 --max-time 12 -o /tmp/root.html -w 'ROOT_HTTP=%{http_code} bytes=%{size_download}\n' http://198.244.191.182:8765/
+          grep -q 'zCloud' /tmp/root.html
+          echo "=== STATUS ==="
+          code="$(curl -sS --connect-timeout 5 --max-time 12 -o /tmp/status.json -w '%{http_code}' http://198.244.191.182:8765/api/status || true)"
+          echo "STATUS_HTTP=$code"
+          head -c 1200 /tmp/status.json 2>/dev/null || true
+          echo
+          test "$code" = "200" -o "$code" = "503"
+          echo ZCLOUD_EXTERNAL_DASHBOARD_REACHABLE
