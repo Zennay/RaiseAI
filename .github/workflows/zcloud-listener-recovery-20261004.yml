@@ -1,4 +1,5 @@
 name: Recover duplicate zCloud Actions listener safely
+# Operational retrigger 2026-10-04 21:33 UTC for zCloud PWQ-10
 # Triggered after zCloud deterministic reset follow-up; keep this workflow checkout-free.
 
 on:
