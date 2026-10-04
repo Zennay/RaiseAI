@@ -184,35 +184,7 @@ if ! INSTALL_OUTPUT="$(install_once 2>&1)"; then
 
   echo "Install failed; trying one automatic reconnect of the originally selected Watch..."
   BOUND_TARGET="$TARGET"
-  if printf '%s' "$BOUND_TARGET" | grep -Eq '^[^:]+:[0-9]+
-else
-  printf '%s\n' "$INSTALL_OUTPUT"
-fi
-
-if [ -n "${RAISE_INSTALLED_WATCH_SERIAL_FILE:-}" ]; then
-  mkdir -p "$(dirname "$RAISE_INSTALLED_WATCH_SERIAL_FILE")"
-  printf '%s\n' "$TARGET" > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
-fi
-
-echo "Applying sideload grants..."
-"$ADB" -s "$TARGET" shell appops set "$PACKAGE" SYSTEM_ALERT_WINDOW allow || true
-"$ADB" -s "$TARGET" shell appops set "$PACKAGE" GET_USAGE_STATS allow || true
-
-echo "Opening Raise AI..."
-"$ADB" -s "$TARGET" shell am start -n "$PACKAGE/.MainActivity" >/dev/null
-
-echo
-echo "Installed package:"
-"$ADB" -s "$TARGET" shell dumpsys package "$PACKAGE" |
-  grep -E "versionName=|versionCode=" | head -2
-
-if [ "$(uname -s)" = "Darwin" ] &&
-   [ -f "$SCRIPT_DIR/install-mac-adb-autoconnect.command" ] &&
-   [ ! -f "$STATE_DIR/autoconnect-installed" ]; then
-  bash "$SCRIPT_DIR/install-mac-adb-autoconnect.command" --quiet || true
-fi
-
-echo "Raise AI installation complete."; then
+  if printf '%s' "$BOUND_TARGET" | grep -Eq '^[^:]+:[0-9]+$'; then
     connect_endpoint "$BOUND_TARGET" || true
   fi
   sleep 1
