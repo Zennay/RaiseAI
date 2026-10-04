@@ -330,9 +330,9 @@ class GatewayProvisionBindingTest(unittest.TestCase):
         self.log = self.root / "adb-provision.log"
         self.profile = self.root / "watch-gateway.properties"
         self.profile.write_text(
-            "url=https://raise.example.invalid:8787\\n"
-            "token=abcdefghijklmnopqrstuvwxyz0123456789TOKEN\\n"
-            "spki_sha256=" + ("a" * 64) + "\\n",
+            "url=https://raise.example.invalid:8787\n"
+            "token=abcdefghijklmnopqrstuvwxyz0123456789TOKEN\n"
+            "spki_sha256=" + ("a" * 64) + "\n",
             encoding="utf-8",
         )
 
