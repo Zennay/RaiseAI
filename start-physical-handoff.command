@@ -37,7 +37,15 @@ done
 
 read_identity() {
   local key="$1"
-  sed -n "s/^${key}=//p" "$IDENTITY" | head -n 1 | tr -d '\r\n'
+  local values
+  values="$(sed -n "s/^${key}=//p" "$IDENTITY" | tr -d '\r')"
+  local count
+  count="$(printf '%s\n' "$values" | awk 'NF { count += 1 } END { print count + 0 }')"
+  [ "$count" -eq 1 ] || {
+    echo "BUILD-IDENTITY.txt must contain exactly one non-empty ${key}= entry (found $count)." >&2
+    return 1
+  }
+  printf '%s' "$values"
 }
 
 revision="$(read_identity source_revision | tr 'A-F' 'a-f')"
