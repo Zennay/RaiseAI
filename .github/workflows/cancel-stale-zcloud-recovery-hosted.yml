@@ -1,0 +1,26 @@
+name: Cancel stale zCloud recovery carrier
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cancel-stale-zcloud-recovery-hosted.yml"
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=37237904626
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/$run_id" --jq '.status' 2>/dev/null || true)"
+          echo "stale_run=$run_id status=$status"
+          if [[ "$status" == "queued" || "$status" == "pending" || "$status" == "in_progress" || "$status" == "waiting" ]]; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/$run_id/cancel" >/dev/null || true
+            echo "STALE_ZCLOUD_RECOVERY_CANCEL_REQUESTED=1"
+          fi
