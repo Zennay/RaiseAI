@@ -94,6 +94,38 @@ class StartPhysicalHandoffTest(unittest.TestCase):
         self.assertIn("APK SHA-256 mismatch.", result.stdout)
         self.assertFalse(self.restore.exists())
 
+    def test_duplicate_source_revision_fails_closed(self):
+        identity = self.artifact / "BUILD-IDENTITY.txt"
+        identity.write_text(
+            identity.read_text(encoding="utf-8")
+            + f"source_revision={self.revision}\n",
+            encoding="utf-8",
+        )
+
+        result = self.starter()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "must contain exactly one non-empty source_revision= entry (found 2)",
+            result.stdout,
+        )
+        self.assertFalse(self.restore.exists())
+
+    def test_duplicate_digest_key_fails_closed(self):
+        identity = self.artifact / "BUILD-IDENTITY.txt"
+        apk_sha = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        identity.write_text(
+            identity.read_text(encoding="utf-8") + f"apk_sha256={apk_sha}\n",
+            encoding="utf-8",
+        )
+
+        result = self.starter()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "must contain exactly one non-empty apk_sha256= entry (found 2)",
+            result.stdout,
+        )
+        self.assertFalse(self.restore.exists())
+
     def test_existing_non_git_restore_fails_closed(self):
         path = self.root / "not-a-checkout"
         path.mkdir()
