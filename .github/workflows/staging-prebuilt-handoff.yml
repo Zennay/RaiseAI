@@ -11,6 +11,9 @@ on:
       - "tests/test_watch_apk_identity.py"
       - ".github/workflows/staging-prebuilt-handoff.yml"
 
+permissions:
+  contents: write
+
 concurrency:
   group: raise-prebuilt-handoff-staging
   cancel-in-progress: true
@@ -41,3 +44,24 @@ jobs:
           bash -n start-physical-handoff.command
           python3 -m py_compile tools/verify-watch-apk-identity.py
           python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
+
+      - name: Publish GREEN staging proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/proofs
+          cat > .github/proofs/prebuilt-handoff-staging-green.env <<EOF
+          status=GREEN
+          tested_revision=${GITHUB_SHA}
+          runner=${RUNNER_NAME}
+          physical_validation_syntax=PASS
+          physical_validation_help=PASS
+          start_handoff_syntax=PASS
+          apk_identity_py_compile=PASS
+          apk_identity_tests=PASS
+          EOF
+          git add .github/proofs/prebuilt-handoff-staging-green.env
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Record GREEN prebuilt handoff staging proof"
+          git push origin HEAD:fix/prebuilt-physical-handoff-20261004
