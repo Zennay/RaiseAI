@@ -1,4 +1,11 @@
-# Raise AI v1.5.1 — Galaxy Watch 7
+# Raise AI v1.5.2 — Galaxy Watch 7
+
+## v1.5.2: fail-closed build identity
+
+- Evidence-capable Watch builds now require an explicit exact 40-character Git revision and fail if build identity cannot be proven.
+- Watch CI verifies that the exact checked-out revision reaches generated BuildConfig before publishing an APK.
+- The physical upgrade path runs the same build-identity gate before installation.
+- v1.5.2 uses versionCode 19 so the corrected evidence build cannot be confused with the invalid v1.5.1 artifact whose source revision resolved to `unknown`.
 
 ## v1.5.1: exact-build physical validation
 
