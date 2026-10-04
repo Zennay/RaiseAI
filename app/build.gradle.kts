@@ -33,6 +33,15 @@ fun resolveSourceRevision(projectDir: java.io.File): String {
     }
 }
 
+fun runGit(projectDir: java.io.File, vararg args: String): Pair<Int, String> {
+    val process = ProcessBuilder(listOf("git") + args)
+        .directory(projectDir)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+    return process.waitFor() to output
+}
+
 val sourceRevision = resolveSourceRevision(rootDir)
 
 plugins {
@@ -86,7 +95,7 @@ dependencies {
 
 tasks.register("verifyEvidenceBuildIdentity") {
     group = "verification"
-    description = "Fails unless the evidence-capable build is pinned to an exact 40-char source revision."
+    description = "Fails unless the evidence-capable build is clean and pinned to the exact checked-out source revision."
 
     doLast {
         val expected = System.getenv("RAISE_BUILD_REVISION")
@@ -97,10 +106,27 @@ tasks.register("verifyEvidenceBuildIdentity") {
         check(expected != null) {
             "RAISE_BUILD_REVISION must contain the exact 40-character Git revision for evidence-capable builds."
         }
+
+        val (statusCode, statusOutput) = runGit(rootDir, "status", "--porcelain", "--untracked-files=normal")
+        check(statusCode == 0) {
+            "Unable to verify Git working-tree state for evidence build: $statusOutput"
+        }
+        check(statusOutput.isBlank()) {
+            "Evidence-capable builds require a clean Git working tree; found local changes:\n$statusOutput"
+        }
+
+        val (headCode, headOutput) = runGit(rootDir, "rev-parse", "HEAD")
+        val checkedOutRevision = headOutput.trim().lowercase()
+        check(headCode == 0 && checkedOutRevision.matches(Regex("^[0-9a-f]{40}$"))) {
+            "Unable to resolve exact checked-out Git revision for evidence build: $headOutput"
+        }
+        check(checkedOutRevision == expected) {
+            "Pinned build revision does not match checked-out HEAD: head=$checkedOutRevision expected=$expected"
+        }
         check(sourceRevision == expected) {
             "Build source revision mismatch: resolved=$sourceRevision expected=$expected"
         }
-        println("Verified evidence build revision: $sourceRevision")
+        println("Verified clean evidence build revision: $sourceRevision")
     }
 }
 
