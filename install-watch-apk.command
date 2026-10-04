@@ -193,6 +193,18 @@ if ! INSTALL_OUTPUT="$(install_once 2>&1)"; then
     echo "Refusing to select a different ADB device during an install retry."
     exit 1
   fi
+  RETRY_MODEL="$("$ADB" -s "$BOUND_TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+  RETRY_DEVICE="$("$ADB" -s "$BOUND_TARGET" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
+  RETRY_CHARACTERISTICS="$("$ADB" -s "$BOUND_TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+  RETRY_FEATURES="$("$ADB" -s "$BOUND_TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+  if [ "$RETRY_MODEL" != "SM_L315F" ] &&
+     ! printf '%s' "$RETRY_DEVICE" | grep -qi '^fresh' &&
+     ! printf '%s' "$RETRY_CHARACTERISTICS" | grep -qi watch &&
+     ! printf '%s\n' "$RETRY_FEATURES" | grep -q 'android.hardware.type.watch'; then
+    echo "Bound ADB target no longer identifies as a Wear OS watch: $BOUND_TARGET"
+    echo "Refusing the install retry to preserve physical evidence provenance."
+    exit 1
+  fi
   TARGET="$BOUND_TARGET"
   install_once
 else
