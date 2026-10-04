@@ -22,8 +22,8 @@ Usage:
 prepare:
   Builds/installs the exact clean Git revision, provisions the gateway profile,
   clears only prior test evidence, and opens Raise AI. Set RAISE_PREBUILT_APK
-  to install an already-published APK instead of rebuilding it; optionally set
-  RAISE_EXPECT_APK_SHA256 to bind that APK to a handoff manifest.
+  to install an already-published APK instead of rebuilding it; prebuilt mode
+  requires RAISE_EXPECT_APK_SHA256 so the exact published artifact is bound.
 
 verify-e2e:
   Pulls fresh Watch diagnostics and requires a quick_ai answer from the exact
@@ -181,6 +181,20 @@ prepare_session() {
   prebuilt_apk="${RAISE_PREBUILT_APK:-}"
   expected_apk_sha="${RAISE_EXPECT_APK_SHA256:-}"
   if [ -n "$prebuilt_apk" ]; then
+    [ -n "$expected_apk_sha" ] || {
+      echo "RAISE_EXPECT_APK_SHA256 is required when RAISE_PREBUILT_APK is set."
+      exit 1
+    }
+    case "$expected_apk_sha" in
+      *[!0-9A-Fa-f]*|'')
+        echo "RAISE_EXPECT_APK_SHA256 must be exactly 64 hexadecimal characters."
+        exit 1
+        ;;
+    esac
+    [ "${#expected_apk_sha}" -eq 64 ] || {
+      echo "RAISE_EXPECT_APK_SHA256 must be exactly 64 hexadecimal characters."
+      exit 1
+    }
     [ -f "$prebuilt_apk" ] || {
       echo "Prebuilt APK not found: $prebuilt_apk"
       exit 1
@@ -189,10 +203,8 @@ prepare_session() {
       python3 tools/verify-watch-apk-identity.py
       "$prebuilt_apk"
       --expect-source-revision "$revision"
+      --expect-sha256 "$expected_apk_sha"
     )
-    if [ -n "$expected_apk_sha" ]; then
-      verify_args+=(--expect-sha256 "$expected_apk_sha")
-    fi
     "${verify_args[@]}" | tee "$session/apk-verification.json"
     bash ./install-watch-apk.command "$prebuilt_apk"
     selected_apk="$prebuilt_apk"
@@ -237,7 +249,6 @@ PY
     echo "Installed Watch version $installed_version does not match prepared version $version"
     exit 1
   }
-
   echo "Clearing prior validation evidence only..."
   "$adb" -s "$target" shell run-as "$PACKAGE" sh -c     "'rm -f files/watch-e2e-evidence.json files/sensor-traces.csv files/sensor-trials.csv'"
   "$adb" -s "$target" logcat -c || true
