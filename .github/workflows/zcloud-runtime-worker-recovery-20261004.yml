@@ -39,7 +39,13 @@ jobs:
           set -euo pipefail
           sudo -n rm -f /home/ubuntu/zennay-cloud/.disable-self-heal
           sudo -n systemctl reset-failed zennay-cloud.service || true
-          sudo -n systemctl restart zennay-cloud.service
+          if ! timeout 20s sudo -n systemctl restart zennay-cloud.service; then
+            echo "ZCLOUD_DASHBOARD_RESTART_TIMEOUT=1"
+            sudo -n systemctl kill --kill-whom=all --signal=KILL zennay-cloud.service || true
+            sleep 2
+            sudo -n systemctl reset-failed zennay-cloud.service || true
+            timeout 20s sudo -n systemctl start zennay-cloud.service
+          fi
           for _ in $(seq 1 30); do
             if sudo -n systemctl is-active --quiet zennay-cloud.service               && curl -fsS --max-time 4 http://127.0.0.1:8765/ >/dev/null               && curl -fsS --max-time 8 http://127.0.0.1:8765/api/status >/dev/null; then
               echo "ZCLOUD_DASHBOARD_RECOVERY_GREEN=1"
