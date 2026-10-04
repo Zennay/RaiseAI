@@ -1,8 +1,15 @@
-# Raise AI v1.5.0 — Galaxy Watch 7
+# Raise AI v1.5.1 — Galaxy Watch 7
+
+## v1.5.1: exact-build physical validation
+
+- `physical-validation.command` turns the real Watch gate into a reproducible **prepare → E2E → 30/100 reliability** session with one evidence directory.
+- Physical evidence is now bound to both `app_version` and the exact 40-character Git `source_revision`; a stale APK, dirty source tree, old evidence schema, or mixed detector revision fails closed.
+- Native Watch → VPS requests persist a compact `watch-e2e-evidence.json` record with build identity, route, status, latency and execution flags but no transcript, response text or credentials.
+- v1.5.1 also fixes release-version drift: `VERSION.txt` and Gradle now agree, and Watch CI enforces that contract.
 
 ## v1.5: evidence-gated physical Watch E2E
 
-- Native Watch → VPS requests now persist a compact `watch-e2e-evidence.json` record with route, status, latency and execution flags but no transcript, response text or credentials.
+- Native Watch → VPS requests persist a compact `watch-e2e-evidence.json` record with route, status, latency and execution flags but no transcript, response text or credentials.
 - `pull-diagnostics.command` pulls that evidence from app-private storage and runs a strict local validation when Python 3 is available.
 - `tools/validate-watch-e2e-evidence.py` fails closed on request failures, unknown routes, schema drift, unexpected fields, stale/future evidence, route/status mismatch or excessive latency. `pull-diagnostics.command` requires evidence from the last 5 minutes by default so an old successful Watch request cannot satisfy a new physical test.
 - CI regression-tests the evidence contract and still builds the real Galaxy Watch APK on the self-hosted `vps-bb300bba` runner.
@@ -184,7 +191,7 @@ app/src/main/java/nl/zennay/raiseai/
 - compile / target SDK 35
 - Java 17 bytecode target
 - AGP 9 built-in Kotlin (no legacy `org.jetbrains.kotlin.android` plugin)
-- Mozilla GeckoView 139, arm64-v8a only
+- Mozilla GeckoView 139, Galaxy Watch `armeabi-v7a` build
 
 ## Gemini + Google Home
 

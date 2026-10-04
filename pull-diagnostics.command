@@ -24,7 +24,9 @@ EOF_DEVICES
 [ -n "$TARGET" ] || { echo "No ADB Wear OS watch connected"; exit 1; }
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-OUT="watch-diagnostics-$STAMP"
+BASE_OUT="${RAISE_OUTPUT_DIR:-$PWD}"
+mkdir -p "$BASE_OUT"
+OUT="$BASE_OUT/watch-diagnostics-$STAMP"
 mkdir -p "$OUT"
 
 $ADB -s "$TARGET" shell getprop > "$OUT/getprop.txt" || true
@@ -43,7 +45,18 @@ echo "Saved diagnostics to: $OUT"
 if [ -s "$OUT/watch-e2e-evidence.json" ]; then
   echo "Watch E2E evidence included: $OUT/watch-e2e-evidence.json"
   if command -v python3 >/dev/null 2>&1; then
-    if python3 tools/validate-watch-e2e-evidence.py       "$OUT/watch-e2e-evidence.json"       --max-latency-ms "${RAISE_E2E_MAX_LATENCY_MS:-15000}"       --max-age-seconds "${RAISE_E2E_MAX_AGE_SECONDS:-300}"; then
+    VALIDATOR_ARGS=(
+      "$OUT/watch-e2e-evidence.json"
+      --max-latency-ms "${RAISE_E2E_MAX_LATENCY_MS:-15000}"
+      --max-age-seconds "${RAISE_E2E_MAX_AGE_SECONDS:-300}"
+    )
+    if [ -n "${RAISE_E2E_EXPECT_APP_VERSION:-}" ]; then
+      VALIDATOR_ARGS+=(--expect-app-version "$RAISE_E2E_EXPECT_APP_VERSION")
+    fi
+    if [ -n "${RAISE_E2E_EXPECT_SOURCE_REVISION:-}" ]; then
+      VALIDATOR_ARGS+=(--expect-source-revision "$RAISE_E2E_EXPECT_SOURCE_REVISION")
+    fi
+    if python3 tools/validate-watch-e2e-evidence.py "${VALIDATOR_ARGS[@]}"; then
       echo "Watch E2E evidence: basic gate PASS"
     else
       echo "Watch E2E evidence: gate NOT PASSED"
