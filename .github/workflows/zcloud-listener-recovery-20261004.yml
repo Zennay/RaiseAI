@@ -71,21 +71,26 @@ jobs:
                   if len(parts) < 4:
                       continue
                   pid, ppid, user, args = parts
-                  if ROOT not in args:
-                      continue
+                  pid_int = int(pid)
+                  cwd = ""
+                  try:
+                      cwd = os.readlink(f"/proc/{pid_int}/cwd")
+                  except (FileNotFoundError, PermissionError, OSError):
+                      pass
                   if f"{ROOT}/bin/Runner.Worker" in args:
                       kind = "worker"
                   elif f"{ROOT}/bin/Runner.Listener" in args:
                       kind = "listener"
-                  elif f"{ROOT}/runsvc.sh" in args:
+                  elif "runsvc.sh" in args and (ROOT in args or cwd == ROOT):
                       kind = "supervisor"
                   else:
                       continue
                   rows.append(
                       {
-                          "pid": int(pid),
+                          "pid": pid_int,
                           "ppid": int(ppid),
                           "user": user,
+                          "cwd": cwd,
                           "args": args,
                           "kind": kind,
                       }
@@ -117,9 +122,12 @@ jobs:
           def still_matches(pid):
               try:
                   raw = pathlib.Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
-              except (FileNotFoundError, PermissionError):
+                  cwd = os.readlink(f"/proc/{pid}/cwd")
+              except (FileNotFoundError, PermissionError, OSError):
                   return False
-              return ROOT in raw and ("Runner.Listener" in raw or "runsvc.sh" in raw)
+              if f"{ROOT}/bin/Runner.Listener" in raw:
+                  return True
+              return "runsvc.sh" in raw and (ROOT in raw or cwd == ROOT)
 
           def snapshot(tag):
               state = service_state()
