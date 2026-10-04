@@ -13,6 +13,7 @@ on:
       - "install-watch-apk.command"
       - "upgrade-watch.command"
       - "physical-validation.command"
+      - "start-physical-handoff.command"
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "provision-watch-gateway.command"
@@ -35,6 +36,7 @@ on:
       - "install-watch-apk.command"
       - "upgrade-watch.command"
       - "physical-validation.command"
+      - "start-physical-handoff.command"
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "provision-watch-gateway.command"
@@ -94,6 +96,7 @@ jobs:
           bash -n pull-watch-data.command
           bash -n physical-validation.command
           bash physical-validation.command --help >/dev/null
+          bash -n start-physical-handoff.command
           bash -n provision-watch-gateway.command
           bash -n install-watch-apk.command
           bash -n upgrade-watch.command
