@@ -55,6 +55,13 @@ jobs:
                   check=False,
               ).stdout.strip()
 
+          def main_pid():
+              raw = run(
+                  ["systemctl", "show", SERVICE, "-p", "MainPID", "--value"],
+                  check=False,
+              ).stdout.strip()
+              return int(raw) if raw.isdigit() else 0
+
           def process_rows():
               out = run(["ps", "-eo", "pid=,ppid=,user=,args="]).stdout
               rows = []
@@ -93,6 +100,19 @@ jobs:
                   return False
               return cgroup in text
 
+          def canonical_lineage_contains(pid, root_pid, rows):
+              if not root_pid:
+                  return False
+              parents = {row["pid"]: row["ppid"] for row in rows}
+              current = pid
+              seen = set()
+              while current and current not in seen:
+                  if current == root_pid:
+                      return True
+                  seen.add(current)
+                  current = parents.get(current, 0)
+              return False
+
           def still_matches(pid):
               try:
                   raw = pathlib.Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
@@ -103,6 +123,7 @@ jobs:
           def snapshot(tag):
               state = service_state()
               cg = control_group()
+              root_pid = main_pid()
               rows = process_rows()
               print(
                   "ZCLOUD_DUPLICATE_LISTENER_SNAPSHOT",
@@ -110,11 +131,13 @@ jobs:
                       {
                           "tag": tag,
                           "service_state": state,
+                          "main_pid": root_pid,
                           "control_group": cg,
                           "processes": [
                               {
                                   **row,
                                   "canonical_cgroup": cgroup_contains(row["pid"], cg),
+                                  "canonical_lineage": canonical_lineage_contains(row["pid"], root_pid, rows),
                               }
                               for row in rows
                           ],
@@ -122,14 +145,14 @@ jobs:
                       sort_keys=True,
                   ),
               )
-              return state, cg, rows
+              return state, cg, root_pid, rows
 
           if not pathlib.Path(ROOT).is_dir():
               raise SystemExit(f"runner root missing: {ROOT}")
 
-          state, cg, rows = snapshot("before")
-          if state == "active" and not cg:
-              raise SystemExit("canonical zCloud runner service is active but ControlGroup is empty")
+          state, cg, root_pid, rows = snapshot("before")
+          if state == "active" and (not cg or not root_pid):
+              raise SystemExit("canonical zCloud runner service is active but identity is incomplete")
 
           # The proven bad state has both a canonical and an orphan listener.
           # Preserve every active Runner.Worker and wait for orphan-owned work to finish.
@@ -137,11 +160,13 @@ jobs:
           while True:
               state = service_state()
               cg = control_group()
+              root_pid = main_pid()
               rows = process_rows()
               orphan_workers = [
                   row
                   for row in rows
-                  if row["kind"] == "worker" and not cgroup_contains(row["pid"], cg)
+                  if row["kind"] == "worker"
+                  and not canonical_lineage_contains(row["pid"], root_pid, rows)
               ]
               if not orphan_workers:
                   break
@@ -158,12 +183,13 @@ jobs:
 
           state = service_state()
           cg = control_group()
+          root_pid = main_pid()
           rows = process_rows()
           orphan = [
               row
               for row in rows
               if row["kind"] in {"listener", "supervisor"}
-              and not cgroup_contains(row["pid"], cg)
+              and not canonical_lineage_contains(row["pid"], root_pid, rows)
           ]
           print("ZCLOUD_ORPHAN_LISTENER_TARGETS", json.dumps(orphan, sort_keys=True))
 
@@ -191,14 +217,18 @@ jobs:
           while True:
               state = service_state()
               cg = control_group()
+              root_pid = main_pid()
               rows = process_rows()
               listeners = [row for row in rows if row["kind"] == "listener"]
-              canonical = [row for row in listeners if cgroup_contains(row["pid"], cg)]
+              canonical = [
+                  row for row in listeners
+                  if canonical_lineage_contains(row["pid"], root_pid, rows)
+              ]
               orphan_runtime = [
                   row
                   for row in rows
                   if row["kind"] in {"listener", "supervisor"}
-                  and not cgroup_contains(row["pid"], cg)
+                  and not canonical_lineage_contains(row["pid"], root_pid, rows)
               ]
               if state == "active" and len(listeners) == 1 and len(canonical) == 1 and not orphan_runtime:
                   break
@@ -215,14 +245,18 @@ jobs:
           time.sleep(12)
           state = service_state()
           cg = control_group()
+          root_pid = main_pid()
           rows = process_rows()
           listeners = [row for row in rows if row["kind"] == "listener"]
-          canonical = [row for row in listeners if cgroup_contains(row["pid"], cg)]
+          canonical = [
+              row for row in listeners
+              if canonical_lineage_contains(row["pid"], root_pid, rows)
+          ]
           orphan_runtime = [
               row
               for row in rows
               if row["kind"] in {"listener", "supervisor"}
-              and not cgroup_contains(row["pid"], cg)
+              and not canonical_lineage_contains(row["pid"], root_pid, rows)
           ]
           if state != "active" or len(listeners) != 1 or len(canonical) != 1 or orphan_runtime:
               snapshot("stability_failed")
