@@ -127,7 +127,11 @@ if [ "${1:-}" = "start-server" ]; then
   exit 0
 fi
 if [ "${1:-}" = "devices" ]; then
-  printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
+  if [ "${SWITCH_AFTER_FAILED_INSTALL:-}" = "1" ] && [ -f "${INSTALL_ATTEMPT_FILE:-}" ]; then
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-c\tdevice\n'
+  else
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
+  fi
   exit 0
 fi
 if [ "${1:-}" = "mdns" ]; then
@@ -140,7 +144,11 @@ if [ "${1:-}" = "-s" ]; then
   args="$*"
   case "$args" in
     "shell getprop ro.product.model")
-      [ "$serial" = "watch-b" ] && echo "SM_L315F" || echo "Pixel_Test"
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+        echo "SM_L315F"
+      else
+        echo "Pixel_Test"
+      fi
       ;;
     "shell getprop ro.product.device")
       [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
@@ -162,6 +170,11 @@ if [ "${1:-}" = "-s" ]; then
       echo "armeabi-v7a"
       ;;
     install\ --no-streaming\ -r\ *)
+      if [ "${FAIL_FIRST_INSTALL:-}" = "1" ] && [ ! -f "${INSTALL_ATTEMPT_FILE:-}" ]; then
+        : > "$INSTALL_ATTEMPT_FILE"
+        echo "error: device disconnected" >&2
+        exit 1
+      fi
       echo "Success"
       ;;
     "shell appops set nl.zennay.raiseai SYSTEM_ALERT_WINDOW allow"|"shell appops set nl.zennay.raiseai GET_USAGE_STATS allow")
@@ -196,10 +209,15 @@ exit 2
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_installer(self, serial):
+    def run_installer(self, serial=None, extra_env=None):
         env = os.environ.copy()
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
-        env["ANDROID_SERIAL"] = serial
+        if serial is None:
+            env.pop("ANDROID_SERIAL", None)
+        else:
+            env["ANDROID_SERIAL"] = serial
+        if extra_env:
+            env.update(extra_env)
         env["ADB_LOG"] = str(self.log)
         env["RAISE_INSTALLED_WATCH_SERIAL_FILE"] = str(self.serial_file)
         env["PATH"] = f"{self.bin}:{env['PATH']}"
@@ -233,6 +251,23 @@ exit 2
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Selected ADB target is not a Wear OS watch", result.stdout)
         self.assertFalse(self.serial_file.exists())
+
+    def test_install_retry_refuses_to_switch_to_another_watch(self):
+        attempt_file = self.root / "install-attempted"
+        result = self.run_installer(
+            None,
+            {
+                "FAIL_FIRST_INSTALL": "1",
+                "SWITCH_AFTER_FAILED_INSTALL": "1",
+                "INSTALL_ATTEMPT_FILE": str(attempt_file),
+            },
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Bound Watch did not reconnect: watch-b", result.stdout)
+        self.assertIn("Refusing to select a different ADB device", result.stdout)
+        self.assertFalse(self.serial_file.exists())
+        self.assertNotIn("watch-c", self.used_serials())
 
 
 class PhysicalPrepareBindingTest(unittest.TestCase):
