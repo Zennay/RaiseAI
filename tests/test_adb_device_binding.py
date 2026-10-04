@@ -144,20 +144,40 @@ if [ "${1:-}" = "-s" ]; then
   args="$*"
   case "$args" in
     "shell getprop ro.product.model")
-      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+      if [ "${MUTATE_BOUND_TARGET_AFTER_FAILED_INSTALL:-}" = "1" ] &&
+         [ -f "${INSTALL_ATTEMPT_FILE:-}" ] &&
+         [ "$serial" = "watch-b" ]; then
+        echo "Pixel_Test"
+      elif [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
         echo "SM_L315F"
       else
         echo "Pixel_Test"
       fi
       ;;
     "shell getprop ro.product.device")
-      [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
+      if [ "${MUTATE_BOUND_TARGET_AFTER_FAILED_INSTALL:-}" = "1" ] &&
+         [ -f "${INSTALL_ATTEMPT_FILE:-}" ] &&
+         [ "$serial" = "watch-b" ]; then
+        echo "phone"
+      else
+        [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
+      fi
       ;;
     "shell getprop ro.build.characteristics")
-      [ "$serial" = "watch-b" ] && echo "watch" || echo "nosdcard"
+      if [ "${MUTATE_BOUND_TARGET_AFTER_FAILED_INSTALL:-}" = "1" ] &&
+         [ -f "${INSTALL_ATTEMPT_FILE:-}" ] &&
+         [ "$serial" = "watch-b" ]; then
+        echo "nosdcard"
+      else
+        [ "$serial" = "watch-b" ] && echo "watch" || echo "nosdcard"
+      fi
       ;;
     "shell pm list features")
-      if [ "$serial" = "watch-b" ]; then
+      if [ "${MUTATE_BOUND_TARGET_AFTER_FAILED_INSTALL:-}" = "1" ] &&
+         [ -f "${INSTALL_ATTEMPT_FILE:-}" ] &&
+         [ "$serial" = "watch-b" ]; then
+        echo "feature:android.hardware.telephony"
+      elif [ "$serial" = "watch-b" ]; then
         echo "feature:android.hardware.type.watch"
       else
         echo "feature:android.hardware.telephony"
@@ -269,6 +289,27 @@ exit 2
         self.assertFalse(self.serial_file.exists())
         self.assertNotIn("watch-c", self.used_serials())
 
+    def test_install_retry_revalidates_bound_watch_identity(self):
+        attempt_file = self.root / "install-attempted"
+        result = self.run_installer(
+            "watch-b",
+            {
+                "FAIL_FIRST_INSTALL": "1",
+                "MUTATE_BOUND_TARGET_AFTER_FAILED_INSTALL": "1",
+                "INSTALL_ATTEMPT_FILE": str(attempt_file),
+            },
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Bound ADB target no longer identifies as a Wear OS watch: watch-b",
+            result.stdout,
+        )
+        self.assertIn(
+            "Refusing the install retry to preserve physical evidence provenance.",
+            result.stdout,
+        )
+        self.assertFalse(self.serial_file.exists())
 
 
 class GatewayProvisionBindingTest(unittest.TestCase):
