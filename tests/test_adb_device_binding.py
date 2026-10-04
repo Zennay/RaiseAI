@@ -1,4 +1,7 @@
+import hashlib
+import json
 import os
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -230,6 +233,141 @@ exit 2
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Selected ADB target is not a Wear OS watch", result.stdout)
         self.assertFalse(self.serial_file.exists())
+
+
+class PhysicalPrepareBindingTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.evidence = self.root / "evidence"
+        self.profile = self.root / "watch-gateway.properties"
+        self.profile.write_text("synthetic=true\n", encoding="utf-8")
+        self.apk = self.root / "RaiseAI-v1.5.2-debug.apk"
+        self.apk.write_bytes(b"physical-prepare-binding-apk")
+
+        shutil.copy2(ROOT / "physical-validation.command", self.repo / "physical-validation.command")
+        (self.repo / "VERSION.txt").write_text("1.5.2\n", encoding="utf-8")
+        (self.repo / "app").mkdir()
+        (self.repo / "app" / "build.gradle.kts").write_text(
+            'android { defaultConfig { versionName = "1.5.2" } }\n',
+            encoding="utf-8",
+        )
+        (self.repo / "tools").mkdir()
+        (self.repo / "tools" / "verify-watch-apk-identity.py").write_text(
+            "import json\nprint(json.dumps({'ok': True}))\n",
+            encoding="utf-8",
+        )
+
+        installer = self.repo / "install-watch-apk.command"
+        installer.write_text(
+            """#!/bin/bash
+set -euo pipefail
+: "${RAISE_INSTALLED_WATCH_SERIAL_FILE:?missing install serial output}"
+printf 'watch-b\\n' > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
+""",
+            encoding="utf-8",
+        )
+        installer.chmod(0o755)
+
+        provision = self.repo / "provision-watch-gateway.command"
+        provision.write_text(
+            """#!/bin/bash
+set -euo pipefail
+[ "${ANDROID_SERIAL:-}" = "watch-b" ] || {
+  echo "provision received wrong serial: ${ANDROID_SERIAL:-<unset>}"
+  exit 42
+}
+printf '%s\\n' "$ANDROID_SERIAL" > "$PROVISION_SERIAL_LOG"
+""",
+            encoding="utf-8",
+        )
+        provision.chmod(0o755)
+
+        adb = self.bin / "adb"
+        adb.write_text(
+            textwrap.dedent(
+                r"""#!/bin/bash
+set -eu
+if [ "${1:-}" = "devices" ]; then
+  printf 'List of devices attached\nwatch-a\tdevice\nwatch-b\tdevice\n'
+  exit 0
+fi
+if [ "${1:-}" = "-s" ]; then
+  serial="$2"
+  shift 2
+  args="$*"
+  case "$args" in
+    "shell getprop ro.product.model") echo "SM_L315F" ;;
+    "shell getprop ro.build.characteristics") echo "watch" ;;
+    "shell pm list features") echo "feature:android.hardware.type.watch" ;;
+    "shell dumpsys package nl.zennay.raiseai")
+      printf '  versionName=1.5.2\n'
+      ;;
+    "shell run-as nl.zennay.raiseai sh -c 'rm -f files/watch-e2e-evidence.json files/sensor-traces.csv files/sensor-trials.csv'")
+      ;;
+    "logcat -c")
+      ;;
+    "shell am start -n nl.zennay.raiseai/.MainActivity")
+      ;;
+    *)
+      echo "unexpected adb invocation: $serial $args" >&2
+      exit 2
+      ;;
+  esac
+  exit 0
+fi
+echo "unexpected adb invocation: $*" >&2
+exit 2
+"""
+            ),
+            encoding="utf-8",
+        )
+        adb.chmod(0o755)
+
+        subprocess.run(["git", "init", "-q", self.repo], check=True)
+        subprocess.run(
+            ["git", "-C", self.repo, "config", "user.email", "raiseai-ci@example.invalid"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", self.repo, "config", "user.name", "RaiseAI CI"],
+            check=True,
+        )
+        subprocess.run(["git", "-C", self.repo, "add", "."], check=True)
+        subprocess.run(["git", "-C", self.repo, "commit", "-qm", "fixture"], check=True)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_prepare_uses_installer_attested_watch_for_provision_and_session(self):
+        provision_log = self.root / "provision-serial"
+        env = os.environ.copy()
+        env["PATH"] = f"{self.bin}:{env['PATH']}"
+        env["RAISE_EVIDENCE_ROOT"] = str(self.evidence)
+        env["RAISE_PREBUILT_APK"] = str(self.apk)
+        env["RAISE_EXPECT_APK_SHA256"] = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        env["PROVISION_SERIAL_LOG"] = str(provision_log)
+        env.pop("ANDROID_SERIAL", None)
+
+        result = subprocess.run(
+            ["bash", str(self.repo / "physical-validation.command"), "prepare", str(self.profile)],
+            cwd=self.repo,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(provision_log.read_text(encoding="utf-8").strip(), "watch-b")
+        sessions = [path for path in self.evidence.iterdir() if path.is_dir()]
+        self.assertEqual(len(sessions), 1)
+        payload = json.loads((sessions[0] / "session.json").read_text(encoding="utf-8"))
+        self.assertEqual(payload["watch_serial"], "watch-b")
 
 
 if __name__ == "__main__":
