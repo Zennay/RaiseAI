@@ -1,4 +1,5 @@
 name: Recover duplicate zCloud Actions listener safely
+# Operational retrigger 2026-10-04 23:46 UTC after zCloud runner stopped accepting queued audit jobs.
 # Operational retrigger 2026-10-04 22:57 UTC after current-main zCloud deploy completed.
 # Operational retrigger 2026-10-04 22:50 UTC for queued zCloud receipt audit/deploy.
 # Operational retrigger 2026-10-04 21:34 UTC for zCloud PWQ-10; full /proc ancestry fix
