@@ -21,7 +21,9 @@ Usage:
 
 prepare:
   Builds/installs the exact clean Git revision, provisions the gateway profile,
-  clears only prior test evidence, and opens Raise AI.
+  clears only prior test evidence, and opens Raise AI. Set RAISE_PREBUILT_APK
+  to install an already-published APK instead of rebuilding it; optionally set
+  RAISE_EXPECT_APK_SHA256 to bind that APK to a handoff manifest.
 
 verify-e2e:
   Pulls fresh Watch diagnostics and requires a quick_ai answer from the exact
@@ -152,6 +154,7 @@ prepare_session() {
   fi
 
   local revision version gradle_version stamp session adb target model installed_version
+  local prebuilt_apk expected_apk_sha selected_apk install_mode apk_sha
   revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"
   printf '%s' "$revision" | grep -Eq '^[0-9a-f]{40}$' || {
     echo "Could not resolve a full Git revision."
@@ -174,7 +177,219 @@ prepare_session() {
   echo "  revision: $revision"
   echo "  evidence: $session"
 
-  RAISE_BUILD_REVISION="$revision" bash ./upgrade-watch.command
+  prebuilt_apk="${RAISE_PREBUILT_APK:-}"
+  expected_apk_sha="${RAISE_EXPECT_APK_SHA256:-}"
+  if [ -n "$prebuilt_apk" ]; then
+    [ -f "$prebuilt_apk" ] || {
+      echo "Prebuilt APK not found: $prebuilt_apk"
+      exit 1
+    }
+    verify_args=(
+      python3 tools/verify-watch-apk-identity.py
+      "$prebuilt_apk"
+      --expect-source-revision "$revision"
+    )
+    if [ -n "$expected_apk_sha" ]; then
+      verify_args+=(--expect-sha256 "$expected_apk_sha")
+    fi
+    "${verify_args[@]}" | tee "$session/apk-verification.json"
+    bash ./install-watch-apk.command "$prebuilt_apk"
+    selected_apk="$prebuilt_apk"
+    install_mode="prebuilt_apk"
+  else
+    RAISE_BUILD_REVISION="$revision" bash ./upgrade-watch.command
+    selected_apk="app/build/outputs/apk/debug/app-debug.apk"
+    python3 tools/verify-watch-apk-identity.py       "$selected_apk"       --expect-source-revision "$revision" | tee "$session/apk-verification.json"
+    install_mode="source_build"
+  fi
+
+  apk_sha="$(python3 - "$selected_apk" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+print(hashlib.sha256(path.read_bytes()).hexdigest())
+PY
+)"
+  printf '%s' "$apk_sha" | grep -Eq '^[0-9a-f]{64}
+  adb="$(find_adb || true)"
+  [ -n "$adb" ] || { echo "ADB not found after install"; exit 1; }
+  target="${ANDROID_SERIAL:-$(find_watch "$adb" | head -n 1)}"
+  [ -n "$target" ] || { echo "Watch disconnected after install"; exit 1; }
+
+  model="$("$adb" -s "$target" shell getprop ro.product.model | tr -d '\r')"
+  installed_version="$("$adb" -s "$target" shell dumpsys package "$PACKAGE" |
+    sed -n 's/^[[:space:]]*versionName=//p' | head -n 1 | tr -d '\r')"
+  [ "$installed_version" = "$version" ] || {
+    echo "Installed Watch version $installed_version does not match prepared version $version"
+    exit 1
+  }
+
+  echo "Clearing prior validation evidence only..."
+  "$adb" -s "$target" shell run-as "$PACKAGE" sh -c     "'rm -f files/watch-e2e-evidence.json files/sensor-traces.csv files/sensor-trials.csv'"
+  "$adb" -s "$target" logcat -c || true
+  "$adb" -s "$target" shell am start -n "$PACKAGE/.MainActivity" >/dev/null
+
+  STARTED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"   SESSION_PATH="$session"   APP_VERSION="$version"   SOURCE_REVISION="$revision"   WATCH_MODEL="$model"   INSTALL_MODE="$install_mode"   APK_SHA256="$apk_sha"   python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+session = Path(os.environ["SESSION_PATH"])
+payload = {
+    "schema_version": 1,
+    "started_at_utc": os.environ["STARTED_AT_UTC"],
+    "app_version": os.environ["APP_VERSION"],
+    "source_revision": os.environ["SOURCE_REVISION"],
+    "watch_model": os.environ["WATCH_MODEL"],
+    "install_mode": os.environ["INSTALL_MODE"],
+    "apk_sha256": os.environ["APK_SHA256"],
+    "e2e_passed": False,
+    "v1_gate_passed": False,
+}
+(session / "session.json").write_text(
+    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+PY
+
+  printf '%s\n' "$session" > "$LATEST_SESSION_FILE"
+  echo
+  echo "PREPARE PASS"
+  echo "On the Watch: open Native Raise AI and complete one short normal AI question."
+  echo "Immediately afterwards run:"
+  echo "  bash ./physical-validation.command verify-e2e '$session'"
+  printf '%s\n' "$session"
+}
+
+verify_e2e() {
+  local session
+  session="$(resolve_session "${1:-}")"
+  [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
+  require_command python3
+
+  local version revision
+  version="$(json_get "$session/session.json" app_version)"
+  revision="$(json_get "$session/session.json" source_revision)"
+
+  RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
+
+  local diag evidence result
+  diag="$(find "$session" -maxdepth 1 -type d -name 'watch-diagnostics-*' -print | sort | tail -n 1)"
+  [ -n "$diag" ] || { echo "No diagnostics directory produced"; exit 1; }
+  evidence="$diag/watch-e2e-evidence.json"
+  [ -s "$evidence" ] || {
+    echo "No fresh Watch E2E evidence found."
+    echo "Complete a native Watch AI request and retry immediately."
+    exit 1
+  }
+
+  result="$session/e2e-result.json"
+  python3 tools/validate-watch-e2e-evidence.py     "$evidence"     --expect-route quick_ai     --max-latency-ms 15000     --max-age-seconds 300     --require-answer     --expect-app-version "$version"     --expect-source-revision "$revision" | tee "$result"
+
+  json_set "$session/session.json" e2e_passed true
+  json_set "$session/session.json" e2e_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo
+  echo "E2E PASS — exact Watch build ${version} @ ${revision}"
+  echo "Next: collect at least 30 mouth raises and 100 representative non-trigger trials."
+  echo "Then run:"
+  echo "  bash ./physical-validation.command verify-v1 '$session'"
+}
+
+verify_v1() {
+  local session
+  session="$(resolve_session "${1:-}")"
+  [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
+  require_command python3
+
+  local e2e_passed version revision
+  e2e_passed="$(json_get "$session/session.json" e2e_passed)"
+  [ "$e2e_passed" = "true" ] || {
+    echo "Refusing V1 gate before this session's fresh E2E gate has passed."
+    echo "Run verify-e2e first."
+    exit 1
+  }
+  version="$(json_get "$session/session.json" app_version)"
+  revision="$(json_get "$session/session.json" source_revision)"
+
+  RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
+
+  local trials result
+  trials="$(find "$session" -maxdepth 1 -type f -name 'watch-sensor-trials-*.csv' -print | sort | tail -n 1)"
+  [ -n "$trials" ] || { echo "No trial evidence was exported"; exit 1; }
+
+  result="$session/v1-result.json"
+  python3 tools/analyze-watch-sensor-trials.py "$trials" \
+    --expect-app-version "$version" \
+    --expect-source-revision "$revision" \
+    --require-v1-gate | tee "$result"
+
+  json_set "$session/session.json" v1_gate_passed true
+  json_set "$session/session.json" v1_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo
+  echo "V1 RELIABILITY PASS"
+  echo "Evidence directory: $session"
+}
+
+show_status() {
+  local session
+  session="$(resolve_session "${1:-}")"
+  [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
+  cat "$session/session.json"
+
+  local trials
+  trials="$(find "$session" -maxdepth 1 -type f -name 'watch-sensor-trials-*.csv' -print | sort | tail -n 1)"
+  if [ -n "$trials" ] && command -v python3 >/dev/null 2>&1; then
+    echo
+    echo "Latest V1 trial score:"
+    python3 tools/analyze-watch-sensor-trials.py "$trials" || true
+  fi
+}
+
+run_all() {
+  local profile="${1:-${RAISE_GATEWAY_PROFILE:-$DEFAULT_PROFILE}}"
+  local session
+  prepare_session "$profile"
+  session="$(resolve_session)"
+
+  echo
+  read -r -p "Complete one short Native Raise AI question on the Watch, then press Enter to verify E2E. " _
+  verify_e2e "$session"
+
+  echo
+  read -r -p "Collect 30 mouth raises + 100 non-trigger trials, then press Enter to verify V1. " _
+  verify_v1 "$session"
+}
+
+case "${1:-}" in
+  prepare)
+    prepare_session "${2:-}"
+    ;;
+  verify-e2e)
+    verify_e2e "${2:-}"
+    ;;
+  verify-v1)
+    verify_v1 "${2:-}"
+    ;;
+  status)
+    show_status "${2:-}"
+    ;;
+  all)
+    run_all "${2:-}"
+    ;;
+  -h|--help|help|"")
+    usage
+    ;;
+  *)
+    echo "Unknown command: $1"
+    usage
+    exit 2
+    ;;
+esac
+ || {
+    echo "Could not compute APK SHA-256."
+    exit 1
+  }
+
   bash ./provision-watch-gateway.command "$profile"
 
   adb="$(find_adb || true)"
