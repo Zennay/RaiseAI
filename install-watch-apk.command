@@ -31,6 +31,24 @@ fi
 [ -f "$APK" ] || { echo "APK not found: $APK"; exit 1; }
 command -v unzip >/dev/null || { echo "unzip is required"; exit 1; }
 
+sha256_file() {
+  local path="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$path" | awk '{print tolower($1)}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print tolower($1)}'
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+  else
+    return 1
+  fi
+}
+
 "$ADB" start-server >/dev/null
 
 find_watch() {
@@ -113,9 +131,20 @@ if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/.android/adbkey" ]; then
 fi
 
 MODEL="$("$ADB" -s "$TARGET" shell getprop ro.product.model | tr -d '\r')"
+WATCH_DEVICE="$("$ADB" -s "$TARGET" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
+WATCH_CHARACTERISTICS="$("$ADB" -s "$TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+WATCH_FEATURES="$("$ADB" -s "$TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
 WATCH_ABI="$("$ADB" -s "$TARGET" shell getprop ro.product.cpu.abi | tr -d '\r')"
 WATCH_ABILIST="$("$ADB" -s "$TARGET" shell getprop ro.product.cpu.abilist | tr -d '\r')"
 APK_ABIS="$(unzip -Z1 "$APK" | awk -F/ '$1=="lib" && $NF ~ /[.]so$/ {print $2}' | sort -u)"
+
+if [ "$MODEL" != "SM_L315F" ] &&
+   ! printf '%s' "$WATCH_DEVICE" | grep -qi '^fresh' &&
+   ! printf '%s' "$WATCH_CHARACTERISTICS" | grep -qi watch &&
+   ! printf '%s\n' "$WATCH_FEATURES" | grep -q 'android.hardware.type.watch'; then
+  echo "ERROR: Refusing install. Selected ADB target is not a Wear OS watch: $TARGET"
+  exit 1
+fi
 
 echo "Watch: $MODEL ($TARGET)"
 echo "Watch ABI: $WATCH_ABI"
@@ -171,15 +200,48 @@ if ! INSTALL_OUTPUT="$(install_once 2>&1)"; then
     exit 1
   fi
 
-  echo "Install failed; trying one automatic reconnect..."
-  DISCOVERED_ENDPOINT="$(mdns_endpoint)"
-  [ -z "${DISCOVERED_ENDPOINT:-}" ] || connect_endpoint "$DISCOVERED_ENDPOINT" || true
+  echo "Install failed; trying one automatic reconnect of the originally selected Watch..."
+  BOUND_TARGET="$TARGET"
+  if printf '%s' "$BOUND_TARGET" | grep -Eq '^[^:]+:[0-9]+$'; then
+    connect_endpoint "$BOUND_TARGET" || true
+  fi
   sleep 1
-  TARGET="${ANDROID_SERIAL:-$(find_watch)}"
-  [ -n "$TARGET" ] || { echo "Watch did not reconnect."; exit 1; }
+  if ! "$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$BOUND_TARGET"; then
+    echo "Bound Watch did not reconnect: $BOUND_TARGET"
+    echo "Refusing to select a different ADB device during an install retry."
+    exit 1
+  fi
+  RETRY_MODEL="$("$ADB" -s "$BOUND_TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+  RETRY_DEVICE="$("$ADB" -s "$BOUND_TARGET" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
+  RETRY_CHARACTERISTICS="$("$ADB" -s "$BOUND_TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+  RETRY_FEATURES="$("$ADB" -s "$BOUND_TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+  if [ "$RETRY_MODEL" != "SM_L315F" ] &&
+     ! printf '%s' "$RETRY_DEVICE" | grep -qi '^fresh' &&
+     ! printf '%s' "$RETRY_CHARACTERISTICS" | grep -qi watch &&
+     ! printf '%s\n' "$RETRY_FEATURES" | grep -q 'android.hardware.type.watch'; then
+    echo "Bound ADB target no longer identifies as a Wear OS watch: $BOUND_TARGET"
+    echo "Refusing the install retry to preserve physical evidence provenance."
+    exit 1
+  fi
+  TARGET="$BOUND_TARGET"
   install_once
 else
   printf '%s\n' "$INSTALL_OUTPUT"
+fi
+
+if [ -n "${RAISE_INSTALLED_APK_SHA256_FILE:-}" ]; then
+  INSTALLED_APK_SHA256="$(sha256_file "$INSTALL_APK" || true)"
+  if [ "${#INSTALLED_APK_SHA256}" -ne 64 ] || printf '%s' "$INSTALLED_APK_SHA256" | grep -Eq '[^0-9a-f]'; then
+    echo "ERROR: Could not attest the exact APK bytes used for installation."
+    exit 1
+  fi
+  mkdir -p "$(dirname "$RAISE_INSTALLED_APK_SHA256_FILE")"
+  printf '%s\n' "$INSTALLED_APK_SHA256" > "$RAISE_INSTALLED_APK_SHA256_FILE"
+fi
+
+if [ -n "${RAISE_INSTALLED_WATCH_SERIAL_FILE:-}" ]; then
+  mkdir -p "$(dirname "$RAISE_INSTALLED_WATCH_SERIAL_FILE")"
+  printf '%s\n' "$TARGET" > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
 fi
 
 echo "Applying sideload grants..."
