@@ -76,6 +76,20 @@ class StartPhysicalHandoffTest(unittest.TestCase):
             check=False,
         )
 
+    def physical_starter(self, canonical_revision):
+        profile = self.root / "watch-gateway.properties"
+        profile.write_text("synthetic=true\n", encoding="utf-8")
+        env = os.environ.copy()
+        env["RAISE_RESTORE_DIR"] = str(self.restore)
+        env["RAISE_CANONICAL_MAIN_REVISION_OVERRIDE"] = canonical_revision
+        return run(
+            "bash",
+            self.artifact / "start-physical-handoff.command",
+            profile,
+            env=env,
+            check=False,
+        )
+
     def test_clean_exact_restore_is_retry_safe(self):
         first = self.starter()
         self.assertEqual(first.returncode, 0, first.stdout)
@@ -122,6 +136,27 @@ class StartPhysicalHandoffTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
             "must contain exactly one non-empty apk_sha256= entry (found 2)",
+            result.stdout,
+        )
+        self.assertFalse(self.restore.exists())
+
+    def test_stale_handoff_is_rejected_before_restore(self):
+        stale_main = "0" * 40
+        self.assertNotEqual(stale_main, self.revision)
+
+        result = self.physical_starter(stale_main)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Physical handoff is stale relative to canonical RaiseAI main.",
+            result.stdout,
+        )
+        self.assertFalse(self.restore.exists())
+
+    def test_malformed_canonical_main_revision_is_rejected_before_restore(self):
+        result = self.physical_starter("not-a-git-sha")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Unable to resolve a valid canonical RaiseAI main revision.",
             result.stdout,
         )
         self.assertFalse(self.restore.exists())
