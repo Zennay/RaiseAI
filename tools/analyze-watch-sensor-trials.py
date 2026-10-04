@@ -20,6 +20,7 @@ REQUIRED_COLUMNS = {
     "detector_triggered",
     "max_similarity",
     "app_version",
+    "source_revision",
     "detector_config",
 }
 
@@ -80,9 +81,12 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
                 raise TrialError(f"line {line}: max_similarity must be between -1 and 1")
 
             app_version = (row.get("app_version") or "").strip()
+            source_revision = (row.get("source_revision") or "").strip().lower()
             detector_config = (row.get("detector_config") or "").strip()
             if not app_version:
                 raise TrialError(f"line {line}: app_version must be non-empty")
+            if len(source_revision) != 40 or any(char not in "0123456789abcdef" for char in source_revision):
+                raise TrialError(f"line {line}: source_revision must be a 40-character Git SHA")
             if not detector_config or detector_config == "missing" or "," in detector_config:
                 raise TrialError(f"line {line}: detector_config must be a concrete comma-free id")
 
@@ -95,6 +99,7 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
                     "detector_triggered": _parse_bool(row["detector_triggered"], line=line),
                     "max_similarity": max_similarity,
                     "app_version": app_version,
+                    "source_revision": source_revision,
                     "detector_config": detector_config,
                 }
             )
@@ -113,6 +118,8 @@ def build_report(
     required_non_triggers: int = 100,
     min_detection_rate: float = 0.90,
     max_false_trigger_rate: float = 0.05,
+    expect_app_version: str | None = None,
+    expect_source_revision: str | None = None,
 ) -> dict[str, Any]:
     if min_duration_ms < 0 or min_samples <= 0:
         raise TrialError("invalid trial quality thresholds")
@@ -130,11 +137,27 @@ def build_report(
     non_triggers = [trial for trial in qualifying if trial["label"] in NON_TRIGGER_LABELS]
 
     app_versions = sorted({trial["app_version"] for trial in qualifying})
+    source_revisions = sorted({trial["source_revision"] for trial in qualifying})
     detector_configs = sorted({trial["detector_config"] for trial in qualifying})
     if len(app_versions) > 1:
         raise TrialError(f"qualifying trials mix app versions: {', '.join(app_versions)}")
+    if len(source_revisions) > 1:
+        raise TrialError("qualifying trials mix source revisions")
     if len(detector_configs) > 1:
         raise TrialError("qualifying trials mix detector configurations")
+
+    if expect_app_version is not None and app_versions and app_versions[0] != expect_app_version:
+        raise TrialError(
+            f"trial app_version {app_versions[0]!r} does not match expected {expect_app_version!r}"
+        )
+    if expect_source_revision is not None:
+        expected_revision = expect_source_revision.strip().lower()
+        if len(expected_revision) != 40 or any(char not in "0123456789abcdef" for char in expected_revision):
+            raise TrialError("expected source revision must be a 40-character Git SHA")
+        if source_revisions and source_revisions[0] != expected_revision:
+            raise TrialError(
+                f"trial source_revision {source_revisions[0]!r} does not match expected {expected_revision!r}"
+            )
 
     detected_raises = sum(1 for trial in raises if trial["detector_triggered"])
     false_triggers = sum(1 for trial in non_triggers if trial["detector_triggered"])
@@ -150,6 +173,7 @@ def build_report(
         "v1_gate_passed": ready,
         "evidence_identity": {
             "app_version": app_versions[0] if app_versions else None,
+            "source_revision": source_revisions[0] if source_revisions else None,
             "detector_config": detector_configs[0] if detector_configs else None,
         },
         "requirements": {
@@ -183,6 +207,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--required-non-triggers", type=int, default=100)
     parser.add_argument("--min-detection-rate", type=float, default=0.90)
     parser.add_argument("--max-false-trigger-rate", type=float, default=0.05)
+    parser.add_argument("--expect-app-version")
+    parser.add_argument("--expect-source-revision")
     parser.add_argument("--require-v1-gate", action="store_true")
     return parser.parse_args(argv)
 
@@ -199,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
             required_non_triggers=args.required_non_triggers,
             min_detection_rate=args.min_detection_rate,
             max_false_trigger_rate=args.max_false_trigger_rate,
+            expect_app_version=args.expect_app_version,
+            expect_source_revision=args.expect_source_revision,
         )
     except TrialError as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
