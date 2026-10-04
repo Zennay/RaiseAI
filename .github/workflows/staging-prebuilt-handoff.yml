@@ -46,6 +46,76 @@ jobs:
           python3 -m py_compile tools/verify-watch-apk-identity.py
           python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
 
+      - name: Verify-only artifact provenance smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          src="$tmp/source"
+          artifact="$tmp/artifact"
+          mkdir -p "$src/tools" "$artifact"
+
+          cp tools/verify-watch-apk-identity.py "$src/tools/"
+          git -C "$src" init -q
+          git -C "$src" config user.name "raise-ci"
+          git -C "$src" config user.email "raise-ci@example.invalid"
+          git -C "$src" add tools/verify-watch-apk-identity.py
+          git -C "$src" commit -q -m "Synthetic handoff source"
+          git -C "$src" branch -M handoff-smoke
+          revision="$(git -C "$src" rev-parse HEAD | tr 'A-F' 'a-f')"
+
+          cp start-physical-handoff.command "$artifact/"
+          git -C "$src" bundle create "$artifact/RaiseAI-v1.5.2-source.bundle" handoff-smoke
+
+          REVISION="$revision" APK="$artifact/RaiseAI-v1.5.2-debug.apk" python3 - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          revision = os.environ["REVISION"].encode("ascii")
+          apk = Path(os.environ["APK"])
+          with zipfile.ZipFile(apk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+              archive.writestr("classes.dex", b"dex-prefix-" + revision + b"-dex-suffix")
+              archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+          PY
+
+          APK="$artifact/RaiseAI-v1.5.2-debug.apk" BUNDLE="$artifact/RaiseAI-v1.5.2-source.bundle" python3 - <<'PY' > "$artifact/BUILD-IDENTITY.txt"
+          import hashlib
+          import os
+          from pathlib import Path
+
+          apk = Path(os.environ["APK"])
+          bundle = Path(os.environ["BUNDLE"])
+          revision = os.environ["REVISION"]
+          print(f"source_revision={revision}")
+          print(f"apk_sha256={hashlib.sha256(apk.read_bytes()).hexdigest()}")
+          print(f"source_bundle_sha256={hashlib.sha256(bundle.read_bytes()).hexdigest()}")
+          PY
+
+          RAISE_RESTORE_DIR="$tmp/restore" \
+            bash "$artifact/start-physical-handoff.command" --verify-only | tee "$tmp/verify-only.log"
+          grep -q '^VERIFY-ONLY PASS
+          set -euo pipefail
+          mkdir -p .github/proofs
+          cat > .github/proofs/prebuilt-handoff-staging-green.env <<EOF
+          status=GREEN
+          tested_revision=${GITHUB_SHA}
+          runner=${RUNNER_NAME}
+          physical_validation_syntax=PASS
+          physical_validation_help=PASS
+          start_handoff_syntax=PASS
+          verify_only_handoff_smoke=PASS
+          apk_identity_py_compile=PASS
+          apk_identity_tests=PASS
+          EOF
+          git add .github/proofs/prebuilt-handoff-staging-green.env
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Record GREEN prebuilt handoff staging proof"
+          git push origin HEAD:fix/prebuilt-physical-handoff-20261004
+ "$tmp/verify-only.log"
+
       - name: Publish GREEN staging proof
         shell: bash
         run: |
