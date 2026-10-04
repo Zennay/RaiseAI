@@ -115,6 +115,7 @@ class InstallWatchBindingTest(unittest.TestCase):
         (self.sdk / "platform-tools").mkdir(parents=True)
         self.log = self.root / "adb-install.log"
         self.serial_file = self.root / "installed-watch-serial"
+        self.installed_apk_sha_file = self.root / "installed-apk-sha256"
         self.apk = self.root / "RaiseAI.apk"
         self.apk.write_bytes(b"synthetic-watch-apk")
 
@@ -240,6 +241,7 @@ exit 2
             env.update(extra_env)
         env["ADB_LOG"] = str(self.log)
         env["RAISE_INSTALLED_WATCH_SERIAL_FILE"] = str(self.serial_file)
+        env["RAISE_INSTALLED_APK_SHA256_FILE"] = str(self.installed_apk_sha_file)
         env["PATH"] = f"{self.bin}:{env['PATH']}"
         return subprocess.run(
             ["bash", str(ROOT / "install-watch-apk.command"), str(self.apk)],
@@ -263,6 +265,10 @@ exit 2
         result = self.run_installer("watch-b")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(self.serial_file.read_text(encoding="utf-8").strip(), "watch-b")
+        self.assertEqual(
+            self.installed_apk_sha_file.read_text(encoding="utf-8").strip(),
+            hashlib.sha256(self.apk.read_bytes()).hexdigest(),
+        )
         self.assertTrue(self.used_serials())
         self.assertEqual(set(self.used_serials()), {"watch-b"})
 
@@ -271,6 +277,7 @@ exit 2
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Selected ADB target is not a Wear OS watch", result.stdout)
         self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
 
     def test_install_retry_refuses_to_switch_to_another_watch(self):
         attempt_file = self.root / "install-attempted"
@@ -287,6 +294,7 @@ exit 2
         self.assertIn("Bound Watch did not reconnect: watch-b", result.stdout)
         self.assertIn("Refusing to select a different ADB device", result.stdout)
         self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
         self.assertNotIn("watch-c", self.used_serials())
 
     def test_install_retry_revalidates_bound_watch_identity(self):
@@ -310,6 +318,7 @@ exit 2
             result.stdout,
         )
         self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
 
 
 class GatewayProvisionBindingTest(unittest.TestCase):
@@ -462,7 +471,9 @@ class PhysicalPrepareBindingTest(unittest.TestCase):
             """#!/bin/bash
 set -euo pipefail
 : "${RAISE_INSTALLED_WATCH_SERIAL_FILE:?missing install serial output}"
+: "${RAISE_INSTALLED_APK_SHA256_FILE:?missing installed APK digest output}"
 printf 'watch-b\\n' > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
+printf '%s\\n' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' > "$RAISE_INSTALLED_APK_SHA256_FILE"
 """,
             encoding="utf-8",
         )
@@ -563,6 +574,8 @@ exit 2
         self.assertEqual(len(sessions), 1)
         payload = json.loads((sessions[0] / "session.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["watch_serial"], "watch-b")
+        self.assertEqual(payload["apk_sha256"], hashlib.sha256(self.apk.read_bytes()).hexdigest())
+        self.assertEqual(payload["installed_apk_sha256"], "b" * 64)
 
 
 if __name__ == "__main__":
