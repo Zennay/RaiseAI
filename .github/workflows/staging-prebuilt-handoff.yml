@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   handoff-contracts:
-    runs-on: [self-hosted, vps-bb300bba]
+    runs-on: self-hosted
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +28,11 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
 
-      - name: Exact revision
+      - name: Exact VPS and revision
         shell: bash
         run: |
           set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test -z "$(git status --porcelain --untracked-files=normal)"
 
