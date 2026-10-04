@@ -11,7 +11,7 @@ ChatGPT Web and Gemini are retained as fallbacks; they are no longer the primary
 For the current M0/V0 gate, use the session orchestrator on the Mac paired with the Galaxy Watch 7:
 
 ```bash
-./physical-validation.command all /path/to/watch-gateway.properties
+bash ./physical-validation.command all /path/to/watch-gateway.properties
 ```
 
 The flow is fail-closed and keeps one evidence directory under `~/.raiseai/evidence/`:
@@ -23,10 +23,10 @@ The flow is fail-closed and keeps one evidence directory under `~/.raiseai/evide
 The manual commands remain available when debugging an individual stage:
 
 ```bash
-./physical-validation.command prepare /path/to/watch-gateway.properties
-./physical-validation.command verify-e2e
-./physical-validation.command verify-v1
-./physical-validation.command status
+bash ./physical-validation.command prepare /path/to/watch-gateway.properties
+bash ./physical-validation.command verify-e2e
+bash ./physical-validation.command verify-v1
+bash ./physical-validation.command status
 ```
 
 A dirty source tree cannot produce passing physical evidence. Old v1 schema evidence also fails closed; v1.5.1 writes schema v2 with `app_version` and `source_revision`.
