@@ -7,6 +7,15 @@ fun resolveSourceRevision(projectDir: java.io.File): String {
     if (override != null) return override.lowercase()
 
     return try {
+        val statusProcess = ProcessBuilder("git", "status", "--porcelain", "--untracked-files=normal")
+            .directory(projectDir)
+            .redirectErrorStream(true)
+            .start()
+        val status = statusProcess.inputStream.bufferedReader().use { it.readText() }
+        if (statusProcess.waitFor() != 0 || status.isNotBlank()) {
+            return "unknown"
+        }
+
         val process = ProcessBuilder("git", "rev-parse", "HEAD")
             .directory(projectDir)
             .redirectErrorStream(true)
