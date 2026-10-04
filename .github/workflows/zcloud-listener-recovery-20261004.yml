@@ -95,9 +95,9 @@ jobs:
             fi
           done
 
-          # Never restart a healthy canonical listener. If the service really is
-          # inactive and there is no canonical listener, start it once after orphan
-          # cleanup; an active service with zero/multiple canonical listeners fails closed.
+          # Never restart a healthy canonical listener. More than one canonical
+          # listener is ambiguous and fails closed. Zero canonical listeners is
+          # recoverable only because we already proved there are no zCloud workers.
           if [[ "${#canonical[@]}" -gt 1 ]]; then
             echo "ZCLOUD_RUNNER_RECOVERY_ABORT canonical_listener_count=${#canonical[@]}" >&2
             exit 76
@@ -120,12 +120,16 @@ jobs:
           done
 
           if [[ "${#canonical[@]}" -eq 0 ]]; then
-            [[ "$state" != "active" ]] || {
-              echo "ZCLOUD_RUNNER_RECOVERY_ABORT active_service_without_canonical_listener" >&2
-              exit 77
-            }
             sudo -n systemctl reset-failed "$service" || true
-            sudo -n systemctl start "$service"
+            if [[ "$state" == "active" ]]; then
+              echo "ZCLOUD_RUNNER_RECOVERY_ACTION=restart_service_without_listener"
+              sudo -n systemctl restart "$service"
+            else
+              echo "ZCLOUD_RUNNER_RECOVERY_ACTION=start_inactive_service"
+              sudo -n systemctl start "$service"
+            fi
+            cgroup="$(systemctl show "$service" -p ControlGroup --value || true)"
+            [[ -n "$cgroup" && "$cgroup" != "/" ]]
           fi
 
           for _ in $(seq 1 30); do
