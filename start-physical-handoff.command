@@ -3,13 +3,22 @@ set -euo pipefail
 
 ARTIFACT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILE="${1:-}"
+VERIFY_ONLY=0
+if [ "${1:-}" = "--verify-only" ]; then
+  VERIFY_ONLY=1
+  PROFILE=""
+fi
+
 IDENTITY="$ARTIFACT_DIR/BUILD-IDENTITY.txt"
 APK="$ARTIFACT_DIR/RaiseAI-v1.5.2-debug.apk"
 BUNDLE="$ARTIFACT_DIR/RaiseAI-v1.5.2-source.bundle"
 
-if [ -z "$PROFILE" ] || [ ! -f "$PROFILE" ]; then
-  echo "Usage: bash ./start-physical-handoff.command /path/to/watch-gateway.properties"
-  exit 2
+if [ "$VERIFY_ONLY" -eq 0 ]; then
+  if [ -z "$PROFILE" ] || [ ! -f "$PROFILE" ]; then
+    echo "Usage: bash ./start-physical-handoff.command /path/to/watch-gateway.properties"
+    echo "       bash ./start-physical-handoff.command --verify-only"
+    exit 2
+  fi
 fi
 
 for command_name in git python3; do
@@ -93,6 +102,11 @@ echo "Verified physical handoff:"
 echo "  source revision: $revision"
 echo "  APK SHA-256:     $expected_apk_sha"
 echo "  source bundle:   $expected_bundle_sha"
+
+if [ "$VERIFY_ONLY" -eq 1 ]; then
+  echo "VERIFY-ONLY PASS"
+  exit 0
+fi
 
 cd "$RESTORE_DIR"
 RAISE_PREBUILT_APK="$APK" RAISE_EXPECT_APK_SHA256="$expected_apk_sha" exec bash ./physical-validation.command all "$PROFILE"
