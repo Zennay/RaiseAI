@@ -78,9 +78,15 @@ jobs:
 
           bash -n upgrade-watch.command
           bash -n physical-validation.command
+          bash -n install-watch-apk.command
+          bash -n provision-watch-gateway.command
+          bash -n start-physical-handoff.command
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
+          python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
+          python3 -m unittest discover -s tests -p 'test_start_physical_handoff.py'
+          python3 -m unittest discover -s tests -p 'test_adb_device_binding.py'
 
           ./gradlew --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx1280m -Dfile.encoding=UTF-8" \
@@ -159,6 +165,18 @@ jobs:
             echo "built_on=$(hostname)"
             echo "github_run_id=$GITHUB_RUN_ID"
           } > "$OUT/BUILD-IDENTITY.txt"
+
+      - name: Verify packaged one-command handoff end to end
+        shell: bash
+        run: |
+          set -euo pipefail
+          restore="$RUNNER_TEMP/raiseai-v1.5.2-handoff-restore"
+          rm -rf "$restore"
+          RAISE_RESTORE_DIR="$restore" \
+            bash RaiseAI-v1.5.2-vps-handoff/start-physical-handoff.command --verify-only
+          test "$(git -C "$restore" rev-parse HEAD | tr 'A-F' 'a-f')" = "$RAISE_SHA"
+          test -z "$(git -C "$restore" status --porcelain --untracked-files=normal)"
+          rm -rf "$restore"
 
       - name: Reconfirm live main before publishing
         shell: bash
