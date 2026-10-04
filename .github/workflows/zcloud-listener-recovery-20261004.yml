@@ -1,8 +1,13 @@
-name: Recover idle zCloud listener
-# retrigger 2026-10-04T20:44Z: zCloud production deploy lane queued with no active cross-project jobs
+name: Recover zCloud listener safely
+# Hardened after zCloud diagnostics proved an orphan Listener outside the canonical
+# service cgroup was sharing /home/ubuntu/actions-runner-zcloud/_work/_temp.
 
 on:
   push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-listener-recovery-20261004.yml"
+  pull_request:
     branches: [main]
     paths:
       - ".github/workflows/zcloud-listener-recovery-20261004.yml"
@@ -21,52 +26,139 @@ jobs:
     timeout-minutes: 5
     env:
       ZCLOUD_RUNNER_SERVICE: actions.runner.Zennay-zCloud.zcloud-vps-1.service
+      ZCLOUD_RUNNER_ROOT: /home/ubuntu/actions-runner-zcloud
     steps:
-      - name: Restart only idle zCloud listener
+      - name: Remove only idle orphan zCloud listener
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
           test "$(hostname)" = "vps-bb300bba"
+
           service="$ZCLOUD_RUNNER_SERVICE"
+          root="$ZCLOUD_RUNNER_ROOT"
+          temp="$root/_work/_temp"
           systemctl cat "$service" >/dev/null
 
-          group="$(systemctl show "$service" -p ControlGroup --value || true)"
-          worker=0
-          if [[ -n "$group" && -r "/sys/fs/cgroup${group}/cgroup.procs" ]]; then
-            while read -r pid; do
-              [[ -r "/proc/$pid/cmdline" ]] || continue
-              cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" || true)"
-              if [[ "$cmd" == *"Runner.Worker"* ]]; then
-                worker=1
-                echo "ZCLOUD_RUNNER_ACTIVE_WORKER pid=$pid"
-                break
-              fi
-            done < "/sys/fs/cgroup${group}/cgroup.procs"
-          fi
+          proc_cmd() {
+            tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null || true
+          }
+          proc_group() {
+            cat "/proc/$1/cgroup" 2>/dev/null || true
+          }
+          listener_pids() {
+            for proc in /proc/[0-9]*; do
+              pid="${proc##*/}"
+              cmd="$(proc_cmd "$pid")"
+              [[ "$cmd" == *"$root/bin/Runner.Listener"* ]] && echo "$pid"
+            done
+          }
+          worker_pids() {
+            for proc in /proc/[0-9]*; do
+              pid="${proc##*/}"
+              cmd="$(proc_cmd "$pid")"
+              [[ "$cmd" == *"$root/bin/Runner.Worker"* ]] && echo "$pid"
+            done
+          }
 
-          state="$(systemctl is-active "$service" || true)"
-          pid="$(systemctl show "$service" -p MainPID --value || true)"
-          echo "ZCLOUD_RUNNER_PRE state=$state pid=$pid worker=$worker"
+          cgroup="$(systemctl show "$service" -p ControlGroup --value || true)"
+          [[ -n "$cgroup" && "$cgroup" != "/" ]] || {
+            echo "ZCLOUD_RUNNER_RECOVERY_ABORT invalid_service_cgroup=$cgroup" >&2
+            exit 70
+          }
 
-          if [[ "$worker" -eq 1 ]]; then
-            echo "ZCLOUD_RUNNER_RECOVERY=preserve_active_worker"
-            exit 0
-          fi
-
-          sudo -n systemctl reset-failed "$service" || true
-          sudo -n systemctl restart "$service"
-
-          for _ in $(seq 1 20); do
-            post="$(systemctl is-active "$service" || true)"
-            post_pid="$(systemctl show "$service" -p MainPID --value || true)"
-            if [[ "$post" == "active" && "$post_pid" =~ ^[1-9][0-9]*$ && -r "/proc/$post_pid/cmdline" ]]; then
-              cmd="$(tr '\0' ' ' < "/proc/$post_pid/cmdline" || true)"
-              if [[ "$cmd" == *"Runner.Listener"* || "$cmd" == *"runsvc.sh"* ]]; then
-                echo "ZCLOUD_RUNNER_RECOVERY=restart_idle_listener"
-                echo "ZCLOUD_RUNNER_POST state=$post pid=$post_pid"
-                exit 0
-              fi
-            fi
+          # This workflow runs on an independent repository runner. Wait until every
+          # zCloud worker lineage is idle, not merely the canonical service cgroup.
+          workers=""
+          for _ in $(seq 1 90); do
+            workers="$(worker_pids | xargs echo -n || true)"
+            [[ -z "$workers" ]] && break
+            echo "ZCLOUD_RUNNER_RECOVERY_WAIT workers=$workers"
             sleep 2
           done
-          exit 1
+          [[ -z "$workers" ]] || {
+            echo "ZCLOUD_RUNNER_RECOVERY_ABORT active_workers=$workers" >&2
+            exit 75
+          }
+
+          state="$(systemctl is-active "$service" || true)"
+          mainpid="$(systemctl show "$service" -p MainPID --value || true)"
+          mapfile -t listeners < <(listener_pids)
+          echo "ZCLOUD_RUNNER_PRE state=$state mainpid=$mainpid listeners=${listeners[*]:-none} cgroup=$cgroup"
+
+          canonical=()
+          orphan=()
+          for pid in "${listeners[@]}"; do
+            if proc_group "$pid" | grep -Fq "$cgroup"; then
+              canonical+=("$pid")
+            else
+              orphan+=("$pid")
+            fi
+          done
+
+          # Never restart a healthy canonical listener. More than one canonical
+          # listener is ambiguous and fails closed. Zero canonical listeners is
+          # recoverable only because we already proved there are no zCloud workers.
+          if [[ "${#canonical[@]}" -gt 1 ]]; then
+            echo "ZCLOUD_RUNNER_RECOVERY_ABORT canonical_listener_count=${#canonical[@]}" >&2
+            exit 76
+          fi
+
+          for pid in "${orphan[@]}"; do
+            ppid="$(awk '{print $4}' "/proc/$pid/stat" 2>/dev/null || true)"
+            parent_cmd=""
+            [[ "$ppid" =~ ^[1-9][0-9]*$ ]] && parent_cmd="$(proc_cmd "$ppid")"
+            echo "ZCLOUD_RUNNER_ORPHAN pid=$pid ppid=${ppid:-unknown} cmd=$(proc_cmd "$pid") parent=$parent_cmd"
+
+            if [[ "$parent_cmd" == *"$root"* ]] && {
+              [[ "$parent_cmd" == *"runsvc.sh"* ]] ||
+              [[ "$parent_cmd" == *"RunnerService"* ]] ||
+              [[ "$parent_cmd" == *"run.sh"* ]];
+            }; then
+              sudo -n kill -TERM "$ppid" 2>/dev/null || true
+            fi
+            sudo -n kill -TERM "$pid" 2>/dev/null || true
+          done
+
+          if [[ "${#canonical[@]}" -eq 0 ]]; then
+            sudo -n systemctl reset-failed "$service" || true
+            if [[ "$state" == "active" ]]; then
+              echo "ZCLOUD_RUNNER_RECOVERY_ACTION=restart_service_without_listener"
+              sudo -n systemctl restart "$service"
+            else
+              echo "ZCLOUD_RUNNER_RECOVERY_ACTION=start_inactive_service"
+              sudo -n systemctl start "$service"
+            fi
+            cgroup="$(systemctl show "$service" -p ControlGroup --value || true)"
+            [[ -n "$cgroup" && "$cgroup" != "/" ]]
+          fi
+
+          for _ in $(seq 1 30); do
+            mapfile -t listeners < <(listener_pids)
+            if [[ "${#listeners[@]}" -eq 1 ]] && proc_group "${listeners[0]}" | grep -Fq "$cgroup"; then
+              break
+            fi
+            sleep 1
+          done
+
+          mapfile -t listeners < <(listener_pids)
+          [[ "${#listeners[@]}" -eq 1 ]] || {
+            echo "ZCLOUD_RUNNER_RECOVERY_ABORT final_listener_count=${#listeners[@]} listeners=${listeners[*]:-none}" >&2
+            exit 78
+          }
+          proc_group "${listeners[0]}" | grep -Fq "$cgroup"
+          systemctl is-active --quiet "$service"
+
+          install -d -o ubuntu -g ubuntu -m 0755 "$temp"
+          sentinel="$temp/.zcloud-independent-recovery-$GITHUB_RUN_ID"
+          sudo -u ubuntu touch "$sentinel"
+          sleep 12
+          test -f "$sentinel"
+          rm -f "$sentinel"
+
+          mapfile -t workers_after < <(worker_pids)
+          [[ "${#workers_after[@]}" -eq 0 ]] || {
+            echo "ZCLOUD_RUNNER_RECOVERY_ABORT unexpected_worker_after=${workers_after[*]}" >&2
+            exit 79
+          }
+
+          echo "ZCLOUD_RUNNER_RECOVERY_GREEN listener=${listeners[0]} cgroup=$cgroup temp_owner=$(stat -c '%U:%G' "$temp")"
