@@ -153,8 +153,9 @@ prepare_session() {
     exit 1
   fi
 
-  local revision version gradle_version stamp session adb target model installed_version
-  local prebuilt_apk expected_apk_sha selected_apk install_mode apk_sha
+  local revision version gradle_version stamp session adb target model characteristics features installed_version
+  local prebuilt_apk expected_apk_sha selected_apk install_mode apk_sha installed_apk_sha
+  local installed_watch_serial_file installed_apk_sha_file
   local -a verify_args
   revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"
   printf '%s' "$revision" | grep -Eq '^[0-9a-f]{40}$' || {
@@ -172,6 +173,9 @@ prepare_session() {
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   session="$EVIDENCE_ROOT/${stamp}-v${version}-${revision:0:12}"
   mkdir -p "$session"
+  installed_watch_serial_file="$session/installed-watch-serial"
+  installed_apk_sha_file="$session/installed-apk-sha256"
+  rm -f "$installed_watch_serial_file" "$installed_apk_sha_file"
 
   echo "Preparing physical validation session:"
   echo "  version:  $version"
@@ -206,11 +210,16 @@ prepare_session() {
       --expect-sha256 "$expected_apk_sha"
     )
     "${verify_args[@]}" | tee "$session/apk-verification.json"
-    bash ./install-watch-apk.command "$prebuilt_apk"
+    RAISE_INSTALLED_WATCH_SERIAL_FILE="$installed_watch_serial_file" \
+      RAISE_INSTALLED_APK_SHA256_FILE="$installed_apk_sha_file" \
+      bash ./install-watch-apk.command "$prebuilt_apk"
     selected_apk="$prebuilt_apk"
     install_mode="prebuilt_apk"
   else
-    RAISE_BUILD_REVISION="$revision" bash ./upgrade-watch.command
+    RAISE_BUILD_REVISION="$revision" \
+      RAISE_INSTALLED_WATCH_SERIAL_FILE="$installed_watch_serial_file" \
+      RAISE_INSTALLED_APK_SHA256_FILE="$installed_apk_sha_file" \
+      bash ./upgrade-watch.command
     selected_apk="app/build/outputs/apk/debug/app-debug.apk"
     python3 tools/verify-watch-apk-identity.py       "$selected_apk"       --expect-source-revision "$revision" | tee "$session/apk-verification.json"
     install_mode="source_build"
@@ -235,26 +244,60 @@ PY
       ;;
   esac
 
-  bash ./provision-watch-gateway.command "$profile"
+  [ -s "$installed_apk_sha_file" ] || {
+    echo "Installer did not attest the exact APK bytes used for this session."
+    exit 1
+  }
+  installed_apk_sha="$(tr -d '\r\n' < "$installed_apk_sha_file")"
+  if [ "${#installed_apk_sha}" -ne 64 ] || printf '%s' "$installed_apk_sha" | grep -Eq '[^0-9a-f]'; then
+    echo "Installer returned an invalid installed APK SHA-256."
+    exit 1
+  fi
+
+  [ -s "$installed_watch_serial_file" ] || {
+    echo "Installer did not attest the Watch serial used for this session."
+    exit 1
+  }
+  target="$(tr -d '\r\n' < "$installed_watch_serial_file")"
+  [ -n "$target" ] || {
+    echo "Installer returned an empty Watch serial."
+    exit 1
+  }
+
+  ANDROID_SERIAL="$target" bash ./provision-watch-gateway.command "$profile"
 
   adb="$(find_adb || true)"
   [ -n "$adb" ] || { echo "ADB not found after install"; exit 1; }
-  target="${ANDROID_SERIAL:-$(find_watch "$adb" | head -n 1)}"
-  [ -n "$target" ] || { echo "Watch disconnected after install"; exit 1; }
+  "$adb" devices | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$target" || {
+    echo "Installed Watch disconnected before session binding: $target"
+    exit 1
+  }
 
-  model="$("$adb" -s "$target" shell getprop ro.product.model | tr -d '\r')"
+  model="$("$adb" -s "$target" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+  characteristics="$("$adb" -s "$target" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+  features="$("$adb" -s "$target" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+  if [ "$model" != "SM_L315F" ] &&
+     ! printf '%s' "$characteristics" | grep -qi watch &&
+     ! printf '%s\n' "$features" | grep -q 'android.hardware.type.watch'; then
+    echo "Installed ADB target is not a Wear OS watch: $target"
+    exit 1
+  fi
+
   installed_version="$("$adb" -s "$target" shell dumpsys package "$PACKAGE" |
     sed -n 's/^[[:space:]]*versionName=//p' | head -n 1 | tr -d '\r')"
   [ "$installed_version" = "$version" ] || {
     echo "Installed Watch version $installed_version does not match prepared version $version"
     exit 1
   }
+  echo "  watch:    $target"
+  echo "  artifact: $apk_sha"
+  echo "  installed:$installed_apk_sha"
   echo "Clearing prior validation evidence only..."
   "$adb" -s "$target" shell run-as "$PACKAGE" sh -c     "'rm -f files/watch-e2e-evidence.json files/sensor-traces.csv files/sensor-trials.csv'"
   "$adb" -s "$target" logcat -c || true
   "$adb" -s "$target" shell am start -n "$PACKAGE/.MainActivity" >/dev/null
 
-  STARTED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"   SESSION_PATH="$session"   APP_VERSION="$version"   SOURCE_REVISION="$revision"   WATCH_MODEL="$model"   INSTALL_MODE="$install_mode"   APK_SHA256="$apk_sha"   python3 - <<'PY'
+  STARTED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"   SESSION_PATH="$session"   APP_VERSION="$version"   SOURCE_REVISION="$revision"   WATCH_MODEL="$model"   WATCH_SERIAL="$target"   INSTALL_MODE="$install_mode"   APK_SHA256="$apk_sha"   INSTALLED_APK_SHA256="$installed_apk_sha"   python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -265,8 +308,10 @@ payload = {
     "app_version": os.environ["APP_VERSION"],
     "source_revision": os.environ["SOURCE_REVISION"],
     "watch_model": os.environ["WATCH_MODEL"],
+    "watch_serial": os.environ["WATCH_SERIAL"],
     "install_mode": os.environ["INSTALL_MODE"],
     "apk_sha256": os.environ["APK_SHA256"],
+    "installed_apk_sha256": os.environ["INSTALLED_APK_SHA256"],
     "e2e_passed": False,
     "v1_gate_passed": False,
 }
@@ -291,11 +336,13 @@ verify_e2e() {
   [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
   require_command python3
 
-  local version revision
+  local version revision watch_serial
   version="$(json_get "$session/session.json" app_version)"
   revision="$(json_get "$session/session.json" source_revision)"
+  watch_serial="$(json_get "$session/session.json" watch_serial)"
+  [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
 
   local diag evidence result
   diag="$(find "$session" -maxdepth 1 -type d -name 'watch-diagnostics-*' -print | sort | tail -n 1)"
@@ -325,7 +372,7 @@ verify_v1() {
   [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
   require_command python3
 
-  local e2e_passed version revision
+  local e2e_passed version revision watch_serial
   e2e_passed="$(json_get "$session/session.json" e2e_passed)"
   [ "$e2e_passed" = "true" ] || {
     echo "Refusing V1 gate before this session's fresh E2E gate has passed."
@@ -334,8 +381,10 @@ verify_v1() {
   }
   version="$(json_get "$session/session.json" app_version)"
   revision="$(json_get "$session/session.json" source_revision)"
+  watch_serial="$(json_get "$session/session.json" watch_serial)"
+  [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
 
   local trials result
   trials="$(find "$session" -maxdepth 1 -type f -name 'watch-sensor-trials-*.csv' -print | sort | tail -n 1)"
