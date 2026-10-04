@@ -182,12 +182,46 @@ if ! INSTALL_OUTPUT="$(install_once 2>&1)"; then
     exit 1
   fi
 
-  echo "Install failed; trying one automatic reconnect..."
-  DISCOVERED_ENDPOINT="$(mdns_endpoint)"
-  [ -z "${DISCOVERED_ENDPOINT:-}" ] || connect_endpoint "$DISCOVERED_ENDPOINT" || true
+  echo "Install failed; trying one automatic reconnect of the originally selected Watch..."
+  BOUND_TARGET="$TARGET"
+  if printf '%s' "$BOUND_TARGET" | grep -Eq '^[^:]+:[0-9]+
+else
+  printf '%s\n' "$INSTALL_OUTPUT"
+fi
+
+if [ -n "${RAISE_INSTALLED_WATCH_SERIAL_FILE:-}" ]; then
+  mkdir -p "$(dirname "$RAISE_INSTALLED_WATCH_SERIAL_FILE")"
+  printf '%s\n' "$TARGET" > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
+fi
+
+echo "Applying sideload grants..."
+"$ADB" -s "$TARGET" shell appops set "$PACKAGE" SYSTEM_ALERT_WINDOW allow || true
+"$ADB" -s "$TARGET" shell appops set "$PACKAGE" GET_USAGE_STATS allow || true
+
+echo "Opening Raise AI..."
+"$ADB" -s "$TARGET" shell am start -n "$PACKAGE/.MainActivity" >/dev/null
+
+echo
+echo "Installed package:"
+"$ADB" -s "$TARGET" shell dumpsys package "$PACKAGE" |
+  grep -E "versionName=|versionCode=" | head -2
+
+if [ "$(uname -s)" = "Darwin" ] &&
+   [ -f "$SCRIPT_DIR/install-mac-adb-autoconnect.command" ] &&
+   [ ! -f "$STATE_DIR/autoconnect-installed" ]; then
+  bash "$SCRIPT_DIR/install-mac-adb-autoconnect.command" --quiet || true
+fi
+
+echo "Raise AI installation complete."; then
+    connect_endpoint "$BOUND_TARGET" || true
+  fi
   sleep 1
-  TARGET="${ANDROID_SERIAL:-$(find_watch)}"
-  [ -n "$TARGET" ] || { echo "Watch did not reconnect."; exit 1; }
+  if ! "$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$BOUND_TARGET"; then
+    echo "Bound Watch did not reconnect: $BOUND_TARGET"
+    echo "Refusing to select a different ADB device during an install retry."
+    exit 1
+  fi
+  TARGET="$BOUND_TARGET"
   install_once
 else
   printf '%s\n' "$INSTALL_OUTPUT"
