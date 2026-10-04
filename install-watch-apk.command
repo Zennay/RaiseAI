@@ -113,9 +113,20 @@ if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/.android/adbkey" ]; then
 fi
 
 MODEL="$("$ADB" -s "$TARGET" shell getprop ro.product.model | tr -d '\r')"
+WATCH_DEVICE="$("$ADB" -s "$TARGET" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
+WATCH_CHARACTERISTICS="$("$ADB" -s "$TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+WATCH_FEATURES="$("$ADB" -s "$TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
 WATCH_ABI="$("$ADB" -s "$TARGET" shell getprop ro.product.cpu.abi | tr -d '\r')"
 WATCH_ABILIST="$("$ADB" -s "$TARGET" shell getprop ro.product.cpu.abilist | tr -d '\r')"
 APK_ABIS="$(unzip -Z1 "$APK" | awk -F/ '$1=="lib" && $NF ~ /[.]so$/ {print $2}' | sort -u)"
+
+if [ "$MODEL" != "SM_L315F" ] &&
+   ! printf '%s' "$WATCH_DEVICE" | grep -qi '^fresh' &&
+   ! printf '%s' "$WATCH_CHARACTERISTICS" | grep -qi watch &&
+   ! printf '%s\n' "$WATCH_FEATURES" | grep -q 'android.hardware.type.watch'; then
+  echo "ERROR: Refusing install. Selected ADB target is not a Wear OS watch: $TARGET"
+  exit 1
+fi
 
 echo "Watch: $MODEL ($TARGET)"
 echo "Watch ABI: $WATCH_ABI"
@@ -180,6 +191,11 @@ if ! INSTALL_OUTPUT="$(install_once 2>&1)"; then
   install_once
 else
   printf '%s\n' "$INSTALL_OUTPUT"
+fi
+
+if [ -n "${RAISE_INSTALLED_WATCH_SERIAL_FILE:-}" ]; then
+  mkdir -p "$(dirname "$RAISE_INSTALLED_WATCH_SERIAL_FILE")"
+  printf '%s\n' "$TARGET" > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
 fi
 
 echo "Applying sideload grants..."
