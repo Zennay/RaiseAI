@@ -80,7 +80,7 @@ jobs:
               archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
           PY
 
-          APK="$artifact/RaiseAI-v1.5.2-debug.apk" BUNDLE="$artifact/RaiseAI-v1.5.2-source.bundle" python3 - <<'PY' > "$artifact/BUILD-IDENTITY.txt"
+          REVISION="$revision" APK="$artifact/RaiseAI-v1.5.2-debug.apk" BUNDLE="$artifact/RaiseAI-v1.5.2-source.bundle" python3 - <<'PY' > "$artifact/BUILD-IDENTITY.txt"
           import hashlib
           import os
           from pathlib import Path
