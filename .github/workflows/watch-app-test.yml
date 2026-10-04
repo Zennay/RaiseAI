@@ -102,6 +102,29 @@ jobs:
           bash -n upgrade-watch.command
           python3 -m py_compile tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/verify-watch-apk-identity.py
 
+      - name: Prebuilt artifact digest contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp_apk="$(mktemp)"
+          tmp_profile="$(mktemp)"
+          tmp_log="$(mktemp)"
+          tmp_evidence="$(mktemp -d)"
+          trap 'rm -f "$tmp_apk" "$tmp_profile" "$tmp_log"; rm -rf "$tmp_evidence"' EXIT
+
+          if RAISE_EVIDENCE_ROOT="$tmp_evidence" RAISE_PREBUILT_APK="$tmp_apk" \
+            bash physical-validation.command prepare "$tmp_profile" >"$tmp_log" 2>&1; then
+            cat "$tmp_log"
+            echo "Prebuilt validation unexpectedly accepted an APK without an expected SHA-256."
+            exit 1
+          fi
+          grep -Fq "RAISE_EXPECT_APK_SHA256 is required when RAISE_PREBUILT_APK is set." "$tmp_log" || {
+            cat "$tmp_log"
+            echo "Missing prebuilt digest failed for an unexpected reason."
+            exit 1
+          }
+          echo "Negative control passed: prebuilt mode requires an exact APK SHA-256."
+
       - name: Release version contract
         run: |
           expected="$(tr -d '\r\n' < VERSION.txt)"
