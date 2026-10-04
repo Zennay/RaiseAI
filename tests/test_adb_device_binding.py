@@ -435,7 +435,7 @@ exit 2
 
     def test_gateway_temp_credential_path_uses_process_id(self):
         source = (ROOT / "provision-watch-gateway.command").read_text(encoding="utf-8")
-        self.assertIn('TMP="/data/local/tmp/raise-gateway-$.properties"', source)
+        self.assertIn('TMP="/data/local/tmp/raise-gateway-$$.properties"', source)
         self.assertNotIn('TMP="/data/local/tmp/raise-gateway-$.properties"', source)
 
     def test_gateway_provisioning_rejects_bound_phone(self):
