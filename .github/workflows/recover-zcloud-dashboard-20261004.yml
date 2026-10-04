@@ -1,0 +1,80 @@
+name: Recover zCloud dashboard via RaiseAI runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/recover-zcloud-dashboard-20261004.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 8
+    steps:
+      - name: Recover zCloud service and listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          sudo -n rm -f /home/ubuntu/zennay-cloud/.disable-self-heal
+          sudo -n systemctl reset-failed zennay-cloud.service || true
+          sudo -n systemctl restart zennay-cloud.service
+          for i in {1..30}; do
+            if sudo -n systemctl is-active --quiet zennay-cloud.service &&
+               curl -fsS --max-time 3 http://127.0.0.1:8765/api/status >/tmp/zcloud-status.json 2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          sudo -n systemctl is-active zennay-cloud.service
+          curl -fsS --max-time 5 http://127.0.0.1:8765/api/status >/tmp/zcloud-status.json
+          python3 - <<'PY'
+          import json
+          s=json.load(open("/tmp/zcloud-status.json"))
+          print(json.dumps({"time":s.get("time"),"errors":s.get("errors"),"dynamic_workers":s.get("dynamic_workers")},indent=2))
+          PY
+          echo "=== LISTENER ==="
+          ss -ltnp | grep ':8765' || true
+          echo "=== PUBLIC SELFTEST ==="
+          if curl -fsS --max-time 6 http://198.244.191.182:8765/ >/dev/null 2>&1; then
+            echo ZCLOUD_DASHBOARD_PUBLIC_GREEN
+          else
+            echo ZCLOUD_DASHBOARD_PUBLIC_SELFTEST_FAILED
+            sudo -n ufw status 2>/dev/null || true
+            sudo -n nft list ruleset 2>/dev/null | grep -C 3 -E '8765|reject|drop' || true
+          fi
+
+      - name: Recover zCloud Actions listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          recovered=0
+          mapfile -t system_units < <(
+            systemctl list-unit-files --type=service --no-legend 2>/dev/null |
+            awk '{print $1}' |
+            grep -Ei '^actions\.runner\..*zcloud.*\.service$' || true
+          )
+          mapfile -t user_units < <(
+            systemctl --user list-unit-files --type=service --no-legend 2>/dev/null |
+            awk '{print $1}' |
+            grep -Ei '^actions\.runner\..*zcloud.*\.service$' || true
+          )
+          for unit in "${system_units[@]}"; do
+            echo "Restart system runner $unit"
+            sudo -n systemctl reset-failed "$unit" || true
+            if sudo -n systemctl restart "$unit"; then
+              recovered=1
+            fi
+          done
+          for unit in "${user_units[@]}"; do
+            echo "Restart user runner $unit"
+            systemctl --user reset-failed "$unit" || true
+            if systemctl --user restart "$unit"; then
+              recovered=1
+            fi
+          done
+          test "$recovered" -eq 1
