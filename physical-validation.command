@@ -212,7 +212,21 @@ path = Path(sys.argv[1])
 print(hashlib.sha256(path.read_bytes()).hexdigest())
 PY
 )"
-  printf '%s' "$apk_sha" | grep -Eq '^[0-9a-f]{64}  [ -n "$adb" ] || { echo "ADB not found after install"; exit 1; }
+  if [ "${#apk_sha}" -ne 64 ]; then
+    echo "Could not compute a 64-character APK SHA-256."
+    exit 1
+  fi
+  case "$apk_sha" in
+    *[!0-9a-f]*)
+      echo "Computed APK SHA-256 contains non-hex characters."
+      exit 1
+      ;;
+  esac
+
+  bash ./provision-watch-gateway.command "$profile"
+
+  adb="$(find_adb || true)"
+  [ -n "$adb" ] || { echo "ADB not found after install"; exit 1; }
   target="${ANDROID_SERIAL:-$(find_watch "$adb" | head -n 1)}"
   [ -n "$target" ] || { echo "Watch disconnected after install"; exit 1; }
 
