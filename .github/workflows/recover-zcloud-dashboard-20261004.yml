@@ -1,4 +1,4 @@
-name: Stabilize zCloud dashboard runtime via RaiseAI
+name: Stabilize zCloud dashboard queue and API
 
 on:
   push:
@@ -15,38 +15,64 @@ jobs:
     runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 5
     steps:
-      - name: Clear stale browser command and prove stable API
+      - name: Clear only stale cloud drain and prove API stability
         shell: bash
         run: |
           set -euo pipefail
           root=/home/ubuntu/zennay-cloud
+          db="$root/history.db"
           test "$(hostname)" = "vps-bb300bba"
           test -e "$root/.disable-self-heal"
-          echo "=== BEFORE ==="
           sudo -n systemctl is-active zennay-cloud.service
           old_pid="$(sudo -n systemctl show -p MainPID --value zennay-cloud.service)"
           echo "pid_before=$old_pid"
-          python3 "$root/scripts/zcloud_worker_watchdog.py"             --db "$root/history.db"             --clear-stale-pending-only             --json | tee /tmp/zcloud-watchdog-clear.json
-          echo "=== PENDING AFTER CLEANUP ==="
           python3 - <<'PY'
           import sqlite3, json
+          from datetime import datetime, timezone
+
           db='/home/ubuntu/zennay-cloud/history.db'
-          c=sqlite3.connect(f'file:{db}?mode=ro',uri=True,timeout=3)
+          c=sqlite3.connect(db,timeout=5)
           c.row_factory=sqlite3.Row
-          rows=c.execute("SELECT id,project_id,action,status,created_at,updated_at,result FROM runner_commands WHERE status='pending' ORDER BY id").fetchall()
-          print(json.dumps([dict(r) for r in rows],indent=2))
+          c.execute('BEGIN IMMEDIATE')
+          row=c.execute("SELECT id,project_id,action,status,created_at,updated_at,result FROM runner_commands WHERE id=19191").fetchone()
+          print("target_before", json.dumps(dict(row) if row else None, ensure_ascii=False))
+          changed=0
+          if row and row['status']=='pending' and row['project_id']=='cloud::w1' and row['action']=='drain':
+              try:
+                  created=datetime.fromisoformat(str(row['created_at']).replace('Z','+00:00'))
+                  if created.tzinfo is None:
+                      created=created.replace(tzinfo=timezone.utc)
+                  age=(datetime.now(timezone.utc)-created.astimezone(timezone.utc)).total_seconds()
+              except Exception:
+                  age=999999
+              if age > 300:
+                  ts=datetime.now(timezone.utc).isoformat()
+                  cur=c.execute(
+                      "UPDATE runner_commands SET status='failed',updated_at=?,result=? "
+                      "WHERE id=19191 AND status='pending' AND project_id='cloud::w1' AND action='drain'",
+                      (ts,'stale drain cleared during dashboard availability recovery'),
+                  )
+                  changed=cur.rowcount
+          c.commit()
+          after=c.execute("SELECT id,project_id,action,status,created_at,updated_at,result FROM runner_commands WHERE id=19191").fetchone()
+          pending=[dict(r) for r in c.execute("SELECT id,project_id,action,status,created_at FROM runner_commands WHERE status='pending' ORDER BY id")]
+          print("changed", changed)
+          print("target_after", json.dumps(dict(after) if after else None, ensure_ascii=False))
+          print("pending", json.dumps(pending, ensure_ascii=False))
+          print("quick_check", c.execute("PRAGMA quick_check").fetchone()[0])
           c.close()
           PY
           for n in 1 2; do
-            rm -f "/tmp/status-$n.json"
-            code="$(curl -sS --connect-timeout 3 --max-time 30 -o "/tmp/status-$n.json" -w '%{http_code}' http://127.0.0.1:8765/api/status)"
-            echo "local_status_attempt=$n http=$code bytes=$(wc -c <"/tmp/status-$n.json")"
+            out="/tmp/zcloud-status-$n.json"
+            rm -f "$out"
+            code="$(curl -sS --connect-timeout 3 --max-time 35 -o "$out" -w '%{http_code}' http://127.0.0.1:8765/api/status)"
+            echo "local_status_attempt=$n http=$code bytes=$(wc -c <"$out")"
             test "$code" = "200"
-            python3 - "/tmp/status-$n.json" <<'PY'
+            python3 - "$out" <<'PY'
           import json,sys
           p=json.load(open(sys.argv[1]))
+          print({'errors':p.get('errors'),'time':p.get('time'),'dynamic_workers':(p.get('dynamic_workers') or {}).get('count')})
           assert p.get('errors') == [], p.get('errors')
-          print({'errors':p.get('errors'),'healthy':(p.get('health') or {}).get('healthy'),'time':p.get('time')})
           PY
             sleep 4
           done
