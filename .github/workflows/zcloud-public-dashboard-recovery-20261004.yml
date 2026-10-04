@@ -36,6 +36,26 @@ jobs:
           curl -fsS --max-time 8 http://127.0.0.1:8765/ >/dev/null
           echo "LOCAL_ZCLOUD_DASHBOARD_GREEN=1"
 
+      - name: Inspect public IP and host input path
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== addresses ==="
+          ip -4 -br addr
+          echo "=== route ==="
+          ip -4 route
+          echo "=== detected public IP ==="
+          public_ip="$(curl -4 -fsS --max-time 10 https://api.ipify.org || true)"
+          echo "PUBLIC_IPV4=$public_ip"
+          echo "=== iptables input ==="
+          sudo -n iptables -S INPUT || true
+          echo "=== nft input hooks ==="
+          sudo -n nft -a list ruleset 2>/dev/null | grep -E -C 5 'hook input|chain INPUT|dport 8765|tcp dport' || true
+          echo "=== self via configured public IP ==="
+          if [ -n "$public_ip" ]; then
+            curl -sv --connect-timeout 5 --max-time 10 "http://$public_ip:8765/" -o /dev/null 2>&1 | tail -30 || true
+          fi
+
       - name: Ensure public bind and host firewall rule
         shell: bash
         run: |
