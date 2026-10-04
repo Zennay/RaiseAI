@@ -55,6 +55,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Pin exact build revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"
+          printf '%s' "$revision" | grep -Eq '^[0-9a-f]{40}$'
+          echo "RAISE_BUILD_REVISION=$revision" >> "$GITHUB_ENV"
+          echo "Pinned evidence build revision: $revision"
+
       - name: Configure Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -99,7 +109,9 @@ jobs:
           ./gradlew --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx1280m -Dfile.encoding=UTF-8" \
             -Dorg.gradle.workers.max=1 \
-            testDebugUnitTest assembleDebug
+            :app:verifyEvidenceBuildIdentity testDebugUnitTest assembleDebug
+          grep -R --fixed-strings "$RAISE_BUILD_REVISION" app/build/generated >/dev/null
+          echo "Generated BuildConfig contains exact source revision: $RAISE_BUILD_REVISION"
 
       - name: Upload debug Watch APK
         uses: actions/upload-artifact@v4
