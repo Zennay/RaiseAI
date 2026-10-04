@@ -21,7 +21,9 @@ Usage:
 
 prepare:
   Builds/installs the exact clean Git revision, provisions the gateway profile,
-  clears only prior test evidence, and opens Raise AI.
+  clears only prior test evidence, and opens Raise AI. Set RAISE_PREBUILT_APK
+  to install an already-published APK instead of rebuilding it; prebuilt mode
+  requires RAISE_EXPECT_APK_SHA256 so the exact published artifact is bound.
 
 verify-e2e:
   Pulls fresh Watch diagnostics and requires a quick_ai answer from the exact
@@ -152,6 +154,8 @@ prepare_session() {
   fi
 
   local revision version gradle_version stamp session adb target model installed_version
+  local prebuilt_apk expected_apk_sha selected_apk install_mode apk_sha
+  local -a verify_args
   revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"
   printf '%s' "$revision" | grep -Eq '^[0-9a-f]{40}$' || {
     echo "Could not resolve a full Git revision."
@@ -174,7 +178,63 @@ prepare_session() {
   echo "  revision: $revision"
   echo "  evidence: $session"
 
-  RAISE_BUILD_REVISION="$revision" bash ./upgrade-watch.command
+  prebuilt_apk="${RAISE_PREBUILT_APK:-}"
+  expected_apk_sha="${RAISE_EXPECT_APK_SHA256:-}"
+  if [ -n "$prebuilt_apk" ]; then
+    [ -n "$expected_apk_sha" ] || {
+      echo "RAISE_EXPECT_APK_SHA256 is required when RAISE_PREBUILT_APK is set."
+      exit 1
+    }
+    case "$expected_apk_sha" in
+      *[!0-9A-Fa-f]*|'')
+        echo "RAISE_EXPECT_APK_SHA256 must be exactly 64 hexadecimal characters."
+        exit 1
+        ;;
+    esac
+    [ "${#expected_apk_sha}" -eq 64 ] || {
+      echo "RAISE_EXPECT_APK_SHA256 must be exactly 64 hexadecimal characters."
+      exit 1
+    }
+    [ -f "$prebuilt_apk" ] || {
+      echo "Prebuilt APK not found: $prebuilt_apk"
+      exit 1
+    }
+    verify_args=(
+      python3 tools/verify-watch-apk-identity.py
+      "$prebuilt_apk"
+      --expect-source-revision "$revision"
+      --expect-sha256 "$expected_apk_sha"
+    )
+    "${verify_args[@]}" | tee "$session/apk-verification.json"
+    bash ./install-watch-apk.command "$prebuilt_apk"
+    selected_apk="$prebuilt_apk"
+    install_mode="prebuilt_apk"
+  else
+    RAISE_BUILD_REVISION="$revision" bash ./upgrade-watch.command
+    selected_apk="app/build/outputs/apk/debug/app-debug.apk"
+    python3 tools/verify-watch-apk-identity.py       "$selected_apk"       --expect-source-revision "$revision" | tee "$session/apk-verification.json"
+    install_mode="source_build"
+  fi
+
+  apk_sha="$(python3 - "$selected_apk" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+print(hashlib.sha256(path.read_bytes()).hexdigest())
+PY
+)"
+  if [ "${#apk_sha}" -ne 64 ]; then
+    echo "Could not compute a 64-character APK SHA-256."
+    exit 1
+  fi
+  case "$apk_sha" in
+    *[!0-9a-f]*)
+      echo "Computed APK SHA-256 contains non-hex characters."
+      exit 1
+      ;;
+  esac
+
   bash ./provision-watch-gateway.command "$profile"
 
   adb="$(find_adb || true)"
@@ -189,13 +249,12 @@ prepare_session() {
     echo "Installed Watch version $installed_version does not match prepared version $version"
     exit 1
   }
-
   echo "Clearing prior validation evidence only..."
   "$adb" -s "$target" shell run-as "$PACKAGE" sh -c     "'rm -f files/watch-e2e-evidence.json files/sensor-traces.csv files/sensor-trials.csv'"
   "$adb" -s "$target" logcat -c || true
   "$adb" -s "$target" shell am start -n "$PACKAGE/.MainActivity" >/dev/null
 
-  STARTED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"   SESSION_PATH="$session"   APP_VERSION="$version"   SOURCE_REVISION="$revision"   WATCH_MODEL="$model"   python3 - <<'PY'
+  STARTED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"   SESSION_PATH="$session"   APP_VERSION="$version"   SOURCE_REVISION="$revision"   WATCH_MODEL="$model"   INSTALL_MODE="$install_mode"   APK_SHA256="$apk_sha"   python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -206,6 +265,8 @@ payload = {
     "app_version": os.environ["APP_VERSION"],
     "source_revision": os.environ["SOURCE_REVISION"],
     "watch_model": os.environ["WATCH_MODEL"],
+    "install_mode": os.environ["INSTALL_MODE"],
+    "apk_sha256": os.environ["APK_SHA256"],
     "e2e_passed": False,
     "v1_gate_passed": False,
 }
