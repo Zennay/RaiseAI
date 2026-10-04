@@ -1,4 +1,4 @@
-name: Roll back zCloud dashboard to last known good via RaiseAI runner
+name: Inspect zCloud 503 and restore runner via RaiseAI
 
 on:
   push:
@@ -13,33 +13,43 @@ permissions:
 jobs:
   recover:
     runs-on: [self-hosted, vps-bb300bba]
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
-      - name: Transactional zCloud last-known-good rollback
+      - name: Inspect live zCloud HTTP and state
         shell: bash
         run: |
-          set -euo pipefail
-          test "$(hostname)" = "vps-bb300bba"
+          set -u
           root=/home/ubuntu/zennay-cloud
-          echo "pre_server_sha256=$(sha256sum "$root/server.py" | awk '{print $1}')"
-          sudo -n rm -f "$root/.disable-self-heal"
-          cd "$root"
-          python3 scripts/zcloud_recovery.py rollback | tee /tmp/zcloud-rollback.json
-          echo "post_server_sha256=$(sha256sum "$root/server.py" | awk '{print $1}')"
-          sudo -n systemctl is-active zennay-cloud.service
-          curl -fsS --max-time 8 http://127.0.0.1:8765/api/status >/tmp/zcloud-status.json
-          echo ZCLOUD_LKG_LOCAL_GREEN
+          echo "=== ROOT ==="
+          curl -sS --max-time 5 -o /tmp/root.html -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/ || true
+          head -c 120 /tmp/root.html 2>/dev/null || true; echo
+          echo "=== STATUS ==="
+          curl -sS --max-time 10 -D /tmp/status.headers -o /tmp/status.json -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/api/status || true
+          cat /tmp/status.headers 2>/dev/null || true
+          python3 -m json.tool /tmp/status.json 2>/dev/null || cat /tmp/status.json 2>/dev/null || true
+          echo "=== RUNNER TARGETS ==="
+          curl -sS --max-time 10 -o /tmp/targets.json -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/api/runner-targets || true
+          python3 -m json.tool /tmp/targets.json 2>/dev/null | head -n 120 || cat /tmp/targets.json 2>/dev/null || true
+          echo "=== PENDING COMMANDS ==="
           python3 - <<'PY'
-          import json
-          s=json.load(open('/tmp/zcloud-status.json'))
-          print(json.dumps({'time':s.get('time'),'errors':s.get('errors'),'dynamic_workers':s.get('dynamic_workers')},indent=2))
+          import sqlite3, json, datetime
+          db='/home/ubuntu/zennay-cloud/history.db'
+          c=sqlite3.connect(f'file:{db}?mode=ro',uri=True,timeout=3)
+          c.row_factory=sqlite3.Row
+          rows=c.execute("SELECT id,project_id,action,status,created_at,updated_at FROM runner_commands WHERE status='pending' ORDER BY id").fetchall()
+          print(json.dumps([dict(r) for r in rows[-50:]],indent=2))
+          c.close()
           PY
-          sudo -n ss -ltnp | grep -E ':8765\b'
+          echo "=== FIREWALL ==="
+          sudo -n ufw status verbose 2>/dev/null || true
+          sudo -n nft list ruleset 2>/dev/null | grep -C 5 -E '8765|policy|reject|drop' || true
+          echo "=== PUBLIC SELFTEST ==="
+          curl -sS --max-time 6 -o /dev/null -w 'HTTP=%{http_code}\n' http://198.244.191.182:8765/ || true
 
-      - name: Recover zCloud Actions listener
+      - name: Recover zCloud Actions listener regardless of API health
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           recovered=0
           mapfile -t system_units < <(
             systemctl list-unit-files --type=service --no-legend 2>/dev/null |
@@ -49,28 +59,16 @@ jobs:
             systemctl --user list-unit-files --type=service --no-legend 2>/dev/null |
             awk '{print $1}' | grep -Ei '^actions\.runner\..*zcloud.*\.service$' || true
           )
+          echo "system_units=${system_units[*]:-none}"
+          echo "user_units=${user_units[*]:-none}"
           for unit in "${system_units[@]}"; do
             sudo -n systemctl reset-failed "$unit" || true
             sudo -n systemctl restart "$unit" && recovered=1 || true
-            sudo -n systemctl is-active "$unit" || true
+            sudo -n systemctl --no-pager --full status "$unit" | head -n 35 || true
           done
           for unit in "${user_units[@]}"; do
             systemctl --user reset-failed "$unit" || true
             systemctl --user restart "$unit" && recovered=1 || true
-            systemctl --user is-active "$unit" || true
+            systemctl --user --no-pager --full status "$unit" | head -n 35 || true
           done
-          test "$recovered" -eq 1
-          echo ZCLOUD_ACTIONS_LISTENER_RECOVERED
-
-      - name: Verify existing public dashboard exposure
-        shell: bash
-        run: |
-          set -euo pipefail
-          if curl -fsS --max-time 8 http://198.244.191.182:8765/ >/dev/null; then
-            echo ZCLOUD_DASHBOARD_PUBLIC_GREEN
-          else
-            echo ZCLOUD_PUBLIC_SELFTEST_FAILED
-            sudo -n ufw status 2>/dev/null || true
-            sudo -n nft list ruleset 2>/dev/null | grep -C 4 -E '8765|reject|drop' || true
-            exit 3
-          fi
+          if [[ "$recovered" -eq 1 ]]; then echo ZCLOUD_ACTIONS_LISTENER_RECOVERED; else echo ZCLOUD_RUNNER_NOT_FOUND_OR_NOT_RESTARTED; fi
