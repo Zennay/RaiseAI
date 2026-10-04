@@ -61,12 +61,42 @@ jobs:
           )
           echo "system_units=${system_units[*]:-none}"
           echo "user_units=${user_units[*]:-none}"
+
+          has_active_worker() {
+            local scope="$1"
+            local unit="$2"
+            local cgroup=""
+            local pid=""
+            local cmd=""
+            if [[ "$scope" == "system" ]]; then
+              cgroup="$(systemctl show "$unit" -p ControlGroup --value 2>/dev/null || true)"
+            else
+              cgroup="$(systemctl --user show "$unit" -p ControlGroup --value 2>/dev/null || true)"
+            fi
+            [[ -n "$cgroup" && -r "/sys/fs/cgroup${cgroup}/cgroup.procs" ]] || return 1
+            while read -r pid; do
+              [[ -r "/proc/$pid/cmdline" ]] || continue
+              cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+              if [[ "$cmd" == *"Runner.Worker"* ]]; then
+                echo "ZCLOUD_RUNNER_RECOVERY_PRESERVE_ACTIVE_WORKER unit=$unit pid=$pid"
+                return 0
+              fi
+            done < "/sys/fs/cgroup${cgroup}/cgroup.procs"
+            return 1
+          }
+
           for unit in "${system_units[@]}"; do
+            if has_active_worker system "$unit"; then
+              continue
+            fi
             sudo -n systemctl reset-failed "$unit" || true
             sudo -n systemctl restart "$unit" && recovered=1 || true
             sudo -n systemctl --no-pager --full status "$unit" | head -n 35 || true
           done
           for unit in "${user_units[@]}"; do
+            if has_active_worker user "$unit"; then
+              continue
+            fi
             systemctl --user reset-failed "$unit" || true
             systemctl --user restart "$unit" && recovered=1 || true
             systemctl --user --no-pager --full status "$unit" | head -n 35 || true
