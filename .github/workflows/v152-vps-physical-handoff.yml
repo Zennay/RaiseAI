@@ -1,0 +1,191 @@
+name: RaiseAI v1.5.2 VPS physical handoff proof
+
+on:
+  push:
+    branches:
+      - ops/v152-vps-physical-handoff-20261004
+    paths:
+      - ".github/v152-vps-handoff.sha"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: raiseai-v152-vps-physical-handoff
+  cancel-in-progress: true
+
+jobs:
+  prove-and-package:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 35
+    steps:
+      - name: Verify execution host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+
+      - name: Checkout ops carrier
+        uses: actions/checkout@v4
+        with:
+          path: orchestrator
+
+      - name: Load pinned RaiseAI main revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision="$(tr -d '\r\n' < orchestrator/.github/v152-vps-handoff.sha | tr 'A-F' 'a-f')"
+          printf '%s' "$revision" | grep -Eq '^[0-9a-f]{40}$'
+          echo "RAISE_SHA=$revision" >> "$GITHUB_ENV"
+          echo "RAISE_BUILD_REVISION=$revision" >> "$GITHUB_ENV"
+
+      - name: Prove pinned revision still equals live main
+        shell: bash
+        run: |
+          set -euo pipefail
+          live_main="$(git ls-remote https://github.com/Zennay/RaiseAI.git refs/heads/main | awk '{print $1}' | tr 'A-F' 'a-f')"
+          test "$live_main" = "$RAISE_SHA"
+          echo "Live RaiseAI main: $live_main"
+
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+
+      - name: Install Android 35 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Checkout exact RaiseAI main revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RAISE_SHA }}
+          path: raiseai
+          fetch-depth: 1
+
+      - name: Prove source and build exact v1.5.2 APK
+        working-directory: raiseai
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD | tr 'A-F' 'a-f')" = "$RAISE_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          test "$(tr -d '\r\n' < VERSION.txt)" = "1.5.2"
+          grep -Eq 'versionCode[[:space:]]*=[[:space:]]*19' app/build.gradle.kts
+
+          bash -n upgrade-watch.command
+          bash -n physical-validation.command
+          python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
+          python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
+          python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
+
+          ./gradlew --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx1280m -Dfile.encoding=UTF-8" \
+            -Dorg.gradle.workers.max=1 \
+            :app:verifyEvidenceBuildIdentity testDebugUnitTest assembleDebug
+
+          grep -R --fixed-strings "$RAISE_SHA" app/build/generated >/dev/null
+          test -s app/build/outputs/apk/debug/app-debug.apk
+
+          python3 - <<'PY'
+          import json
+          import os
+          import zipfile
+          from pathlib import Path
+
+          metadata = json.loads(Path("app/build/outputs/apk/debug/output-metadata.json").read_text())
+          elem = metadata["elements"][0]
+          if elem.get("versionCode") != 19 or elem.get("versionName") != "1.5.2":
+              raise SystemExit(
+                  f"unexpected APK metadata: {elem.get('versionCode')} / {elem.get('versionName')}"
+              )
+
+          needle = os.environ["RAISE_SHA"].encode("ascii")
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          with zipfile.ZipFile(apk) as archive:
+              dex_files = [name for name in archive.namelist() if name.endswith(".dex")]
+              hits = [name for name in dex_files if needle in archive.read(name)]
+          if not hits:
+              raise SystemExit("exact source revision is not embedded in APK DEX")
+          print("Exact source revision embedded in:", ", ".join(hits))
+          PY
+
+      - name: Package exact physical-session handoff
+        working-directory: raiseai
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="../RaiseAI-v1.5.2-vps-handoff"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          cp app/build/outputs/apk/debug/app-debug.apk "$OUT/RaiseAI-v1.5.2-debug.apk"
+          cp physical-validation.command "$OUT/"
+          cp upgrade-watch.command "$OUT/"
+          for f in START-HERE.md DEVICE-TEST.md watch-preflight.command pull-diagnostics.command; do
+            if [ -f "$f" ]; then cp "$f" "$OUT/"; fi
+          done
+
+          git branch -f physical-main "$RAISE_SHA"
+          git bundle create "$OUT/RaiseAI-v1.5.2-source.bundle" physical-main
+          git bundle verify "$OUT/RaiseAI-v1.5.2-source.bundle"
+          bundle_head="$(git bundle list-heads "$OUT/RaiseAI-v1.5.2-source.bundle" refs/heads/physical-main | awk '{print $1}' | tr 'A-F' 'a-f')"
+          test "$bundle_head" = "$RAISE_SHA"
+
+          RESTORE="../RaiseAI-v1.5.2-vps-restore-check"
+          rm -rf "$RESTORE"
+          git clone -q -b physical-main "$OUT/RaiseAI-v1.5.2-source.bundle" "$RESTORE"
+          test "$(git -C "$RESTORE" rev-parse HEAD | tr 'A-F' 'a-f')" = "$RAISE_SHA"
+          test -z "$(git -C "$RESTORE" status --porcelain --untracked-files=normal)"
+          rm -rf "$RESTORE"
+
+          apk_sha="$(sha256sum app/build/outputs/apk/debug/app-debug.apk | awk '{print $1}')"
+          bundle_sha="$(sha256sum "$OUT/RaiseAI-v1.5.2-source.bundle" | awk '{print $1}')"
+          {
+            echo "proof=GREEN"
+            echo "version=1.5.2"
+            echo "version_code=19"
+            echo "source_revision=$RAISE_SHA"
+            echo "source_branch=main"
+            echo "apk_sha256=$apk_sha"
+            echo "source_bundle_sha256=$bundle_sha"
+            echo "built_on=$(hostname)"
+            echo "github_run_id=$GITHUB_RUN_ID"
+          } > "$OUT/BUILD-IDENTITY.txt"
+
+      - name: Reconfirm live main before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          live_main="$(git ls-remote https://github.com/Zennay/RaiseAI.git refs/heads/main | awk '{print $1}' | tr 'A-F' 'a-f')"
+          test "$live_main" = "$RAISE_SHA"
+
+      - name: Upload exact physical-session handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: RaiseAI-v1.5.2-vps-handoff-${{ github.run_id }}
+          path: RaiseAI-v1.5.2-vps-handoff
+          retention-days: 14
+
+      - name: Record GREEN proof marker
+        working-directory: orchestrator
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin ops/v152-vps-physical-handoff-20261004
+          mkdir -p .github/proofs
+          marker=".github/proofs/raiseai-v1.5.2-vps-handoff-green.env"
+          {
+            echo "proof=GREEN"
+            echo "github_run_id=$GITHUB_RUN_ID"
+            echo "artifact_name=RaiseAI-v1.5.2-vps-handoff-$GITHUB_RUN_ID"
+            cat ../RaiseAI-v1.5.2-vps-handoff/BUILD-IDENTITY.txt
+          } > "$marker"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$marker"
+          git commit -m "Record GREEN RaiseAI v1.5.2 VPS physical handoff $RAISE_SHA"
+          git push origin HEAD:ops/v152-vps-physical-handoff-20261004
