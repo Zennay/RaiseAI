@@ -1,4 +1,5 @@
 name: Recover duplicate zCloud Actions listener safely
+# Triggered after zCloud deterministic reset follow-up; keep this workflow checkout-free.
 
 on:
   push:
