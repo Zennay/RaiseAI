@@ -1,4 +1,4 @@
-name: Diagnose and recover zCloud dashboard via RaiseAI runner
+name: Roll back zCloud dashboard to last known good via RaiseAI runner
 
 on:
   push:
@@ -15,76 +15,28 @@ jobs:
     runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 8
     steps:
-      - name: Capture zCloud runtime diagnosis
+      - name: Transactional zCloud last-known-good rollback
         shell: bash
         run: |
-          set -u
+          set -euo pipefail
           test "$(hostname)" = "vps-bb300bba"
-          echo "=== SERVICE STATUS ==="
-          sudo -n systemctl --no-pager --full status zennay-cloud.service || true
-          echo "=== UNIT ==="
-          sudo -n systemctl cat zennay-cloud.service || true
-          echo "=== PROPERTIES ==="
-          sudo -n systemctl show zennay-cloud.service -p ActiveState -p SubState -p MainPID -p ExecMainPID -p NRestarts -p Environment -p TimeoutStartUSec -p TimeoutStopUSec || true
-          echo "=== SOURCE ==="
-          git -C /home/ubuntu/zennay-cloud rev-parse HEAD 2>/dev/null || true
-          git -C /home/ubuntu/zennay-cloud status --short 2>/dev/null || true
-          sha256sum /home/ubuntu/zennay-cloud/server.py 2>/dev/null || true
-          python3 -m py_compile /home/ubuntu/zennay-cloud/server.py || true
-          echo "=== LISTENERS ==="
-          sudo -n ss -ltnp | grep -E ':8765\b' || true
-          echo "=== PROCESS ==="
-          pid="$(sudo -n systemctl show -p MainPID --value zennay-cloud.service 2>/dev/null || true)"
-          echo "PID=$pid"
-          if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
-            ps -fp "$pid" || true
-            ps -L -p "$pid" -o pid,tid,stat,pcpu,pmem,wchan:32,comm || true
-            sudo -n cat "/proc/$pid/stack" 2>/dev/null || true
-            sudo -n ls -l "/proc/$pid/fd" 2>/dev/null | tail -n 40 || true
-          fi
-          echo "=== LOCAL HTTP PROBES ==="
-          timeout 4 curl -v --max-time 3 http://127.0.0.1:8765/ 2>&1 || true
-          timeout 4 curl -v --max-time 3 http://127.0.0.1:8765/api/status 2>&1 || true
-          echo "=== JOURNAL ==="
-          sudo -n journalctl -u zennay-cloud.service -n 220 --no-pager || true
-          echo "=== SQLITE QUICK CHECK ==="
-          timeout 8 python3 - <<'PY' || true
-          import sqlite3, time
-          p="/home/ubuntu/zennay-cloud/history.db"
-          t=time.time()
-          c=sqlite3.connect(f"file:{p}?mode=ro",uri=True,timeout=2)
-          print("journal_mode", c.execute("pragma journal_mode").fetchone())
-          print("quick_check", c.execute("pragma quick_check").fetchone())
-          print("runner_commands", c.execute("select count(*) from runner_commands").fetchone())
-          print("elapsed", time.time()-t)
-          c.close()
-          PY
-
-      - name: Clear stale command and restart once
-        shell: bash
-        run: |
-          set -u
           root=/home/ubuntu/zennay-cloud
+          echo "pre_server_sha256=$(sha256sum "$root/server.py" | awk '{print $1}')"
           sudo -n rm -f "$root/.disable-self-heal"
-          if [[ -f "$root/scripts/zcloud_worker_watchdog.py" ]]; then
-            timeout 12 python3 "$root/scripts/zcloud_worker_watchdog.py" --db "$root/history.db" --clear-stale-pending-only --json || true
-          fi
-          sudo -n systemctl reset-failed zennay-cloud.service || true
-          timeout 110 sudo -n systemctl restart zennay-cloud.service || true
-          sleep 3
-          echo "=== POST RESTART ==="
-          sudo -n systemctl --no-pager --full status zennay-cloud.service || true
-          sudo -n ss -ltnp | grep -E ':8765\b' || true
-          if curl -fsS --max-time 5 http://127.0.0.1:8765/api/status >/tmp/zcloud-status.json; then
-            echo ZCLOUD_LOCAL_GREEN
-            python3 -m json.tool /tmp/zcloud-status.json | head -n 60
-          else
-            echo ZCLOUD_LOCAL_STILL_UNHEALTHY
-            exit 2
-          fi
+          cd "$root"
+          python3 scripts/zcloud_recovery.py rollback | tee /tmp/zcloud-rollback.json
+          echo "post_server_sha256=$(sha256sum "$root/server.py" | awk '{print $1}')"
+          sudo -n systemctl is-active zennay-cloud.service
+          curl -fsS --max-time 8 http://127.0.0.1:8765/api/status >/tmp/zcloud-status.json
+          echo ZCLOUD_LKG_LOCAL_GREEN
+          python3 - <<'PY'
+          import json
+          s=json.load(open('/tmp/zcloud-status.json'))
+          print(json.dumps({'time':s.get('time'),'errors':s.get('errors'),'dynamic_workers':s.get('dynamic_workers')},indent=2))
+          PY
+          sudo -n ss -ltnp | grep -E ':8765\b'
 
       - name: Recover zCloud Actions listener
-        if: success()
         shell: bash
         run: |
           set -euo pipefail
@@ -97,23 +49,28 @@ jobs:
             systemctl --user list-unit-files --type=service --no-legend 2>/dev/null |
             awk '{print $1}' | grep -Ei '^actions\.runner\..*zcloud.*\.service$' || true
           )
-          for unit in "${system_units[@]}"; do sudo -n systemctl reset-failed "$unit" || true; sudo -n systemctl restart "$unit" && recovered=1 || true; done
-          for unit in "${user_units[@]}"; do systemctl --user reset-failed "$unit" || true; systemctl --user restart "$unit" && recovered=1 || true; done
+          for unit in "${system_units[@]}"; do
+            sudo -n systemctl reset-failed "$unit" || true
+            sudo -n systemctl restart "$unit" && recovered=1 || true
+            sudo -n systemctl is-active "$unit" || true
+          done
+          for unit in "${user_units[@]}"; do
+            systemctl --user reset-failed "$unit" || true
+            systemctl --user restart "$unit" && recovered=1 || true
+            systemctl --user is-active "$unit" || true
+          done
           test "$recovered" -eq 1
-          sleep 4
-          echo ZCLOUD_RUNNER_RECOVERY_DONE
+          echo ZCLOUD_ACTIONS_LISTENER_RECOVERED
 
       - name: Verify existing public dashboard exposure
-        if: success()
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n ss -ltnp | grep -E ':8765\b'
-          if curl -fsS --max-time 6 http://198.244.191.182:8765/ >/dev/null; then
+          if curl -fsS --max-time 8 http://198.244.191.182:8765/ >/dev/null; then
             echo ZCLOUD_DASHBOARD_PUBLIC_GREEN
           else
             echo ZCLOUD_PUBLIC_SELFTEST_FAILED
             sudo -n ufw status 2>/dev/null || true
-            sudo -n nft list ruleset 2>/dev/null | grep -C 3 -E '8765|reject|drop' || true
+            sudo -n nft list ruleset 2>/dev/null | grep -C 4 -E '8765|reject|drop' || true
             exit 3
           fi
