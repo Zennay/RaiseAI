@@ -1,4 +1,4 @@
-name: Inspect zCloud 503 and restore runner via RaiseAI
+name: Diagnose external zCloud status failure via RaiseAI
 
 on:
   push:
@@ -11,94 +11,27 @@ permissions:
   contents: read
 
 jobs:
-  recover:
+  diagnose:
     runs-on: [self-hosted, vps-bb300bba]
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Inspect live zCloud HTTP and state
+      - name: Capture status handler and recent errors
         shell: bash
         run: |
-          set -u
+          set -euo pipefail
           root=/home/ubuntu/zennay-cloud
-          echo "=== ROOT ==="
-          curl -sS --max-time 5 -o /tmp/root.html -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/ || true
-          head -c 120 /tmp/root.html 2>/dev/null || true; echo
-          echo "=== STATUS ==="
-          curl -sS --max-time 10 -D /tmp/status.headers -o /tmp/status.json -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/api/status || true
-          cat /tmp/status.headers 2>/dev/null || true
-          python3 -m json.tool /tmp/status.json 2>/dev/null || cat /tmp/status.json 2>/dev/null || true
-          echo "=== RUNNER TARGETS ==="
-          curl -sS --max-time 10 -o /tmp/targets.json -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/api/runner-targets || true
-          python3 -m json.tool /tmp/targets.json 2>/dev/null | head -n 120 || cat /tmp/targets.json 2>/dev/null || true
-          echo "=== PENDING COMMANDS ==="
-          python3 - <<'PY'
-          import sqlite3, json, datetime
-          db='/home/ubuntu/zennay-cloud/history.db'
-          c=sqlite3.connect(f'file:{db}?mode=ro',uri=True,timeout=3)
-          c.row_factory=sqlite3.Row
-          rows=c.execute("SELECT id,project_id,action,status,created_at,updated_at FROM runner_commands WHERE status='pending' ORDER BY id").fetchall()
-          print(json.dumps([dict(r) for r in rows[-50:]],indent=2))
-          c.close()
-          PY
-          echo "=== FIREWALL ==="
-          sudo -n ufw status verbose 2>/dev/null || true
-          sudo -n nft list ruleset 2>/dev/null | grep -C 5 -E '8765|policy|reject|drop' || true
-          echo "=== PUBLIC SELFTEST ==="
-          curl -sS --max-time 6 -o /dev/null -w 'HTTP=%{http_code}\n' http://198.244.191.182:8765/ || true
-
-      - name: Recover zCloud Actions listener regardless of API health
-        shell: bash
-        run: |
-          set -u
-          recovered=0
-          mapfile -t system_units < <(
-            systemctl list-unit-files --type=service --no-legend 2>/dev/null |
-            awk '{print $1}' | grep -Ei '^actions\.runner\..*zcloud.*\.service$' || true
-          )
-          mapfile -t user_units < <(
-            systemctl --user list-unit-files --type=service --no-legend 2>/dev/null |
-            awk '{print $1}' | grep -Ei '^actions\.runner\..*zcloud.*\.service$' || true
-          )
-          echo "system_units=${system_units[*]:-none}"
-          echo "user_units=${user_units[*]:-none}"
-
-          has_active_worker() {
-            local scope="$1"
-            local unit="$2"
-            local cgroup=""
-            local pid=""
-            local cmd=""
-            if [[ "$scope" == "system" ]]; then
-              cgroup="$(systemctl show "$unit" -p ControlGroup --value 2>/dev/null || true)"
-            else
-              cgroup="$(systemctl --user show "$unit" -p ControlGroup --value 2>/dev/null || true)"
-            fi
-            [[ -n "$cgroup" && -r "/sys/fs/cgroup${cgroup}/cgroup.procs" ]] || return 1
-            while read -r pid; do
-              [[ -r "/proc/$pid/cmdline" ]] || continue
-              cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
-              if [[ "$cmd" == *"Runner.Worker"* ]]; then
-                echo "ZCLOUD_RUNNER_RECOVERY_PRESERVE_ACTIVE_WORKER unit=$unit pid=$pid"
-                return 0
-              fi
-            done < "/sys/fs/cgroup${cgroup}/cgroup.procs"
-            return 1
-          }
-
-          for unit in "${system_units[@]}"; do
-            if has_active_worker system "$unit"; then
-              continue
-            fi
-            sudo -n systemctl reset-failed "$unit" || true
-            sudo -n systemctl restart "$unit" && recovered=1 || true
-            sudo -n systemctl --no-pager --full status "$unit" | head -n 35 || true
-          done
-          for unit in "${user_units[@]}"; do
-            if has_active_worker user "$unit"; then
-              continue
-            fi
-            systemctl --user reset-failed "$unit" || true
-            systemctl --user restart "$unit" && recovered=1 || true
-            systemctl --user --no-pager --full status "$unit" | head -n 35 || true
-          done
-          if [[ "$recovered" -eq 1 ]]; then echo ZCLOUD_ACTIONS_LISTENER_RECOVERED; else echo ZCLOUD_RUNNER_NOT_FOUND_OR_NOT_RESTARTED; fi
+          echo "=== CURRENT SERVICE ==="
+          sudo -n systemctl is-active zennay-cloud.service
+          sudo -n ss -ltnp | grep ':8765'
+          echo "=== RECENT JOURNAL ==="
+          sudo -n journalctl -u zennay-cloud.service --since '2026-10-04 22:33:00 UTC' --no-pager | tail -n 320 || true
+          echo "=== API STATUS ROUTE REFERENCES ==="
+          grep -n -E "api/status|def status|def do_GET|status_payload|build_status|health" "$root/server.py" | tail -n 200 || true
+          echo "=== DO_GET REGION ==="
+          start="$(grep -n 'def do_GET' "$root/server.py" | tail -1 | cut -d: -f1)"
+          if [[ "$start" =~ ^[0-9]+$ ]]; then
+            sed -n "${start},$((start+220))p" "$root/server.py"
+          fi
+          echo "=== LOCAL STATUS TIMING ==="
+          /usr/bin/time -f 'elapsed=%e cpu=%P maxrss=%M' curl -sS --max-time 25 -o /tmp/status.json -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/api/status || true
+          python3 -m json.tool /tmp/status.json 2>/dev/null | head -n 35 || true
