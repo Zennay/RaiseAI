@@ -124,7 +124,7 @@ echo "APK ABI(s):"
 printf '%s\n' "$APK_ABIS"
 
 if [ "$APK_ABIS" != "$EXPECTED_ABI" ]; then
-  echo "ERROR: Refusing install. Race AI Watch APK must contain exactly: $EXPECTED_ABI"
+  echo "ERROR: Refusing install. Raise AI Watch APK must contain exactly: $EXPECTED_ABI"
   exit 1
 fi
 if [ "$WATCH_ABI" != "$EXPECTED_ABI" ]; then
@@ -144,7 +144,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
   if [ ! -f "$STABLE_KEY" ] && [ -f "$SOURCE_DEBUG_KEY" ]; then
     cp -p "$SOURCE_DEBUG_KEY" "$STABLE_KEY"
     chmod 600 "$STABLE_KEY"
-    echo "Pinned this Mac's existing Android debug key for future Race AI updates."
+    echo "Pinned this Mac's existing Android debug key for future Raise AI updates."
   fi
 
   if [ -n "${APKSIGNER:-}" ] && [ -x "$APKSIGNER" ] && [ -f "$STABLE_KEY" ]; then
@@ -152,7 +152,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
     "$APKSIGNER" sign       --ks "$STABLE_KEY"       --ks-key-alias androiddebugkey       --ks-pass pass:android       --key-pass pass:android       --out "$SIGNED_APK"       "$APK"
     "$APKSIGNER" verify "$SIGNED_APK"
     INSTALL_APK="$SIGNED_APK"
-    echo "APK signed with the pinned Mac Race AI key."
+    echo "APK signed with the pinned Mac Raise AI key."
   fi
 fi
 
@@ -160,12 +160,12 @@ install_once() {
   "$ADB" -s "$TARGET" install --no-streaming -r "$INSTALL_APK"
 }
 
-echo "Installing verified Race AI APK..."
+echo "Installing verified Raise AI APK..."
 if ! INSTALL_OUTPUT="$(install_once 2>&1)"; then
   printf '%s\n' "$INSTALL_OUTPUT"
   if printf '%s' "$INSTALL_OUTPUT" | grep -q 'INSTALL_FAILED_UPDATE_INCOMPATIBLE'; then
     echo
-    echo "Existing Race AI uses a different signing key."
+    echo "Existing Raise AI uses a different signing key."
     echo "I will NOT uninstall it automatically because that could erase your ChatGPT session/app data."
     echo "If this Mac built the installed version, make sure ~/.android/debug.keystore still exists."
     exit 1
@@ -186,7 +186,7 @@ echo "Applying sideload grants..."
 "$ADB" -s "$TARGET" shell appops set "$PACKAGE" SYSTEM_ALERT_WINDOW allow || true
 "$ADB" -s "$TARGET" shell appops set "$PACKAGE" GET_USAGE_STATS allow || true
 
-echo "Opening Race AI..."
+echo "Opening Raise AI..."
 "$ADB" -s "$TARGET" shell am start -n "$PACKAGE/.MainActivity" >/dev/null
 
 echo
@@ -200,4 +200,4 @@ if [ "$(uname -s)" = "Darwin" ] &&
   bash "$SCRIPT_DIR/install-mac-adb-autoconnect.command" --quiet || true
 fi
 
-echo "Race AI installation complete."
+echo "Raise AI installation complete."

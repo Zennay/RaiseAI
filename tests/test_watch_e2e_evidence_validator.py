@@ -12,8 +12,10 @@ SPEC.loader.exec_module(validator)
 
 def success_payload(**overrides):
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "recorded_at_utc": "2026-10-03T23:40:00Z",
+        "app_version": "1.5.1",
+        "source_revision": "0123456789abcdef0123456789abcdef01234567",
         "outcome": "success",
         "input_length_chars": 18,
         "latency_ms": 742,
@@ -36,6 +38,8 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
             max_latency_ms=2_000,
             max_age_seconds=300,
             require_answer=True,
+            expect_app_version="1.5.1",
+            expect_source_revision="0123456789abcdef0123456789abcdef01234567",
             now_utc=dt.datetime(2026, 10, 3, 23, 42, tzinfo=dt.timezone.utc),
         )
         self.assertTrue(result["valid"])
@@ -81,10 +85,32 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
                 now_utc=dt.datetime(2026, 10, 3, 23, 40, tzinfo=dt.timezone.utc),
             )
 
+    def test_rejects_wrong_app_version(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "app_version"):
+            validator.validate_evidence(
+                success_payload(),
+                expect_app_version="1.5.0",
+            )
+
+    def test_rejects_wrong_source_revision(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "source_revision"):
+            validator.validate_evidence(
+                success_payload(),
+                expect_source_revision="fedcba9876543210fedcba9876543210fedcba98",
+            )
+
+    def test_rejects_non_git_source_revision(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "40-character Git SHA"):
+            validator.validate_evidence(
+                success_payload(source_revision="unknown"),
+            )
+
     def test_failure_evidence_is_not_a_passing_gate(self):
         failure = {
-            "schema_version": 1,
+            "schema_version": 2,
             "recorded_at_utc": "2026-10-03T23:40:00Z",
+            "app_version": "1.5.1",
+            "source_revision": "0123456789abcdef0123456789abcdef01234567",
             "outcome": "failure",
             "input_length_chars": 18,
             "latency_ms": 1200,

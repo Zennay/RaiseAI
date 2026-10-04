@@ -1,5 +1,38 @@
 import java.util.zip.ZipFile
 
+fun resolveSourceRevision(projectDir: java.io.File): String {
+    return try {
+        val statusProcess = ProcessBuilder("git", "status", "--porcelain", "--untracked-files=normal")
+            .directory(projectDir)
+            .redirectErrorStream(true)
+            .start()
+        val status = statusProcess.inputStream.bufferedReader().use { it.readText() }
+        if (statusProcess.waitFor() != 0 || status.isNotBlank()) {
+            return "unknown"
+        }
+
+        val override = System.getenv("RAISE_BUILD_REVISION")
+            ?.trim()
+            ?.takeIf { it.matches(Regex("^[0-9a-fA-F]{40}$")) }
+        if (override != null) return override.lowercase()
+
+        val process = ProcessBuilder("git", "rev-parse", "HEAD")
+            .directory(projectDir)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        if (process.waitFor() == 0 && output.matches(Regex("^[0-9a-fA-F]{40}$"))) {
+            output.lowercase()
+        } else {
+            "unknown"
+        }
+    } catch (_: Exception) {
+        "unknown"
+    }
+}
+
+val sourceRevision = resolveSourceRevision(rootDir)
+
 plugins {
     id("com.android.application")
 }
@@ -12,8 +45,9 @@ android {
         applicationId = "nl.zennay.raiseai"
         minSdk = 30
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.5.0"
+        versionCode = 18
+        versionName = "1.5.1"
+        buildConfigField("String", "SOURCE_REVISION", "\"$sourceRevision\"")
 
         // Target Galaxy Watch reports ro.product.cpu.abi=armeabi-v7a.
         // Keep the browser APK watch-specific instead of producing stale desktop/x86 variants.

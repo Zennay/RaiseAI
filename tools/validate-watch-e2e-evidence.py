@@ -20,6 +20,8 @@ KNOWN_ROUTES = {"quick_ai", "deep_ai", "current_info", "smart_home", "zcloud_tas
 COMMON_KEYS = {
     "schema_version",
     "recorded_at_utc",
+    "app_version",
+    "source_revision",
     "outcome",
     "input_length_chars",
     "latency_ms",
@@ -63,10 +65,12 @@ def validate_evidence(
     max_latency_ms: int | None = None,
     max_age_seconds: int | None = None,
     require_answer: bool = False,
+    expect_app_version: str | None = None,
+    expect_source_revision: str | None = None,
     now_utc: dt.datetime | None = None,
 ) -> dict[str, Any]:
     _require(isinstance(payload, dict), "evidence root must be a JSON object")
-    _require(payload.get("schema_version") == 1, "schema_version must equal 1")
+    _require(payload.get("schema_version") == 2, "schema_version must equal 2")
 
     outcome = payload.get("outcome")
     _require(outcome in {"success", "failure"}, "outcome must be success or failure")
@@ -79,6 +83,37 @@ def validate_evidence(
     _require(not missing, f"missing evidence fields: {', '.join(missing)}")
 
     recorded_at = _parse_timestamp(payload["recorded_at_utc"])
+
+    app_version = payload["app_version"]
+    source_revision = payload["source_revision"]
+    _require(
+        isinstance(app_version, str) and 0 < len(app_version) <= 40,
+        "app_version must be a non-empty string up to 40 characters",
+    )
+    _require(
+        isinstance(source_revision, str)
+        and len(source_revision) == 40
+        and all(char in "0123456789abcdefABCDEF" for char in source_revision),
+        "source_revision must be a 40-character Git SHA",
+    )
+    source_revision = source_revision.lower()
+
+    if expect_app_version is not None:
+        _require(
+            app_version == expect_app_version,
+            f"app_version {app_version!r} does not match expected {expect_app_version!r}",
+        )
+    if expect_source_revision is not None:
+        expected_revision = expect_source_revision.strip().lower()
+        _require(
+            len(expected_revision) == 40
+            and all(char in "0123456789abcdef" for char in expected_revision),
+            "expected source revision must be a 40-character Git SHA",
+        )
+        _require(
+            source_revision == expected_revision,
+            f"source_revision {source_revision!r} does not match expected {expected_revision!r}",
+        )
 
     if max_age_seconds is not None:
         _require(max_age_seconds >= 0, "max_age_seconds must be non-negative")
@@ -133,6 +168,8 @@ def validate_evidence(
         "answer_present": payload["answer_present"],
         "execution_enabled": payload["execution_enabled"],
         "recorded_at_utc": payload["recorded_at_utc"],
+        "app_version": app_version,
+        "source_revision": source_revision,
     }
 
 
@@ -148,6 +185,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="reject evidence older than this many seconds (allows up to 60s future clock skew)",
     )
     parser.add_argument("--require-answer", action="store_true")
+    parser.add_argument("--expect-app-version")
+    parser.add_argument("--expect-source-revision")
     return parser.parse_args(argv)
 
 
@@ -162,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
             max_latency_ms=args.max_latency_ms,
             max_age_seconds=args.max_age_seconds,
             require_answer=args.require_answer,
+            expect_app_version=args.expect_app_version,
+            expect_source_revision=args.expect_source_revision,
         )
     except (OSError, json.JSONDecodeError, EvidenceError) as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))

@@ -1,10 +1,35 @@
-# Raise AI v1.5 — START HERE
+# Raise AI v1.5.1 — START HERE
 
 Raise AI is native-first:
 
 **raise-to-mouth → native Watch voice UI → secure VPS router → selected connector/provider → Watch**
 
 ChatGPT Web and Gemini are retained as fallbacks; they are no longer the primary raise-to-mouth path.
+
+## Preferred physical validation flow
+
+For the current M0/V0 gate, use the session orchestrator on the Mac paired with the Galaxy Watch 7:
+
+```bash
+./physical-validation.command all /path/to/watch-gateway.properties
+```
+
+The flow is fail-closed and keeps one evidence directory under `~/.raiseai/evidence/`:
+
+1. **prepare** requires a clean Git checkout, binds the APK to the exact 40-character source revision, builds/installs v1.5.1, provisions the gateway profile, clears only old validation evidence, and opens Raise AI;
+2. **verify-e2e** accepts only a fresh `quick_ai` response from the exact prepared app version and Git revision;
+3. **verify-v1** is allowed only after E2E passes and requires the full 30 intentional raises / 100 non-trigger dataset with ≥90% detection and ≤5% false triggers.
+
+The manual commands remain available when debugging an individual stage:
+
+```bash
+./physical-validation.command prepare /path/to/watch-gateway.properties
+./physical-validation.command verify-e2e
+./physical-validation.command verify-v1
+./physical-validation.command status
+```
+
+A dirty source tree cannot produce passing physical evidence. Old v1 schema evidence also fails closed; v1.5.1 writes schema v2 with `app_version` and `source_revision`.
 
 ## 1. Install or upgrade the Watch app
 
@@ -102,14 +127,16 @@ python3 tools/validate-watch-e2e-evidence.py \
   --expect-route quick_ai \
   --max-latency-ms 15000 \
   --max-age-seconds 300 \
-  --require-answer
+  --require-answer \
+  --expect-app-version 1.5.1 \
+  --expect-source-revision <40-character-git-sha>
 ```
 
 `pull-diagnostics.command` also runs the basic schema/latency/freshness gate automatically when Python 3 is available. By default it rejects evidence older than 300 seconds; override only for deliberate diagnostics with `RAISE_E2E_MAX_AGE_SECONDS`.
 11. Treat the physical Watch → VPS gate as proven only when the validator exits 0 for the intended route and the evidence reports a plausible latency.
 12. Keep Gemini and ChatGPT Web as UI fallbacks until the native path is stable on the physical Watch.
 
-The Watch evidence file is deliberately content-free: it records route, status, execution flags, latency and input length, but never stores the transcript, response text, gateway token, TLS key material or provider credentials.
+The Watch evidence file is deliberately content-free: it records app version, exact source revision, route, status, execution flags, latency and input length, but never stores the transcript, response text, gateway token, TLS key material or provider credentials.
 
 ## 6. Run the V1 gesture reliability evidence session
 

@@ -33,8 +33,10 @@ else
 fi
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-OUT="$PWD/watch-sensor-traces-$STAMP.csv"
-TRIALS_OUT="$PWD/watch-sensor-trials-$STAMP.csv"
+BASE_OUT="${RAISE_OUTPUT_DIR:-$PWD}"
+mkdir -p "$BASE_OUT"
+OUT="$BASE_OUT/watch-sensor-traces-$STAMP.csv"
+TRIALS_OUT="$BASE_OUT/watch-sensor-trials-$STAMP.csv"
 if "$ADB" -s "$TARGET" shell run-as nl.zennay.raiseai cat files/sensor-traces.csv > "$OUT" 2>/dev/null; then
   if [ -s "$OUT" ]; then
     echo "Saved: $OUT"

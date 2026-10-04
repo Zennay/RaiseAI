@@ -56,8 +56,10 @@ object WatchE2eEvidence {
         inputLengthChars: Int,
         latencyMs: Long
     ): JSONObject = JSONObject()
-        .put("schema_version", 1)
+        .put("schema_version", 2)
         .put("recorded_at_utc", Instant.now().toString())
+        .put("app_version", BuildConfig.VERSION_NAME)
+        .put("source_revision", BuildConfig.SOURCE_REVISION)
         .put("outcome", outcome)
         .put("input_length_chars", inputLengthChars.coerceAtLeast(0))
         .put("latency_ms", latencyMs.coerceAtLeast(0))
