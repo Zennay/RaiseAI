@@ -25,6 +25,7 @@ on:
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
       - "tests/test_watch_apk_identity.py"
+      - "tests/test_start_physical_handoff.py"
       - ".github/workflows/watch-app-test.yml"
   pull_request:
     paths:
@@ -48,6 +49,7 @@ on:
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
       - "tests/test_watch_apk_identity.py"
+      - "tests/test_start_physical_handoff.py"
       - ".github/workflows/watch-app-test.yml"
 
 concurrency:
@@ -138,6 +140,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
+          python3 -m unittest discover -s tests -p 'test_start_physical_handoff.py'
 
       - name: Evidence identity negative controls
         shell: bash
