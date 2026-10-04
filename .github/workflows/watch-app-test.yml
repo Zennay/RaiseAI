@@ -20,10 +20,12 @@ on:
       - "tools/validate-watch-e2e-evidence.py"
       - "tools/analyze-watch-sensor-traces.py"
       - "tools/analyze-watch-sensor-trials.py"
+      - "tools/build-watch-acceptance-report.py"
       - "tools/verify-watch-apk-identity.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
+      - "tests/test_watch_acceptance_report.py"
       - "tests/test_watch_apk_identity.py"
       - ".github/workflows/watch-app-test.yml"
   pull_request:
@@ -138,6 +140,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
+          python3 -m unittest discover -s tests -p 'test_watch_acceptance_report.py'
           python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
 
       - name: Evidence identity negative controls
