@@ -270,6 +270,125 @@ exit 2
         self.assertNotIn("watch-c", self.used_serials())
 
 
+
+class GatewayProvisionBindingTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.sdk = self.root / "sdk"
+        (self.sdk / "platform-tools").mkdir(parents=True)
+        self.log = self.root / "adb-provision.log"
+        self.profile = self.root / "watch-gateway.properties"
+        self.profile.write_text(
+            "url=https://raise.example.invalid:8787\\n"
+            "token=abcdefghijklmnopqrstuvwxyz0123456789TOKEN\\n"
+            "spki_sha256=" + ("a" * 64) + "\\n",
+            encoding="utf-8",
+        )
+
+        adb = self.sdk / "platform-tools" / "adb"
+        adb.write_text(
+            textwrap.dedent(
+                r"""#!/bin/bash
+set -eu
+if [ "${1:-}" = "start-server" ]; then
+  exit 0
+fi
+if [ "${1:-}" = "devices" ]; then
+  printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
+  exit 0
+fi
+if [ "${1:-}" = "-s" ]; then
+  serial="$2"
+  printf '%s\n' "$serial" >> "$ADB_LOG"
+  shift 2
+  args="$*"
+  case "$args" in
+    "shell getprop ro.product.model")
+      [ "$serial" = "watch-b" ] && echo "SM_L315F" || echo "Pixel_Test"
+      ;;
+    "shell getprop ro.product.device")
+      [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
+      ;;
+    "shell getprop ro.build.characteristics")
+      [ "$serial" = "watch-b" ] && echo "watch" || echo "nosdcard"
+      ;;
+    "shell pm list features")
+      if [ "$serial" = "watch-b" ]; then
+        echo "feature:android.hardware.type.watch"
+      else
+        echo "feature:android.hardware.telephony"
+      fi
+      ;;
+    "shell run-as nl.zennay.raiseai id")
+      exit 0
+      ;;
+    push\ *)
+      exit 0
+      ;;
+    shell\ chmod\ 600\ /data/local/tmp/raise-gateway-*.properties)
+      exit 0
+      ;;
+    shell\ run-as\ nl.zennay.raiseai\ sh\ -c\ *)
+      exit 0
+      ;;
+    shell\ rm\ -f\ /data/local/tmp/raise-gateway-*.properties)
+      exit 0
+      ;;
+    *)
+      echo "unexpected adb invocation: $serial $args" >&2
+      exit 2
+      ;;
+  esac
+  exit 0
+fi
+echo "unexpected adb invocation: $*" >&2
+exit 2
+"""
+            ),
+            encoding="utf-8",
+        )
+        adb.chmod(0o755)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def run_provisioner(self, serial):
+        env = os.environ.copy()
+        env["ANDROID_SDK_ROOT"] = str(self.sdk)
+        env["ANDROID_SERIAL"] = serial
+        env["ADB_LOG"] = str(self.log)
+        return subprocess.run(
+            ["bash", str(ROOT / "provision-watch-gateway.command"), str(self.profile)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+    def used_serials(self):
+        if not self.log.exists():
+            return []
+        return [
+            line.strip()
+            for line in self.log.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    def test_gateway_provisioning_stays_on_bound_watch(self):
+        result = self.run_provisioner("watch-b")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(self.used_serials())
+        self.assertEqual(set(self.used_serials()), {"watch-b"})
+        self.assertIn("Gateway profile installed on Watch: watch-b", result.stdout)
+
+    def test_gateway_provisioning_rejects_bound_phone(self):
+        result = self.run_provisioner("phone-a")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing gateway provisioning to non-Wear ADB target: phone-a", result.stdout)
+        self.assertEqual(set(self.used_serials()), {"phone-a"})
+
 class PhysicalPrepareBindingTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
