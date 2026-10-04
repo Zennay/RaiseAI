@@ -1,0 +1,43 @@
+name: Raise prebuilt handoff staging check
+
+on:
+  push:
+    branches:
+      - fix/prebuilt-physical-handoff-20261004
+    paths:
+      - "physical-validation.command"
+      - "start-physical-handoff.command"
+      - "tools/verify-watch-apk-identity.py"
+      - "tests/test_watch_apk_identity.py"
+      - ".github/workflows/staging-prebuilt-handoff.yml"
+
+concurrency:
+  group: raise-prebuilt-handoff-staging
+  cancel-in-progress: true
+
+jobs:
+  handoff-contracts:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+
+      - name: Handoff script contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n physical-validation.command
+          bash physical-validation.command --help >/dev/null
+          bash -n start-physical-handoff.command
+          python3 -m py_compile tools/verify-watch-apk-identity.py
+          python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
