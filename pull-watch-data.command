@@ -21,7 +21,13 @@ fi
 
 DEVICES="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
 COUNT="$(printf '%s\n' "$DEVICES" | awk 'NF {n++} END {print n+0}')"
-if [ "$COUNT" -eq 0 ]; then
+TARGET="${ANDROID_SERIAL:-}"
+if [ -n "$TARGET" ]; then
+  printf '%s\n' "$DEVICES" | grep -Fxq "$TARGET" || {
+    echo "Prepared Watch is not connected over ADB: $TARGET"
+    exit 1
+  }
+elif [ "$COUNT" -eq 0 ]; then
   echo "No watch connected over ADB. Turn on Wireless debugging and connect first."
   exit 1
 elif [ "$COUNT" -eq 1 ]; then
