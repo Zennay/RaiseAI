@@ -1,7 +1,14 @@
 import java.util.zip.ZipFile
 
+private val sourceRevisionPattern = Regex("^[0-9a-fA-F]{40}$")
+
 fun resolveSourceRevision(projectDir: java.io.File): String {
     return try {
+        val override = System.getenv("RAISE_BUILD_REVISION")
+            ?.trim()
+            ?.takeIf { it.matches(sourceRevisionPattern) }
+        if (override != null) return override.lowercase()
+
         val statusProcess = ProcessBuilder("git", "status", "--porcelain", "--untracked-files=normal")
             .directory(projectDir)
             .redirectErrorStream(true)
@@ -11,17 +18,12 @@ fun resolveSourceRevision(projectDir: java.io.File): String {
             return "unknown"
         }
 
-        val override = System.getenv("RAISE_BUILD_REVISION")
-            ?.trim()
-            ?.takeIf { it.matches(Regex("^[0-9a-fA-F]{40}$")) }
-        if (override != null) return override.lowercase()
-
         val process = ProcessBuilder("git", "rev-parse", "HEAD")
             .directory(projectDir)
             .redirectErrorStream(true)
             .start()
         val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        if (process.waitFor() == 0 && output.matches(Regex("^[0-9a-fA-F]{40}$"))) {
+        if (process.waitFor() == 0 && output.matches(sourceRevisionPattern)) {
             output.lowercase()
         } else {
             "unknown"
@@ -80,6 +82,26 @@ dependencies {
     // Last GeckoView line whose AndroidX dependencies build cleanly with SDK 35.
     implementation("org.mozilla.geckoview:geckoview:139.0.20250609112858")
     testImplementation("junit:junit:4.13.2")
+}
+
+tasks.register("verifyEvidenceBuildIdentity") {
+    group = "verification"
+    description = "Fails unless the evidence-capable build is pinned to an exact 40-char source revision."
+
+    doLast {
+        val expected = System.getenv("RAISE_BUILD_REVISION")
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.matches(Regex("^[0-9a-f]{40}$")) }
+
+        check(expected != null) {
+            "RAISE_BUILD_REVISION must contain the exact 40-character Git revision for evidence-capable builds."
+        }
+        check(sourceRevision == expected) {
+            "Build source revision mismatch: resolved=$sourceRevision expected=$expected"
+        }
+        println("Verified evidence build revision: $sourceRevision")
+    }
 }
 
 tasks.register("verifyWatchAbi") {
