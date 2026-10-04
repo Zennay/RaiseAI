@@ -73,7 +73,7 @@ if ! "$ADB" -s "$TARGET" shell run-as "$PACKAGE" id >/dev/null 2>&1; then
   exit 1
 fi
 
-TMP="/data/local/tmp/raise-gateway-$.properties"
+TMP="/data/local/tmp/raise-gateway-$$.properties"
 cleanup_remote_tmp() {
   "$ADB" -s "$TARGET" shell rm -f "$TMP" >/dev/null 2>&1 || true
 }
