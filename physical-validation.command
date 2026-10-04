@@ -153,8 +153,8 @@ prepare_session() {
     exit 1
   fi
 
-  local revision version gradle_version stamp session adb target model installed_version
-  local prebuilt_apk expected_apk_sha selected_apk install_mode apk_sha
+  local revision version gradle_version stamp session adb target model characteristics features installed_version
+  local prebuilt_apk expected_apk_sha selected_apk install_mode apk_sha installed_watch_serial_file
   local -a verify_args
   revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"
   printf '%s' "$revision" | grep -Eq '^[0-9a-f]{40}$' || {
@@ -172,6 +172,8 @@ prepare_session() {
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   session="$EVIDENCE_ROOT/${stamp}-v${version}-${revision:0:12}"
   mkdir -p "$session"
+  installed_watch_serial_file="$session/installed-watch-serial"
+  rm -f "$installed_watch_serial_file"
 
   echo "Preparing physical validation session:"
   echo "  version:  $version"
@@ -206,11 +208,14 @@ prepare_session() {
       --expect-sha256 "$expected_apk_sha"
     )
     "${verify_args[@]}" | tee "$session/apk-verification.json"
-    bash ./install-watch-apk.command "$prebuilt_apk"
+    RAISE_INSTALLED_WATCH_SERIAL_FILE="$installed_watch_serial_file" \
+      bash ./install-watch-apk.command "$prebuilt_apk"
     selected_apk="$prebuilt_apk"
     install_mode="prebuilt_apk"
   else
-    RAISE_BUILD_REVISION="$revision" bash ./upgrade-watch.command
+    RAISE_BUILD_REVISION="$revision" \
+      RAISE_INSTALLED_WATCH_SERIAL_FILE="$installed_watch_serial_file" \
+      bash ./upgrade-watch.command
     selected_apk="app/build/outputs/apk/debug/app-debug.apk"
     python3 tools/verify-watch-apk-identity.py       "$selected_apk"       --expect-source-revision "$revision" | tee "$session/apk-verification.json"
     install_mode="source_build"
@@ -235,14 +240,35 @@ PY
       ;;
   esac
 
-  bash ./provision-watch-gateway.command "$profile"
+  [ -s "$installed_watch_serial_file" ] || {
+    echo "Installer did not attest the Watch serial used for this session."
+    exit 1
+  }
+  target="$(tr -d '\r\n' < "$installed_watch_serial_file")"
+  [ -n "$target" ] || {
+    echo "Installer returned an empty Watch serial."
+    exit 1
+  }
+
+  ANDROID_SERIAL="$target" bash ./provision-watch-gateway.command "$profile"
 
   adb="$(find_adb || true)"
   [ -n "$adb" ] || { echo "ADB not found after install"; exit 1; }
-  target="${ANDROID_SERIAL:-$(find_watch "$adb" | head -n 1)}"
-  [ -n "$target" ] || { echo "Watch disconnected after install"; exit 1; }
+  "$adb" devices | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$target" || {
+    echo "Installed Watch disconnected before session binding: $target"
+    exit 1
+  }
 
-  model="$("$adb" -s "$target" shell getprop ro.product.model | tr -d '\r')"
+  model="$("$adb" -s "$target" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+  characteristics="$("$adb" -s "$target" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+  features="$("$adb" -s "$target" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+  if [ "$model" != "SM_L315F" ] &&
+     ! printf '%s' "$characteristics" | grep -qi watch &&
+     ! printf '%s\n' "$features" | grep -q 'android.hardware.type.watch'; then
+    echo "Installed ADB target is not a Wear OS watch: $target"
+    exit 1
+  fi
+
   installed_version="$("$adb" -s "$target" shell dumpsys package "$PACKAGE" |
     sed -n 's/^[[:space:]]*versionName=//p' | head -n 1 | tr -d '\r')"
   [ "$installed_version" = "$version" ] || {
