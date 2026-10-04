@@ -63,7 +63,8 @@ jobs:
         with:
           # PR validation must build the exact head commit, not GitHub's synthetic merge ref.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          # The physical-handoff source bundle must contain the pinned revision's full ancestry.
+          fetch-depth: 0
 
       - name: Pin exact build revision
         shell: bash
@@ -227,6 +228,52 @@ jobs:
           print("APK DEX contains exact source revision:", ", ".join(hits))
           print("APK release identity:", version_code, version_name)
           PY
+
+      - name: Build and verify physical handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION.txt)"
+          handoff_dir="$RUNNER_TEMP/raiseai-physical-handoff"
+          restore_dir="$RUNNER_TEMP/raiseai-physical-handoff-verify"
+          rm -rf "$handoff_dir" "$restore_dir"
+          mkdir -p "$handoff_dir"
+
+          apk="$handoff_dir/RaiseAI-v${version}-debug.apk"
+          bundle="$handoff_dir/RaiseAI-v${version}-source.bundle"
+          identity="$handoff_dir/BUILD-IDENTITY.txt"
+
+          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
+          cp start-physical-handoff.command "$handoff_dir/start-physical-handoff.command"
+          chmod +x "$handoff_dir/start-physical-handoff.command"
+
+          git branch -f physical-handoff "$RAISE_BUILD_REVISION"
+          git bundle create "$bundle" refs/heads/physical-handoff
+          git branch -D physical-handoff
+
+          apk_sha="$(sha256sum "$apk" | awk '{print tolower($1)}')"
+          bundle_sha="$(sha256sum "$bundle" | awk '{print tolower($1)}')"
+          cat > "$identity" <<EOF
+          source_revision=$RAISE_BUILD_REVISION
+          apk_sha256=$apk_sha
+          source_bundle_sha256=$bundle_sha
+          EOF
+
+          RAISE_RESTORE_DIR="$restore_dir" \
+            bash "$handoff_dir/start-physical-handoff.command" --verify-only
+          rm -rf "$restore_dir"
+
+          echo "RAISE_HANDOFF_DIR=$handoff_dir" >> "$GITHUB_ENV"
+          echo "RAISE_HANDOFF_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Upload exact main physical handoff
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RaiseAI-Watch7-v${{ env.RAISE_HANDOFF_VERSION }}-physical-handoff-${{ github.run_id }}
+          path: ${{ env.RAISE_HANDOFF_DIR }}
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload debug Watch APK
         uses: actions/upload-artifact@v4
