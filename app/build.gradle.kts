@@ -1,11 +1,6 @@
 import java.util.zip.ZipFile
 
 fun resolveSourceRevision(projectDir: java.io.File): String {
-    val override = System.getenv("RAISE_BUILD_REVISION")
-        ?.trim()
-        ?.takeIf { it.matches(Regex("^[0-9a-fA-F]{40}$")) }
-    if (override != null) return override.lowercase()
-
     return try {
         val statusProcess = ProcessBuilder("git", "status", "--porcelain", "--untracked-files=normal")
             .directory(projectDir)
@@ -15,6 +10,11 @@ fun resolveSourceRevision(projectDir: java.io.File): String {
         if (statusProcess.waitFor() != 0 || status.isNotBlank()) {
             return "unknown"
         }
+
+        val override = System.getenv("RAISE_BUILD_REVISION")
+            ?.trim()
+            ?.takeIf { it.matches(Regex("^[0-9a-fA-F]{40}$")) }
+        if (override != null) return override.lowercase()
 
         val process = ProcessBuilder("git", "rev-parse", "HEAD")
             .directory(projectDir)
