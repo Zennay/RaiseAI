@@ -1,4 +1,4 @@
-name: Diagnose external zCloud status failure via RaiseAI
+name: Restore zCloud guarded-deploy self-heal lock
 
 on:
   push:
@@ -11,27 +11,20 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  guard:
     runs-on: [self-hosted, vps-bb300bba]
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Capture status handler and recent errors
+      - name: Restore deploy self-heal guard
         shell: bash
         run: |
           set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
           root=/home/ubuntu/zennay-cloud
-          echo "=== CURRENT SERVICE ==="
+          sudo -n install -o ubuntu -g ubuntu -m 0644 /dev/null "$root/.disable-self-heal"
+          echo ZCLOUD_SELF_HEAL_GUARD_RESTORED
+          ls -l "$root/.disable-self-heal"
           sudo -n systemctl is-active zennay-cloud.service
-          sudo -n ss -ltnp | grep ':8765'
-          echo "=== RECENT JOURNAL ==="
-          sudo -n journalctl -u zennay-cloud.service --since '2026-10-04 22:33:00 UTC' --no-pager | tail -n 320 || true
-          echo "=== API STATUS ROUTE REFERENCES ==="
-          grep -n -E "api/status|def status|def do_GET|status_payload|build_status|health" "$root/server.py" | tail -n 200 || true
-          echo "=== DO_GET REGION ==="
-          start="$(grep -n 'def do_GET' "$root/server.py" | tail -1 | cut -d: -f1)"
-          if [[ "$start" =~ ^[0-9]+$ ]]; then
-            sed -n "${start},$((start+220))p" "$root/server.py"
-          fi
-          echo "=== LOCAL STATUS TIMING ==="
-          /usr/bin/time -f 'elapsed=%e cpu=%P maxrss=%M' curl -sS --max-time 25 -o /tmp/status.json -w 'HTTP=%{http_code} bytes=%{size_download}\n' http://127.0.0.1:8765/api/status || true
-          python3 -m json.tool /tmp/status.json 2>/dev/null | head -n 35 || true
+          sudo -n systemctl is-active zcloud-self-heal.timer || true
+          curl -fsS --max-time 8 http://127.0.0.1:8765/ >/dev/null
+          echo ZCLOUD_ROOT_LOCAL_GREEN
