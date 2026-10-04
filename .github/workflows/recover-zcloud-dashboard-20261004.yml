@@ -1,4 +1,4 @@
-name: Restore zCloud guarded-deploy self-heal lock
+name: Stabilize zCloud dashboard runtime via RaiseAI
 
 on:
   push:
@@ -11,20 +11,47 @@ permissions:
   contents: read
 
 jobs:
-  guard:
+  stabilize:
     runs-on: [self-hosted, vps-bb300bba]
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
-      - name: Restore deploy self-heal guard
+      - name: Clear stale browser command and prove stable API
         shell: bash
         run: |
           set -euo pipefail
-          test "$(hostname)" = "vps-bb300bba"
           root=/home/ubuntu/zennay-cloud
-          sudo -n install -o ubuntu -g ubuntu -m 0644 /dev/null "$root/.disable-self-heal"
-          echo ZCLOUD_SELF_HEAL_GUARD_RESTORED
-          ls -l "$root/.disable-self-heal"
+          test "$(hostname)" = "vps-bb300bba"
+          test -e "$root/.disable-self-heal"
+          echo "=== BEFORE ==="
           sudo -n systemctl is-active zennay-cloud.service
-          sudo -n systemctl is-active zcloud-self-heal.timer || true
+          old_pid="$(sudo -n systemctl show -p MainPID --value zennay-cloud.service)"
+          echo "pid_before=$old_pid"
+          python3 "$root/scripts/zcloud_worker_watchdog.py"             --db "$root/history.db"             --clear-stale-pending-only             --json | tee /tmp/zcloud-watchdog-clear.json
+          echo "=== PENDING AFTER CLEANUP ==="
+          python3 - <<'PY'
+          import sqlite3, json
+          db='/home/ubuntu/zennay-cloud/history.db'
+          c=sqlite3.connect(f'file:{db}?mode=ro',uri=True,timeout=3)
+          c.row_factory=sqlite3.Row
+          rows=c.execute("SELECT id,project_id,action,status,created_at,updated_at,result FROM runner_commands WHERE status='pending' ORDER BY id").fetchall()
+          print(json.dumps([dict(r) for r in rows],indent=2))
+          c.close()
+          PY
+          for n in 1 2; do
+            rm -f "/tmp/status-$n.json"
+            code="$(curl -sS --connect-timeout 3 --max-time 30 -o "/tmp/status-$n.json" -w '%{http_code}' http://127.0.0.1:8765/api/status)"
+            echo "local_status_attempt=$n http=$code bytes=$(wc -c <"/tmp/status-$n.json")"
+            test "$code" = "200"
+            python3 - "/tmp/status-$n.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1]))
+          assert p.get('errors') == [], p.get('errors')
+          print({'errors':p.get('errors'),'healthy':(p.get('health') or {}).get('healthy'),'time':p.get('time')})
+          PY
+            sleep 4
+          done
+          new_pid="$(sudo -n systemctl show -p MainPID --value zennay-cloud.service)"
+          echo "pid_after=$new_pid"
+          test "$old_pid" = "$new_pid"
           curl -fsS --max-time 8 http://127.0.0.1:8765/ >/dev/null
-          echo ZCLOUD_ROOT_LOCAL_GREEN
+          echo ZCLOUD_LOCAL_DASHBOARD_STABLE
