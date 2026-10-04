@@ -18,7 +18,7 @@ The flow is fail-closed and keeps one evidence directory under `~/.raiseai/evide
 
 1. **prepare** requires a clean Git checkout, binds the APK to the exact 40-character source revision, builds/installs v1.5.2, provisions the gateway profile, clears only old validation evidence, and opens Raise AI;
 2. **verify-e2e** accepts only a fresh `quick_ai` response from the exact prepared app version and Git revision;
-3. **verify-v1** is allowed only after E2E passes and requires the full 30 intentional raises / 100 non-trigger dataset with ≥90% detection and ≤5% false triggers.
+3. **verify-v1** is allowed only after E2E passes and requires the full 30 intentional raises / 100 non-trigger dataset from that same exact app version + source revision, with ≥90% detection and ≤5% false triggers.
 
 The manual commands remain available when debugging an individual stage:
 
