@@ -54,6 +54,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # PR validation must build the exact head commit, not GitHub's synthetic merge ref.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
 
       - name: Pin exact build revision
         shell: bash
@@ -116,22 +120,38 @@ jobs:
           )
 
           wrong_revision="0000000000000000000000000000000000000000"
-          if RAISE_BUILD_REVISION="$wrong_revision" "${gradle[@]}"; then
+          wrong_log="$(mktemp)"
+          if RAISE_BUILD_REVISION="$wrong_revision" "${gradle[@]}" >"$wrong_log" 2>&1; then
+            cat "$wrong_log"
             echo "Identity gate unexpectedly accepted a revision that does not match HEAD."
             exit 1
           fi
-          echo "Negative control passed: mismatched revision rejected."
+          grep -Fq "Pinned build revision does not match checked-out HEAD" "$wrong_log" || {
+            cat "$wrong_log"
+            echo "Mismatched-revision control failed for an unexpected reason."
+            exit 1
+          }
+          rm -f "$wrong_log"
+          echo "Negative control passed: mismatched revision rejected for HEAD mismatch."
 
-          trap 'git checkout -- VERSION.txt' EXIT
+          dirty_log="$(mktemp)"
+          trap 'git checkout -- VERSION.txt; rm -f "$dirty_log"' EXIT
           printf '\n' >> VERSION.txt
-          if "${gradle[@]}"; then
+          if "${gradle[@]}" >"$dirty_log" 2>&1; then
+            cat "$dirty_log"
             echo "Identity gate unexpectedly accepted a dirty working tree."
             exit 1
           fi
+          grep -Fq "Evidence-capable builds require a clean Git working tree" "$dirty_log" || {
+            cat "$dirty_log"
+            echo "Dirty-tree control failed for an unexpected reason."
+            exit 1
+          }
           git checkout -- VERSION.txt
+          rm -f "$dirty_log"
           trap - EXIT
           test -z "$(git status --porcelain --untracked-files=normal)"
-          echo "Negative control passed: dirty working tree rejected."
+          echo "Negative control passed: dirty working tree rejected for cleanliness."
 
       - name: Unit tests and Watch APK
         run: |
