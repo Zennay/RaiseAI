@@ -47,8 +47,8 @@ android {
         applicationId = "nl.zennay.raiseai"
         minSdk = 30
         targetSdk = 35
-        versionCode = 18
-        versionName = "1.5.1"
+        versionCode = 19
+        versionName = "1.5.2"
         buildConfigField("String", "SOURCE_REVISION", "\"$sourceRevision\"")
 
         // Target Galaxy Watch reports ro.product.cpu.abi=armeabi-v7a.
