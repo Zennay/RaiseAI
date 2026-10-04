@@ -249,12 +249,13 @@ PY
     echo "Installed Watch version $installed_version does not match prepared version $version"
     exit 1
   }
+  echo "  watch:    $target"
   echo "Clearing prior validation evidence only..."
   "$adb" -s "$target" shell run-as "$PACKAGE" sh -c     "'rm -f files/watch-e2e-evidence.json files/sensor-traces.csv files/sensor-trials.csv'"
   "$adb" -s "$target" logcat -c || true
   "$adb" -s "$target" shell am start -n "$PACKAGE/.MainActivity" >/dev/null
 
-  STARTED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"   SESSION_PATH="$session"   APP_VERSION="$version"   SOURCE_REVISION="$revision"   WATCH_MODEL="$model"   INSTALL_MODE="$install_mode"   APK_SHA256="$apk_sha"   python3 - <<'PY'
+  STARTED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"   SESSION_PATH="$session"   APP_VERSION="$version"   SOURCE_REVISION="$revision"   WATCH_MODEL="$model"   WATCH_SERIAL="$target"   INSTALL_MODE="$install_mode"   APK_SHA256="$apk_sha"   python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -265,6 +266,7 @@ payload = {
     "app_version": os.environ["APP_VERSION"],
     "source_revision": os.environ["SOURCE_REVISION"],
     "watch_model": os.environ["WATCH_MODEL"],
+    "watch_serial": os.environ["WATCH_SERIAL"],
     "install_mode": os.environ["INSTALL_MODE"],
     "apk_sha256": os.environ["APK_SHA256"],
     "e2e_passed": False,
@@ -291,11 +293,13 @@ verify_e2e() {
   [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
   require_command python3
 
-  local version revision
+  local version revision watch_serial
   version="$(json_get "$session/session.json" app_version)"
   revision="$(json_get "$session/session.json" source_revision)"
+  watch_serial="$(json_get "$session/session.json" watch_serial)"
+  [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
 
   local diag evidence result
   diag="$(find "$session" -maxdepth 1 -type d -name 'watch-diagnostics-*' -print | sort | tail -n 1)"
@@ -325,7 +329,7 @@ verify_v1() {
   [ -f "$session/session.json" ] || { echo "Invalid session: $session"; exit 1; }
   require_command python3
 
-  local e2e_passed version revision
+  local e2e_passed version revision watch_serial
   e2e_passed="$(json_get "$session/session.json" e2e_passed)"
   [ "$e2e_passed" = "true" ] || {
     echo "Refusing V1 gate before this session's fresh E2E gate has passed."
@@ -334,8 +338,10 @@ verify_v1() {
   }
   version="$(json_get "$session/session.json" app_version)"
   revision="$(json_get "$session/session.json" source_revision)"
+  watch_serial="$(json_get "$session/session.json" watch_serial)"
+  [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
 
   local trials result
   trials="$(find "$session" -maxdepth 1 -type f -name 'watch-sensor-trials-*.csv' -print | sort | tail -n 1)"
