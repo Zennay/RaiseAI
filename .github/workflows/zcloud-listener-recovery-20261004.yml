@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: raiseai-zcloud-listener-recovery-20261004
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   recover:
