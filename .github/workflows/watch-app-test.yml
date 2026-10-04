@@ -75,6 +75,7 @@ jobs:
           bash -n pull-diagnostics.command
           bash -n pull-watch-data.command
           bash -n physical-validation.command
+          bash physical-validation.command --help >/dev/null
           bash -n provision-watch-gateway.command
           bash -n install-watch-apk.command
           bash -n upgrade-watch.command
