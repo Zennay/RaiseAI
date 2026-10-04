@@ -1,5 +1,5 @@
 name: Recover duplicate zCloud Actions listener safely
-# Operational retrigger 2026-10-04 21:33 UTC for zCloud PWQ-10
+# Operational retrigger 2026-10-04 21:34 UTC for zCloud PWQ-10; full /proc ancestry fix
 # Triggered after zCloud deterministic reset follow-up; keep this workflow checkout-free.
 
 on:
@@ -110,14 +110,27 @@ jobs:
           def canonical_lineage_contains(pid, root_pid, rows):
               if not root_pid:
                   return False
-              parents = {row["pid"]: row["ppid"] for row in rows}
+              # Follow the kernel process tree rather than the filtered runner rows.
+              # Runner.Listener is launched through intermediate service/node processes
+              # that are intentionally absent from process_rows(); using only those
+              # filtered rows falsely classified the canonical listener as an orphan.
               current = pid
               seen = set()
               while current and current not in seen:
                   if current == root_pid:
                       return True
                   seen.add(current)
-                  current = parents.get(current, 0)
+                  try:
+                      stat = pathlib.Path(f"/proc/{current}/stat").read_text()
+                  except (FileNotFoundError, PermissionError, OSError):
+                      return False
+                  marker = stat.rfind(") ")
+                  if marker < 0:
+                      return False
+                  fields = stat[marker + 2:].split()
+                  if len(fields) < 2 or not fields[1].isdigit():
+                      return False
+                  current = int(fields[1])
               return False
 
           def still_matches(pid):
