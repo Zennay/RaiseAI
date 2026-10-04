@@ -13,11 +13,11 @@ mkdir -p "$STATE_DIR" "$EVIDENCE_ROOT"
 usage() {
   cat <<'EOF'
 Usage:
-  ./physical-validation.command prepare [gateway-profile]
-  ./physical-validation.command verify-e2e [session-dir]
-  ./physical-validation.command verify-v1 [session-dir]
-  ./physical-validation.command status [session-dir]
-  ./physical-validation.command all [gateway-profile]
+  bash ./physical-validation.command prepare [gateway-profile]
+  bash ./physical-validation.command verify-e2e [session-dir]
+  bash ./physical-validation.command verify-v1 [session-dir]
+  bash ./physical-validation.command status [session-dir]
+  bash ./physical-validation.command all [gateway-profile]
 
 prepare:
   Builds/installs the exact clean Git revision, provisions the gateway profile,
@@ -84,7 +84,7 @@ resolve_session() {
   fi
   [ -f "$LATEST_SESSION_FILE" ] || {
     echo "No previous physical validation session found." >&2
-    echo "Run: ./physical-validation.command prepare [gateway-profile]" >&2
+    echo "Run: bash ./physical-validation.command prepare [gateway-profile]" >&2
     return 1
   }
   tr -d '\r\n' < "$LATEST_SESSION_FILE"
@@ -220,7 +220,7 @@ PY
   echo "PREPARE PASS"
   echo "On the Watch: open Native Raise AI and complete one short normal AI question."
   echo "Immediately afterwards run:"
-  echo "  ./physical-validation.command verify-e2e '$session'"
+  echo "  bash ./physical-validation.command verify-e2e '$session'"
   printf '%s\n' "$session"
 }
 
@@ -255,7 +255,7 @@ verify_e2e() {
   echo "E2E PASS — exact Watch build ${version} @ ${revision}"
   echo "Next: collect at least 30 mouth raises and 100 representative non-trigger trials."
   echo "Then run:"
-  echo "  ./physical-validation.command verify-v1 '$session'"
+  echo "  bash ./physical-validation.command verify-v1 '$session'"
 }
 
 verify_v1() {
