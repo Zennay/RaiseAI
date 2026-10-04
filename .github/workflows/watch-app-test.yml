@@ -63,7 +63,8 @@ jobs:
         with:
           # PR validation must build the exact head commit, not GitHub's synthetic merge ref.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          # The physical-handoff source bundle must contain the pinned revision's full ancestry.
+          fetch-depth: 0
 
       - name: Pin exact build revision
         shell: bash
