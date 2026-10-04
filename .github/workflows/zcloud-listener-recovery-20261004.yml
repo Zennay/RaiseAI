@@ -207,13 +207,26 @@ jobs:
                   raise SystemExit("zCloud runner did not converge to exactly one canonical listener")
               time.sleep(2)
 
-          TEMP.mkdir(parents=True, exist_ok=True)
-          sentinel = TEMP / f"zcloud-listener-recovery-{os.environ.get('GITHUB_RUN_ID', 'unknown')}"
-          sentinel.write_text("stable\n")
-          time.sleep(15)
-          if not sentinel.exists() or sentinel.read_text() != "stable\n":
-              raise SystemExit("runner temp sentinel disappeared after listener convergence")
-          sentinel.unlink(missing_ok=True)
+          # Do not use a foreign sentinel in the zCloud runner temp directory here.
+          # A healthy canonical runner may legitimately clean its own _work/_temp
+          # between jobs. Instead require one canonical listener to remain stable
+          # across a bounded observation window; the subsequent zCloud regression
+          # validates runner-owned event/command files from inside a real zCloud job.
+          time.sleep(12)
+          state = service_state()
+          cg = control_group()
+          rows = process_rows()
+          listeners = [row for row in rows if row["kind"] == "listener"]
+          canonical = [row for row in listeners if cgroup_contains(row["pid"], cg)]
+          orphan_runtime = [
+              row
+              for row in rows
+              if row["kind"] in {"listener", "supervisor"}
+              and not cgroup_contains(row["pid"], cg)
+          ]
+          if state != "active" or len(listeners) != 1 or len(canonical) != 1 or orphan_runtime:
+              snapshot("stability_failed")
+              raise SystemExit("canonical zCloud listener did not remain stable for 12s")
 
           snapshot("after")
           print("ZCLOUD_DUPLICATE_LISTENER_RECOVERY_GREEN")
