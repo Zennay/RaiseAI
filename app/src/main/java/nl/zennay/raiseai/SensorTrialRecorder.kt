@@ -40,16 +40,17 @@ object SensorTrialRecorder {
         detectorTriggered: Boolean,
         maxSimilarity: Float,
         appVersion: String,
+        sourceRevision: String,
         detectorConfig: String
     ) {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
             file.writeText(
-                "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,detector_config\n"
+                "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config\n"
             )
         }
         file.appendText(
-            "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity,$appVersion,$detectorConfig\n"
+            "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity,$appVersion,$sourceRevision,$detectorConfig\n"
         )
     }
 
@@ -72,8 +73,8 @@ object SensorTrialRecorder {
 
         file.useLines { lines ->
             lines.drop(1).forEach { line ->
-                val fields = line.split(',', limit = 8)
-                if (fields.size != 8) {
+                val fields = line.split(',', limit = 9)
+                if (fields.size != 9) {
                     rejectedTrials++
                     return@forEach
                 }
@@ -87,10 +88,13 @@ object SensorTrialRecorder {
                     else -> null
                 }
                 val appVersion = fields[6]
-                val detectorConfig = fields[7]
+                val sourceRevision = fields[7].lowercase()
+                val detectorConfig = fields[8]
 
                 if (durationMs == null || sampleCount == null || triggered == null ||
-                    appVersion.isBlank() || detectorConfig.isBlank() || detectorConfig == "missing"
+                    appVersion.isBlank() ||
+                    !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
+                    detectorConfig.isBlank() || detectorConfig == "missing"
                 ) {
                     rejectedTrials++
                     return@forEach
@@ -101,7 +105,7 @@ object SensorTrialRecorder {
                     return@forEach
                 }
 
-                identities += "$appVersion|$detectorConfig"
+                identities += "$appVersion|$sourceRevision|$detectorConfig"
                 when (label) {
                     "mouth_raise" -> {
                         mouthTrials++

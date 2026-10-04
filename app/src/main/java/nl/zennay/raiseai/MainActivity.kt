@@ -364,6 +364,7 @@ class MainActivity : Activity(), SensorEventListener {
             detectorTriggered = traceDetectorTriggered,
             maxSimilarity = traceMaxSimilarity,
             appVersion = BuildConfig.VERSION_NAME,
+            sourceRevision = BuildConfig.SOURCE_REVISION,
             detectorConfig = traceDetector?.configurationId() ?: "missing"
         )
 
@@ -465,7 +466,7 @@ class MainActivity : Activity(), SensorEventListener {
                     "(${"%.0f".format(trialProgress.falseTriggerRate * 100)}% false)"
             )
             if (trialProgress.mixedEvidenceIdentity) {
-                append("\n⚠ Mixed app/detector trial revisions — clear test data")
+                append("\n⚠ Mixed app/source/detector trial revisions — clear test data")
             } else if (trialProgress.v1GatePassed) {
                 append("\n✓ V1 reliability gate measured")
             } else if (trialProgress.rejectedTrials > 0) {

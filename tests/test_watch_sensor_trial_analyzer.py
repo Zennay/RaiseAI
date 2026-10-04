@@ -17,7 +17,8 @@ def trial(
     *,
     duration_ms=4000,
     sample_count=40,
-    app_version="1.5.0",
+    app_version="1.5.2",
+    source_revision="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     detector_config="raise-detector-v1;similarity=0.955",
 ):
     return {
@@ -28,6 +29,7 @@ def trial(
         "detector_triggered": triggered,
         "max_similarity": 0.98 if triggered else 0.88,
         "app_version": app_version,
+        "source_revision": source_revision,
         "detector_config": detector_config,
     }
 
@@ -87,6 +89,34 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
                 required_non_triggers=1,
             )
 
+    def test_rejects_mixed_source_revisions(self):
+        trials = [trial("mouth_raise", 1, True)]
+        trials += [
+            trial(
+                "normal_move",
+                2,
+                False,
+                source_revision="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            )
+        ]
+        with self.assertRaisesRegex(analyzer.TrialError, "mix source revisions"):
+            analyzer.build_report(
+                trials,
+                required_raises=1,
+                required_non_triggers=1,
+            )
+
+    def test_rejects_source_revision_that_does_not_match_session(self):
+        trials = [trial("mouth_raise", 1, True)]
+        trials += [trial("normal_move", 2, False)]
+        with self.assertRaisesRegex(analyzer.TrialError, "does not match expected"):
+            analyzer.build_report(
+                trials,
+                required_raises=1,
+                required_non_triggers=1,
+                expect_source_revision="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            )
+
     def test_rejects_mixed_detector_configurations(self):
         trials = [trial("mouth_raise", 1, True, detector_config="raise-detector-v1;similarity=0.955")]
         trials += [trial("normal_move", 2, False, detector_config="raise-detector-v1;similarity=0.970")]
@@ -99,9 +129,9 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
 
     def test_read_trials_rejects_duplicate_session(self):
         content = (
-            "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,detector_config\n"
-            "mouth_raise,1,4000,40,true,0.98,1.5.0,raise-detector-v1;similarity=0.955\n"
-            "view_time,1,4000,40,false,0.80,1.5.0,raise-detector-v1;similarity=0.955\n"
+            "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config\n"
+            "mouth_raise,1,4000,40,true,0.98,1.5.2,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,raise-detector-v1;similarity=0.955\n"
+            "view_time,1,4000,40,false,0.80,1.5.2,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,raise-detector-v1;similarity=0.955\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "sensor-trials.csv"

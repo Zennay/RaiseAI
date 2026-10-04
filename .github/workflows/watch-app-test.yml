@@ -54,6 +54,20 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # PR validation must build the exact head commit, not GitHub's synthetic merge ref.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Pin exact build revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"
+          printf '%s' "$revision" | grep -Eq '^[0-9a-f]{40}$'
+          echo "RAISE_BUILD_REVISION=$revision" >> "$GITHUB_ENV"
+          echo "Pinned evidence build revision: $revision"
 
       - name: Configure Android SDK
         uses: android-actions/setup-android@v3
@@ -94,17 +108,99 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
 
+      - name: Evidence identity negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle=(
+            ./gradlew --no-daemon
+            -Dorg.gradle.jvmargs="-Xmx1280m -Dfile.encoding=UTF-8"
+            -Dorg.gradle.workers.max=1
+            :app:verifyEvidenceBuildIdentity
+          )
+
+          wrong_revision="0000000000000000000000000000000000000000"
+          wrong_log="$(mktemp)"
+          if RAISE_BUILD_REVISION="$wrong_revision" "${gradle[@]}" >"$wrong_log" 2>&1; then
+            cat "$wrong_log"
+            echo "Identity gate unexpectedly accepted a revision that does not match HEAD."
+            exit 1
+          fi
+          grep -Fq "Pinned build revision does not match checked-out HEAD" "$wrong_log" || {
+            cat "$wrong_log"
+            echo "Mismatched-revision control failed for an unexpected reason."
+            exit 1
+          }
+          rm -f "$wrong_log"
+          echo "Negative control passed: mismatched revision rejected for HEAD mismatch."
+
+          dirty_log="$(mktemp)"
+          trap 'git checkout -- VERSION.txt; rm -f "$dirty_log"' EXIT
+          printf '\n' >> VERSION.txt
+          if "${gradle[@]}" >"$dirty_log" 2>&1; then
+            cat "$dirty_log"
+            echo "Identity gate unexpectedly accepted a dirty working tree."
+            exit 1
+          fi
+          grep -Fq "Evidence-capable builds require a clean Git working tree" "$dirty_log" || {
+            cat "$dirty_log"
+            echo "Dirty-tree control failed for an unexpected reason."
+            exit 1
+          }
+          git checkout -- VERSION.txt
+          rm -f "$dirty_log"
+          trap - EXIT
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          echo "Negative control passed: dirty working tree rejected for cleanliness."
+
       - name: Unit tests and Watch APK
         run: |
           ./gradlew --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx1280m -Dfile.encoding=UTF-8" \
             -Dorg.gradle.workers.max=1 \
-            testDebugUnitTest assembleDebug
+            :app:verifyEvidenceBuildIdentity testDebugUnitTest assembleDebug
+          grep -R --fixed-strings "$RAISE_BUILD_REVISION" app/build/generated >/dev/null
+          echo "Generated BuildConfig contains exact source revision: $RAISE_BUILD_REVISION"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import zipfile
+          from pathlib import Path
+
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          metadata_path = Path("app/build/outputs/apk/debug/output-metadata.json")
+          revision = os.environ["RAISE_BUILD_REVISION"].encode("ascii")
+
+          with zipfile.ZipFile(apk) as archive:
+              dex_files = [name for name in archive.namelist() if name.endswith(".dex")]
+              hits = [name for name in dex_files if revision in archive.read(name)]
+          if not hits:
+              raise SystemExit("exact source revision not embedded in APK DEX")
+
+          gradle = Path("app/build.gradle.kts").read_text()
+          version_name = Path("VERSION.txt").read_text().strip()
+          match = re.search(r"versionCode\s*=\s*(\d+)", gradle)
+          if not match:
+              raise SystemExit("versionCode not found in app/build.gradle.kts")
+          version_code = int(match.group(1))
+
+          metadata = json.loads(metadata_path.read_text())
+          element = metadata["elements"][0]
+          if element.get("versionName") != version_name or element.get("versionCode") != version_code:
+              raise SystemExit(
+                  f"APK metadata mismatch: expected {version_code}/{version_name}, "
+                  f"got {element.get('versionCode')}/{element.get('versionName')}"
+              )
+
+          print("APK DEX contains exact source revision:", ", ".join(hits))
+          print("APK release identity:", version_code, version_name)
+          PY
 
       - name: Upload debug Watch APK
         uses: actions/upload-artifact@v4
         with:
-          name: RaiseAI-Watch7-v1.5.1-${{ github.run_id }}
+          name: RaiseAI-Watch7-v1.5.2-${{ github.run_id }}
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

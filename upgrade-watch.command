@@ -33,11 +33,19 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
     exit 1
   fi
   RAISE_BUILD_REVISION="${RAISE_BUILD_REVISION:-$(git rev-parse HEAD)}"
+  printf '%s' "$RAISE_BUILD_REVISION" | grep -Eq '^[0-9a-fA-F]{40}$' || {
+    echo "RAISE_BUILD_REVISION must be an exact 40-character Git revision."
+    exit 1
+  }
   export RAISE_BUILD_REVISION
+else
+  echo "Git checkout required for evidence-capable Watch builds."
+  exit 1
 fi
 
 echo "Building Raise AI v$VERSION…"
-echo "The build will fail automatically if the Watch ABI is wrong."
-./gradlew :app:assembleDebug
+echo "Evidence build revision: $RAISE_BUILD_REVISION"
+echo "The build will fail automatically if build identity or Watch ABI is wrong."
+./gradlew :app:verifyEvidenceBuildIdentity :app:assembleDebug
 
 exec ./install-watch-apk.command app/build/outputs/apk/debug/app-debug.apk

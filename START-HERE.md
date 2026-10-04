@@ -1,4 +1,4 @@
-# Raise AI v1.5.1 — START HERE
+# Raise AI v1.5.2 — START HERE
 
 Raise AI is native-first:
 
@@ -16,9 +16,9 @@ bash ./physical-validation.command all /path/to/watch-gateway.properties
 
 The flow is fail-closed and keeps one evidence directory under `~/.raiseai/evidence/`:
 
-1. **prepare** requires a clean Git checkout, binds the APK to the exact 40-character source revision, builds/installs v1.5.1, provisions the gateway profile, clears only old validation evidence, and opens Raise AI;
+1. **prepare** requires a clean Git checkout, binds the APK to the exact 40-character source revision, builds/installs v1.5.2, provisions the gateway profile, clears only old validation evidence, and opens Raise AI;
 2. **verify-e2e** accepts only a fresh `quick_ai` response from the exact prepared app version and Git revision;
-3. **verify-v1** is allowed only after E2E passes and requires the full 30 intentional raises / 100 non-trigger dataset with ≥90% detection and ≤5% false triggers.
+3. **verify-v1** is allowed only after E2E passes and requires the full 30 intentional raises / 100 non-trigger dataset from that same exact app version + source revision, with ≥90% detection and ≤5% false triggers.
 
 The manual commands remain available when debugging an individual stage:
 
@@ -29,7 +29,7 @@ bash ./physical-validation.command verify-v1
 bash ./physical-validation.command status
 ```
 
-A dirty source tree cannot produce passing physical evidence. Old v1 schema evidence also fails closed; v1.5.1 writes schema v2 with `app_version` and `source_revision`.
+A dirty source tree cannot produce passing physical evidence. Old v1 schema evidence also fails closed; v1.5.2 writes schema v2 with `app_version` and `source_revision`.
 
 ## 1. Install or upgrade the Watch app
 
@@ -128,7 +128,7 @@ python3 tools/validate-watch-e2e-evidence.py \
   --max-latency-ms 15000 \
   --max-age-seconds 300 \
   --require-answer \
-  --expect-app-version 1.5.1 \
+  --expect-app-version 1.5.2 \
   --expect-source-revision <40-character-git-sha>
 ```
 

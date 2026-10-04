@@ -51,3 +51,7 @@ credentials.json
 /watch-diagnostics-*/
 /watch-sensor-traces-*.csv
 /sensor-traces.csv
+
+# Python-generated test/cache files
+__pycache__/
+*.py[cod]
