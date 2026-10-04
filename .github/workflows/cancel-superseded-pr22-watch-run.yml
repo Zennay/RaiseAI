@@ -1,0 +1,62 @@
+name: Cancel superseded RaiseAI PR22 Watch run
+
+on:
+  push:
+    branches:
+      - ops/cancel-superseded-pr22-watch-run
+    paths:
+      - ".github/workflows/cancel-superseded-pr22-watch-run.yml"
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel only superseded exact run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const targetRunId = 37164844693;
+            const expectedOldHead = "bc3d9d6e310db64c37c8ce3c2fdaae2daeda67c9";
+            const expectedNewHead = "96eede22c4807b1dea1e5bf3b752cdad95a30eaf";
+            const { owner, repo } = context.repo;
+
+            const run = await github.rest.actions.getWorkflowRun({
+              owner,
+              repo,
+              run_id: targetRunId,
+            });
+            if (run.data.head_sha !== expectedOldHead) {
+              core.setFailed(`Refusing: run head ${run.data.head_sha} != expected old head ${expectedOldHead}`);
+              return;
+            }
+
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: 22,
+            });
+            if (pr.data.head.sha !== expectedNewHead) {
+              core.setFailed(`Refusing: PR22 head ${pr.data.head.sha} != expected new head ${expectedNewHead}`);
+              return;
+            }
+            if (pr.data.head.sha === run.data.head_sha) {
+              core.setFailed("Refusing: target run is not superseded");
+              return;
+            }
+
+            if (["queued", "in_progress", "pending"].includes(run.data.status)) {
+              await github.rest.actions.cancelWorkflowRun({
+                owner,
+                repo,
+                run_id: targetRunId,
+              });
+              core.info(`Cancelled superseded Watch run ${targetRunId}`);
+            } else {
+              core.info(`Run already terminal: ${run.data.status}/${run.data.conclusion}`);
+            }
