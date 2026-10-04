@@ -86,13 +86,29 @@ bundle_branch="${bundle_ref#refs/heads/}"
 }
 
 RESTORE_DIR="${RAISE_RESTORE_DIR:-$ARTIFACT_DIR/RaiseAI-v1.5.2-source}"
-[ ! -e "$RESTORE_DIR" ] || {
-  echo "Restore directory already exists: $RESTORE_DIR"
-  echo "Remove it or set RAISE_RESTORE_DIR to a fresh path."
-  exit 1
-}
+if [ -e "$RESTORE_DIR" ]; then
+  [ -d "$RESTORE_DIR/.git" ] || {
+    echo "Restore path exists but is not a Git checkout: $RESTORE_DIR"
+    exit 1
+  }
+  restored_revision="$(git -C "$RESTORE_DIR" rev-parse HEAD 2>/dev/null | tr 'A-F' 'a-f' || true)"
+  [ "$restored_revision" = "$revision" ] || {
+    echo "Existing restore revision does not match the handoff."
+    echo "  expected: $revision"
+    echo "  actual:   ${restored_revision:-<unresolved>}"
+    echo "Remove the restore directory or set RAISE_RESTORE_DIR to a fresh path."
+    exit 1
+  }
+  [ -z "$(git -C "$RESTORE_DIR" status --porcelain --untracked-files=normal)" ] || {
+    echo "Existing restore checkout is dirty: $RESTORE_DIR"
+    echo "Refusing to reuse it for physical evidence."
+    exit 1
+  }
+  echo "Reusing exact clean restored source: $RESTORE_DIR"
+else
+  git clone -q -b "$bundle_branch" "$BUNDLE" "$RESTORE_DIR"
+fi
 
-git clone -q -b "$bundle_branch" "$BUNDLE" "$RESTORE_DIR"
 test "$(git -C "$RESTORE_DIR" rev-parse HEAD | tr 'A-F' 'a-f')" = "$revision"
 test -z "$(git -C "$RESTORE_DIR" status --porcelain --untracked-files=normal)"
 
