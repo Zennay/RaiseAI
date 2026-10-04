@@ -446,6 +446,7 @@ class MainActivity : Activity(), SensorEventListener {
         val triggers = CalibrationStore.triggerCount(this)
         val samples = SensorTraceRecorder.sampleCount(this)
         val trials = SensorTrialRecorder.trialCount(this)
+        val trialProgress = SensorTrialRecorder.progress(this)
         val lastSimilarity = CalibrationStore.lastTriggerSimilarity(this)
         val assistantPath = CalibrationStore.lastAssistantPath(this)
         val activeMinutes = CalibrationStore.activeMonitoringMs(this) / 60_000L
@@ -457,6 +458,19 @@ class MainActivity : Activity(), SensorEventListener {
             append("\nAssistant route: $assistantPath")
             append("\nActive: ${activeMinutes}m · Sleep paused: ${sleepMinutes}m")
             append("\nAssistant retriggers blocked: $sessionBlocks")
+            append(
+                "\nV1 trials: mouth ${trialProgress.mouthTrials}/30 " +
+                    "(${"%.0f".format(trialProgress.detectionRate * 100)}% detected) · " +
+                    "non-trigger ${trialProgress.nonTriggerTrials}/100 " +
+                    "(${"%.0f".format(trialProgress.falseTriggerRate * 100)}% false)"
+            )
+            if (trialProgress.mixedEvidenceIdentity) {
+                append("\n⚠ Mixed app/detector trial revisions — clear test data")
+            } else if (trialProgress.v1GatePassed) {
+                append("\n✓ V1 reliability gate measured")
+            } else if (trialProgress.rejectedTrials > 0) {
+                append("\nRejected/incomplete trials: ${trialProgress.rejectedTrials}")
+            }
         }
     }
 
