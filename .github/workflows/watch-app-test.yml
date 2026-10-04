@@ -112,6 +112,41 @@ jobs:
             :app:verifyEvidenceBuildIdentity testDebugUnitTest assembleDebug
           grep -R --fixed-strings "$RAISE_BUILD_REVISION" app/build/generated >/dev/null
           echo "Generated BuildConfig contains exact source revision: $RAISE_BUILD_REVISION"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import zipfile
+          from pathlib import Path
+
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          metadata_path = Path("app/build/outputs/apk/debug/output-metadata.json")
+          revision = os.environ["RAISE_BUILD_REVISION"].encode("ascii")
+
+          with zipfile.ZipFile(apk) as archive:
+              dex_files = [name for name in archive.namelist() if name.endswith(".dex")]
+              hits = [name for name in dex_files if revision in archive.read(name)]
+          if not hits:
+              raise SystemExit("exact source revision not embedded in APK DEX")
+
+          gradle = Path("app/build.gradle.kts").read_text()
+          version_name = Path("VERSION.txt").read_text().strip()
+          match = re.search(r"versionCode\\s*=\\s*(\\d+)", gradle)
+          if not match:
+              raise SystemExit("versionCode not found in app/build.gradle.kts")
+          version_code = int(match.group(1))
+
+          metadata = json.loads(metadata_path.read_text())
+          element = metadata["elements"][0]
+          if element.get("versionName") != version_name or element.get("versionCode") != version_code:
+              raise SystemExit(
+                  f"APK metadata mismatch: expected {version_code}/{version_name}, "
+                  f"got {element.get('versionCode')}/{element.get('versionName')}"
+              )
+
+          print("APK DEX contains exact source revision:", ", ".join(hits))
+          print("APK release identity:", version_code, version_name)
+          PY
 
       - name: Upload debug Watch APK
         uses: actions/upload-artifact@v4
