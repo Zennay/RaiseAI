@@ -51,15 +51,41 @@ TARGET="${ANDROID_SERIAL:-$(find_watch | head -n 1)}"
   exit 1
 }
 
+"$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$TARGET" || {
+  echo "Selected ADB target is not connected: $TARGET"
+  exit 1
+}
+
+MODEL="$("$ADB" -s "$TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+DEVICE="$("$ADB" -s "$TARGET" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
+CHARACTERISTICS="$("$ADB" -s "$TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+FEATURES="$("$ADB" -s "$TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+if [ "$MODEL" != "SM_L315F" ] &&
+   ! printf '%s' "$DEVICE" | grep -qi '^fresh' &&
+   ! printf '%s' "$CHARACTERISTICS" | grep -qi watch &&
+   ! printf '%s\n' "$FEATURES" | grep -q 'android.hardware.type.watch'; then
+  echo "Refusing gateway provisioning to non-Wear ADB target: $TARGET"
+  exit 1
+fi
+
 if ! "$ADB" -s "$TARGET" shell run-as "$PACKAGE" id >/dev/null 2>&1; then
   echo "Raise AI debug build is not installed or run-as is unavailable."
   exit 1
 fi
 
-TMP="/data/local/tmp/raise-gateway.properties"
+TMP="/data/local/tmp/raise-gateway-$$.properties"
+cleanup_remote_tmp() {
+  "$ADB" -s "$TARGET" shell rm -f "$TMP" >/dev/null 2>&1 || true
+}
+trap cleanup_remote_tmp EXIT
+
 "$ADB" -s "$TARGET" push "$PROFILE" "$TMP" >/dev/null
-"$ADB" -s "$TARGET" shell run-as "$PACKAGE"   sh -c "'mkdir -p files && cp $TMP files/raise-gateway.properties && chmod 600 files/raise-gateway.properties'"
-"$ADB" -s "$TARGET" shell rm -f "$TMP"
+"$ADB" -s "$TARGET" shell chmod 600 "$TMP"
+"$ADB" -s "$TARGET" shell run-as "$PACKAGE" \
+  sh -c "'mkdir -p files && cp $TMP files/raise-gateway.properties && chmod 600 files/raise-gateway.properties'"
+
+cleanup_remote_tmp
+trap - EXIT
 
 echo "Gateway profile installed on Watch: $TARGET"
 echo "URL: $URL"
