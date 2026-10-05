@@ -159,6 +159,24 @@ class MainActivity : Activity(), SensorEventListener {
             gravity = android.view.Gravity.CENTER
         }, matchWrap(bottom = 6))
 
+        column.addView(Button(this).apply {
+            text = responseModeLabel(ResponseModeStore.load(this@MainActivity))
+            textSize = 13f
+            isAllCaps = false
+            minHeight = dp(48)
+            setOnClickListener {
+                val next = ResponseModeStore.cycle(this@MainActivity)
+                text = responseModeLabel(next)
+                toast(
+                    when (next) {
+                        ResponseMode.SILENT -> "Answers stay silent"
+                        ResponseMode.SHORT_SPOKEN -> "Short answers will be spoken"
+                        ResponseMode.FULL_SPOKEN -> "Full answers will be spoken"
+                    }
+                )
+            }
+        }, matchWrap(bottom = 6))
+
         column.addView(button("Open ChatGPT Web fallback") {
             if (!ChatGptLauncher.launchFromActivity(this)) {
                 toast("ChatGPT fallback could not be opened")
@@ -473,6 +491,12 @@ class MainActivity : Activity(), SensorEventListener {
                 append("\nRejected/incomplete trials: ${trialProgress.rejectedTrials}")
             }
         }
+    }
+
+    private fun responseModeLabel(mode: ResponseMode): String = when (mode) {
+        ResponseMode.SILENT -> "Answer audio: silent"
+        ResponseMode.SHORT_SPOKEN -> "Answer audio: short"
+        ResponseMode.FULL_SPOKEN -> "Answer audio: full"
     }
 
     private fun requestNotificationPermissionIfNeeded() {
