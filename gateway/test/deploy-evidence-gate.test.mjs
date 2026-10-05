@@ -4,6 +4,18 @@ import { validateDeployEvidence, assertDeployEvidence } from "../deploy/validate
 
 const revision = "9fdf2c7d73766ef02692d5d62708a113686de210";
 
+function openRouterProbe() {
+  return {
+    name: "openrouter_quick_ai_probe",
+    ok: true,
+    status: 200,
+    route: "quick_ai",
+    configured: true,
+    provider: "openrouter",
+    model: "z-ai/glm-5.3-flash"
+  };
+}
+
 function goodEvidence({ degraded = false } = {}) {
   return {
     schema_version: 3,
@@ -59,7 +71,7 @@ function goodEvidence({ degraded = false } = {}) {
           profile_mode_600: true
         }
       },
-      initial_smoke: { outcome: "success", ok: true, degraded, checks: [] },
+      initial_smoke: { outcome: "success", ok: true, degraded, checks: [openRouterProbe()] },
       idempotent_redeploy: { outcome: "success" },
       repeat_payload: {
         outcome: "success",
@@ -94,7 +106,7 @@ function goodEvidence({ degraded = false } = {}) {
           profile_mode_600: true
         }
       },
-      repeat_smoke: { outcome: "success", ok: true, degraded, checks: [] }
+      repeat_smoke: { outcome: "success", ok: true, degraded, checks: [openRouterProbe()] }
     }
   };
 }
@@ -117,6 +129,36 @@ test("allows a degraded dependency when core deployment proof is green", () => {
     }),
     []
   );
+});
+
+test("accepts production evidence only when both OpenRouter probes are proven", () => {
+  assert.deepEqual(
+    validateDeployEvidence(goodEvidence(), {
+      expectedRevision: revision,
+      requireOpenRouter: true
+    }),
+    []
+  );
+});
+
+test("rejects production evidence when an OpenRouter probe is missing or degraded", () => {
+  const evidence = goodEvidence();
+  evidence.verification.initial_smoke.checks = [];
+  evidence.verification.repeat_smoke.checks[0] = {
+    name: "openrouter_quick_ai_probe",
+    ok: true,
+    route: "quick_ai",
+    configured: false,
+    reason: "openrouter_not_configured",
+    degraded: true
+  };
+
+  const errors = validateDeployEvidence(evidence, {
+    expectedRevision: revision,
+    requireOpenRouter: true
+  });
+  assert.equal(errors.includes("initial OpenRouter quick_ai probe not proven"), true);
+  assert.equal(errors.includes("repeat OpenRouter quick_ai probe not proven"), true);
 });
 
 test("rejects stale live revision and an inactive service", () => {

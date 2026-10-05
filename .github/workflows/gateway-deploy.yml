@@ -156,4 +156,5 @@ jobs:
         env:
           RAISE_EVIDENCE_PATH: ${{ runner.temp }}/raise-gateway-deploy-evidence.json
           RAISE_EXPECTED_REVISION: ${{ github.sha }}
+          RAISE_REQUIRE_OPENROUTER: "1"
         run: node deploy/validate-deploy-evidence.mjs
