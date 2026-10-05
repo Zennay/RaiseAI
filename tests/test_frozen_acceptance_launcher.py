@@ -56,6 +56,10 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 set -euo pipefail
                 : "${FAKE_HANDOFF_LOG:?}"
                 if [ "${1:-}" = "--verify-only" ]; then
+                  if [ "${FAKE_VERIFY_FAIL:-0}" = "1" ]; then
+                    echo "simulated frozen handoff verification failure"
+                    exit 70
+                  fi
                   [ -n "${RAISE_RESTORE_DIR:-}" ] || {
                     echo "verify restore directory missing"
                     exit 71
@@ -133,10 +137,16 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                       printf '%s\n' "${FAKE_MODEL:-SM-L315F}"
                       ;;
                     "shell getprop ro.build.characteristics")
-                      echo "watch"
+                      if [ "${FAKE_NOT_WEAR:-0}" = "1" ]; then
+                        echo "nosdcard"
+                      else
+                        echo "watch"
+                      fi
                       ;;
                     "shell pm list features")
-                      echo "feature:android.hardware.type.watch"
+                      if [ "${FAKE_NOT_WEAR:-0}" != "1" ]; then
+                        echo "feature:android.hardware.type.watch"
+                      fi
                       ;;
                     *)
                       echo "unexpected adb invocation: $*" >&2
@@ -206,6 +216,41 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
             "No APK was installed and no physical acceptance session was started.",
             result.stdout,
         )
+
+    def test_unknown_option_fails_before_fetch(self):
+        result = self.run_launcher(args=["--definitely-not-a-real-option"])
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Unknown option: --definitely-not-a-real-option", result.stdout)
+        self.assertIn("Usage:", result.stdout)
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
+
+    def test_preflight_stops_when_frozen_handoff_verification_fails(self):
+        result = self.run_launcher(
+            {"FAKE_VERIFY_FAIL": "1"},
+            args=["--preflight-only", str(self.profile)],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.fetch_marker.exists())
+        self.assertIn(
+            "simulated frozen handoff verification failure",
+            result.stdout,
+        )
+        self.assertNotIn("FROZEN-ACCEPTANCE PREFLIGHT PASS", result.stdout)
+        self.assertFalse(self.log.exists())
+
+    def test_rejects_matching_model_that_is_not_wear_os_before_fetch(self):
+        result = self.run_launcher({"FAKE_NOT_WEAR": "1"})
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Selected ADB target does not identify as Wear OS",
+            result.stdout,
+        )
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
 
     def test_rejects_multiple_active_adb_devices_before_fetch(self):
         result = self.run_launcher({"FAKE_MULTIPLE_DEVICES": "1"})
