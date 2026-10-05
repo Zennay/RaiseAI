@@ -40,6 +40,11 @@ case "${1:-}" in
       exit 2
     fi
     ;;
+  -*)
+    echo "Unknown option: $1"
+    usage
+    exit 2
+    ;;
   "")
     ;;
   *)
