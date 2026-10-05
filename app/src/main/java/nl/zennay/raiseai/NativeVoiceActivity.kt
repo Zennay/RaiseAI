@@ -38,6 +38,11 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
+    private val retryListeningRunnable = Runnable {
+        if (!submitted && !isFinishing && !isDestroyed) {
+            startListening()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -175,11 +180,8 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
         if (retryable && retryPolicy.tryConsumeRetry()) {
             transcriptText.text = "Ik hoorde niets — nog één keer"
-            mainHandler.postDelayed({
-                if (!isFinishing && !isDestroyed) {
-                    startListening()
-                }
-            }, RETRY_DELAY_MS)
+            mainHandler.removeCallbacks(retryListeningRunnable)
+            mainHandler.postDelayed(retryListeningRunnable, RETRY_DELAY_MS)
         } else if (retryable) {
             showError("Ik hoor niets")
             detailText.text =
@@ -214,6 +216,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private fun submit(text: String) {
         if (submitted) return
         submitted = true
+        mainHandler.removeCallbacks(retryListeningRunnable)
         recognizer?.stopListening()
         transcriptText.text = text
 
@@ -310,6 +313,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
     private fun showError(message: String) {
         submitted = true
+        mainHandler.removeCallbacks(retryListeningRunnable)
         recognizer?.cancel()
         NativeSessionState.set("error")
         statusText.text = message
