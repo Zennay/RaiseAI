@@ -1,0 +1,93 @@
+name: PWQ-5 exact-main OpenRouter proof
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pwq5-exact-main-provider-proof.yml"
+  workflow_dispatch: {}
+
+jobs:
+  prove:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 15
+    env:
+      EXPECTED_MAIN: 46de084450c59c51b5915167ae2e4507db3e48f6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_MAIN }}
+
+      - name: Prove exact canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN"
+          test "$(hostname)" = "vps-bb300bba"
+
+      - name: Deploy exact main
+        shell: bash
+        working-directory: gateway
+        env:
+          RAISE_DEPLOY_REVISION: ${{ env.EXPECTED_MAIN }}
+          RAISE_READY_REPORT: ${{ runner.temp }}/raise-ready-pwq5.json
+        run: bash deploy/install-user-gateway.sh
+
+      - name: Initial live OpenRouter smoke
+        shell: bash
+        working-directory: gateway
+        env:
+          RAISE_EXPECTED_REVISION: ${{ env.EXPECTED_MAIN }}
+          RAISE_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-pwq5-initial.json
+        run: node deploy/smoke-live.mjs
+
+      - name: Prove idempotent redeploy
+        shell: bash
+        working-directory: gateway
+        env:
+          RAISE_DEPLOY_REVISION: ${{ env.EXPECTED_MAIN }}
+          RAISE_READY_REPORT: ${{ runner.temp }}/raise-ready-pwq5-repeat.json
+        run: bash deploy/assert-idempotent-redeploy.sh
+
+      - name: Repeat live OpenRouter smoke
+        shell: bash
+        working-directory: gateway
+        env:
+          RAISE_EXPECTED_REVISION: ${{ env.EXPECTED_MAIN }}
+          RAISE_SMOKE_REPORT: ${{ runner.temp }}/raise-smoke-pwq5-repeat.json
+        run: node deploy/smoke-live.mjs
+
+      - name: Gate both live provider probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          expected = os.environ["EXPECTED_MAIN"]
+          for name in ("initial", "repeat"):
+              report = json.loads((temp / f"raise-smoke-pwq5-{name}.json").read_text())
+              assert report["ok"] is True, (name, report)
+              assert report["expected_revision"] == expected, (name, report.get("expected_revision"))
+              probes = {item["name"]: item for item in report["checks"]}
+              probe = probes["openrouter_quick_ai_probe"]
+              assert probe["ok"] is True, (name, probe)
+              assert probe.get("configured") is True, (name, probe)
+              assert probe.get("status") == 200, (name, probe)
+              assert probe.get("provider") == "openrouter", (name, probe)
+          print("PWQ5_PROVIDER_PROOF_GREEN")
+          PY
+
+      - name: Upload secret-safe proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwq5-openrouter-proof-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/raise-ready-pwq5.json
+            ${{ runner.temp }}/raise-ready-pwq5-repeat.json
+            ${{ runner.temp }}/raise-smoke-pwq5-initial.json
+            ${{ runner.temp }}/raise-smoke-pwq5-repeat.json
+          if-no-files-found: error
+          retention-days: 30
