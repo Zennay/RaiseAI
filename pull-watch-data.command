@@ -20,16 +20,33 @@ if [ -z "$ADB" ]; then
 fi
 
 DEVICES="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
-COUNT="$(printf '%s\n' "$DEVICES" | awk 'NF {n++} END {print n+0}')"
-if [ "$COUNT" -eq 0 ]; then
-  echo "No watch connected over ADB. Turn on Wireless debugging and connect first."
-  exit 1
-elif [ "$COUNT" -eq 1 ]; then
-  TARGET="$(printf '%s\n' "$DEVICES" | awk 'NF {print; exit}')"
+BOUND_TARGET="${ANDROID_SERIAL:-}"
+if [ -n "$BOUND_TARGET" ]; then
+  printf '%s\n' "$DEVICES" | grep -Fxq "$BOUND_TARGET" || {
+    echo "Prepared Watch is not connected over ADB: $BOUND_TARGET"
+    exit 1
+  }
+  TARGET="$BOUND_TARGET"
 else
-  echo "Connected devices:"
-  printf '%s\n' "$DEVICES" | sed 's/^/  /'
-  read -r -p "Watch serial/address: " TARGET
+  COUNT="$(printf '%s\n' "$DEVICES" | awk 'NF {n++} END {print n+0}')"
+  if [ "$COUNT" -eq 0 ]; then
+    echo "No watch connected over ADB. Turn on Wireless debugging and connect first."
+    exit 1
+  elif [ "$COUNT" -eq 1 ]; then
+    TARGET="$(printf '%s\n' "$DEVICES" | awk 'NF {print; exit}')"
+  else
+    echo "Connected devices:"
+    printf '%s\n' "$DEVICES" | sed 's/^/  /'
+    read -r -p "Watch serial/address: " TARGET
+  fi
+fi
+
+characteristics="$("$ADB" -s "$TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+features="$("$ADB" -s "$TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+if ! printf '%s' "$characteristics" | grep -qi watch &&
+   ! printf '%s\n' "$features" | grep -q 'android.hardware.type.watch'; then
+  echo "Selected ADB target is not a Wear OS watch: $TARGET"
+  exit 1
 fi
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
