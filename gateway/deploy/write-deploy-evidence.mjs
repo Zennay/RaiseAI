@@ -37,6 +37,9 @@ function safeCheck(check) {
   if (typeof check?.route === "string") result.route = check.route;
   if (typeof check?.reason === "string") result.reason = check.reason;
   if (typeof check?.degraded === "boolean") result.degraded = check.degraded;
+  if (typeof check?.configured === "boolean") result.configured = check.configured;
+  if (typeof check?.provider === "string") result.provider = check.provider;
+  if (typeof check?.model === "string") result.model = check.model;
   if (typeof check?.error === "string") result.error = check.error.slice(0, 500);
 
   return result;
