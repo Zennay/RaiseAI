@@ -20,6 +20,7 @@ object CalibrationStore {
     private const val KEY_SLEEP_PAUSED_MS = "sleep_paused_ms"
     private const val KEY_SENSOR_EVENTS = "sensor_events"
     private const val KEY_SESSION_BLOCKS = "assistant_session_blocks"
+    private const val KEY_RAISE_TARGET = "raise_target"
 
     fun savePose(context: Context, x: Float, y: Float, z: Float) {
         val normalized = normalize(x, y, z) ?: return
@@ -63,6 +64,19 @@ object CalibrationStore {
     fun isSleepDndPauseEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(KEY_SLEEP_DND_PAUSE, true)
+
+    fun setRaiseTarget(context: Context, target: RaiseTarget) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_RAISE_TARGET, target.storageValue)
+            .apply()
+    }
+
+    fun getRaiseTarget(context: Context): RaiseTarget =
+        RaiseTarget.fromStored(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_RAISE_TARGET, null)
+        )
 
     fun recordTrigger(context: Context, similarity: Float) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
