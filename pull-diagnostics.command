@@ -99,7 +99,7 @@ if [ -s "$OUT/voice-startup-evidence.json" ]; then
 fi
 
 if [ -s "$OUT/voice-startup-evidence.jsonl" ]; then
-  samples="$(grep -cve '^[[:space:]]* "$OUT/voice-startup-evidence.jsonl" || true)"
+  samples="$(grep -cve '^[[:space:]]*$' "$OUT/voice-startup-evidence.jsonl" || true)"
   echo "Voice startup history included: $OUT/voice-startup-evidence.jsonl ($samples samples; Watch retains the newest 50)"
   if command -v python3 >/dev/null 2>&1; then
     SUMMARY_ARGS=(
