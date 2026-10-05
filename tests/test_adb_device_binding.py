@@ -111,8 +111,11 @@ class InstallWatchBindingTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        self.home = self.root / "home"
+        self.home.mkdir()
         self.sdk = self.root / "sdk"
         (self.sdk / "platform-tools").mkdir(parents=True)
+        (self.sdk / "build-tools" / "35.0.0").mkdir(parents=True)
         self.log = self.root / "adb-install.log"
         self.serial_file = self.root / "installed-watch-serial"
         self.installed_apk_sha_file = self.root / "installed-apk-sha256"
@@ -227,11 +230,29 @@ exit 2
         )
         unzip.chmod(0o755)
 
+        uname = self.bin / "uname"
+        uname.write_text(
+            "#!/bin/bash\n"
+            "if [ \"${FAKE_DARWIN:-0}\" = \"1\" ]; then echo Darwin; else echo Linux; fi\n",
+            encoding="utf-8",
+        )
+        uname.chmod(0o755)
+
+        apksigner = self.sdk / "build-tools" / "35.0.0" / "apksigner"
+        apksigner.write_text(
+            "#!/bin/bash\n"
+            "printf 'invoked\\n' >> \"${APKSIGNER_LOG:?}\"\n"
+            "exit 91\n",
+            encoding="utf-8",
+        )
+        apksigner.chmod(0o755)
+
     def tearDown(self):
         self.temp.cleanup()
 
     def run_installer(self, serial=None, extra_env=None):
         env = os.environ.copy()
+        env["HOME"] = str(self.home)
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
         if serial is None:
             env.pop("ANDROID_SERIAL", None)
@@ -271,6 +292,32 @@ exit 2
         )
         self.assertTrue(self.used_serials())
         self.assertEqual(set(self.used_serials()), {"watch-b"})
+    def test_preserve_apk_bytes_skips_darwin_resigning(self):
+        signing_dir = self.home / ".raiseai" / "signing"
+        signing_dir.mkdir(parents=True)
+        (signing_dir / "raiseai-debug.keystore").write_bytes(b"synthetic-key")
+        (self.home / ".raiseai" / "autoconnect-installed").write_text("1\n", encoding="utf-8")
+        apksigner_log = self.root / "apksigner.log"
+
+        result = self.run_installer(
+            "watch-b",
+            {
+                "FAKE_DARWIN": "1",
+                "RAISE_PRESERVE_APK_BYTES": "1",
+                "APKSIGNER_LOG": str(apksigner_log),
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(apksigner_log.exists())
+        self.assertIn(
+            "Preserving exact prebuilt APK bytes; local re-signing is disabled",
+            result.stdout,
+        )
+        self.assertEqual(
+            self.installed_apk_sha_file.read_text(encoding="utf-8").strip(),
+            hashlib.sha256(self.apk.read_bytes()).hexdigest(),
+        )
 
     def test_installer_rejects_non_watch_android_serial(self):
         result = self.run_installer("phone-a")
