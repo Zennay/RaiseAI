@@ -42,9 +42,27 @@ function watchProfileAttestationOk(report) {
   );
 }
 
+function openRouterProbeOk(report) {
+  const check = report?.checks?.find(
+    item => item?.name === "openrouter_quick_ai_probe"
+  );
+  return (
+    report?.outcome === SUCCESS &&
+    report?.ok === true &&
+    check?.ok === true &&
+    check?.status === 200 &&
+    check?.route === "quick_ai" &&
+    check?.configured === true &&
+    check?.provider === "openrouter"
+  );
+}
+
 export function validateDeployEvidence(
   evidence,
-  { expectedRevision = process.env.RAISE_EXPECTED_REVISION ?? process.env.GITHUB_SHA ?? "" } = {}
+  {
+    expectedRevision = process.env.RAISE_EXPECTED_REVISION ?? process.env.GITHUB_SHA ?? "",
+    requireOpenRouter = process.env.RAISE_REQUIRE_OPENROUTER === "1"
+  } = {}
 ) {
   const errors = [];
   const expected = text(expectedRevision);
@@ -123,6 +141,19 @@ export function validateDeployEvidence(
     verification.repeat_smoke?.outcome === SUCCESS && verification.repeat_smoke?.ok === true,
     "repeat live smoke did not succeed"
   );
+
+  if (requireOpenRouter) {
+    push(
+      errors,
+      openRouterProbeOk(verification.initial_smoke),
+      "initial OpenRouter quick_ai probe not proven"
+    );
+    push(
+      errors,
+      openRouterProbeOk(verification.repeat_smoke),
+      "repeat OpenRouter quick_ai probe not proven"
+    );
+  }
 
   return errors;
 }
