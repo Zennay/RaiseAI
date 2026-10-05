@@ -23,6 +23,7 @@ on:
       - "tools/verify-watch-apk-identity.py"
       - "tools/fetch-frozen-physical-handoff.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
+      - "tests/test_adb_device_binding.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -48,6 +49,7 @@ on:
       - "tools/verify-watch-apk-identity.py"
       - "tools/fetch-frozen-physical-handoff.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
+      - "tests/test_adb_device_binding.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -140,6 +142,7 @@ jobs:
       - name: Watch evidence contracts
         run: |
           python3 -m unittest discover -s tests -p 'test_frozen_physical_handoff_fetcher.py'
+          python3 -m unittest discover -s tests -p 'test_adb_device_binding.py'
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
