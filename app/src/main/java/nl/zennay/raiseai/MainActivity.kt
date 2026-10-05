@@ -135,6 +135,27 @@ class MainActivity : Activity(), SensorEventListener {
             recreate()
         }, matchWrap(bottom = 8))
 
+        val raiseTarget = CalibrationStore.getRaiseTarget(this)
+        column.addView(TextView(this).apply {
+            text = "Raise target · ${raiseTarget.displayName}"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            gravity = android.view.Gravity.CENTER
+        }, matchWrap(top = 2, bottom = 6))
+
+        column.addView(button(
+            if (raiseTarget == RaiseTarget.GEMINI) "Use Native Raise AI instead" else "Use Gemini instead"
+        ) {
+            val nextTarget = if (CalibrationStore.getRaiseTarget(this) == RaiseTarget.GEMINI) {
+                RaiseTarget.NATIVE
+            } else {
+                RaiseTarget.GEMINI
+            }
+            CalibrationStore.setRaiseTarget(this, nextTarget)
+            toast("Raise target: ${nextTarget.displayName}")
+            recreate()
+        }, matchWrap(bottom = 10))
+
         column.addView(TextView(this).apply {
             text = "Native Raise AI · VPS routed"
             setTextColor(Color.WHITE)
@@ -456,6 +477,7 @@ class MainActivity : Activity(), SensorEventListener {
         statsText.text = buildString {
             append("Triggers: $triggers · Samples: $samples · Trials: $trials")
             if (triggers > 0) append("\nLast match: ${"%.3f".format(lastSimilarity)}")
+            append("\nRaise target: ${CalibrationStore.getRaiseTarget(this@MainActivity).displayName}")
             append("\nAssistant route: $assistantPath")
             append("\nActive: ${activeMinutes}m · Sleep paused: ${sleepMinutes}m")
             append("\nAssistant retriggers blocked: $sessionBlocks")
