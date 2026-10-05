@@ -85,7 +85,15 @@ bundle_branch="${bundle_ref#refs/heads/}"
   exit 1
 }
 
-RESTORE_DIR="${RAISE_RESTORE_DIR:-$ARTIFACT_DIR/RaiseAI-v1.5.2-source}"
+VERIFY_TMP_ROOT=""
+if [ "$VERIFY_ONLY" -eq 1 ] && [ -z "${RAISE_RESTORE_DIR:-}" ]; then
+  VERIFY_TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/raiseai-handoff-verify.XXXXXX")"
+  RESTORE_DIR="$VERIFY_TMP_ROOT/source"
+  trap 'rm -rf "$VERIFY_TMP_ROOT"' EXIT
+else
+  RESTORE_DIR="${RAISE_RESTORE_DIR:-$ARTIFACT_DIR/RaiseAI-v1.5.2-source}"
+fi
+
 [ ! -e "$RESTORE_DIR" ] || {
   echo "Restore directory already exists: $RESTORE_DIR"
   echo "Remove it or set RAISE_RESTORE_DIR to a fresh path."
