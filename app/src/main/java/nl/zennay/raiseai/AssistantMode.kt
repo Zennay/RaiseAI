@@ -15,14 +15,17 @@ object AssistantModeStore {
     private const val PREFS = "raise_ai_prefs"
     private const val KEY_ASSISTANT_MODE = "assistant_mode"
 
+    fun resolve(stored: String?): AssistantMode =
+        when (stored) {
+            AssistantMode.NATIVE.storedValue -> AssistantMode.NATIVE
+            else -> AssistantMode.GEMINI
+        }
+
     fun get(context: Context): AssistantMode {
         val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_ASSISTANT_MODE, null)
 
-        return when (stored) {
-            AssistantMode.NATIVE.storedValue -> AssistantMode.NATIVE
-            else -> AssistantMode.GEMINI
-        }
+        return resolve(stored)
     }
 
     fun set(context: Context, mode: AssistantMode) {
