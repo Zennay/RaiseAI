@@ -32,11 +32,14 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private lateinit var transcriptText: TextView
     private lateinit var detailText: TextView
     private lateinit var orb: View
+    private lateinit var correctionRow: LinearLayout
     private lateinit var fallbackButton: Button
 
     private var recognizer: SpeechRecognizer? = null
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
+    private var pendingTranscript: String? = null
+    private var pendingReviewRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,7 +104,35 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         column.addView(transcriptText, fullWidth(bottom = 10))
 
         detailText = textView(12f, Color.LTGRAY)
-        column.addView(detailText, fullWidth(bottom = 14))
+        column.addView(detailText, fullWidth(bottom = 10))
+
+        correctionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+
+            addView(
+                Button(this@NativeVoiceActivity).apply {
+                    text = "Opnieuw"
+                    isAllCaps = false
+                    setOnClickListener { startListening() }
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = dp(4)
+                }
+            )
+            addView(
+                Button(this@NativeVoiceActivity).apply {
+                    text = "Annuleren"
+                    isAllCaps = false
+                    setOnClickListener { cancelAndFinish() }
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = dp(4)
+                }
+            )
+        }
+        column.addView(correctionRow, fullWidth(bottom = 8))
 
         fallbackButton = Button(this).apply {
             text = "Open Gemini fallback"
@@ -118,6 +149,10 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     private fun startListening() {
+        cancelPendingReview()
+        fallbackButton.visibility = View.GONE
+        detailText.text = ""
+
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             showError("Spraakherkenning is niet beschikbaar")
             return
@@ -143,6 +178,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         }
 
         submitted = false
+        transcriptText.text = "Zeg iets…"
         setState("listening", "Ik luister")
         recognizer?.startListening(intent)
     }
@@ -181,12 +217,12 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     override fun onResults(results: Bundle?) {
-        val text = bestResult(results)
-        if (text.isNullOrBlank()) {
+        val review = VoiceTranscriptReview.prepare(bestResult(results))
+        if (review == null) {
             showError("Geen transcript ontvangen")
             return
         }
-        submit(text)
+        queueTranscriptForAutoSubmit(review)
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
@@ -202,9 +238,48 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             ?.firstOrNull()
             ?.trim()
 
+    private fun queueTranscriptForAutoSubmit(review: VoiceTranscriptReview.Pending) {
+        if (submitted) return
+
+        cancelPendingReview()
+        pendingTranscript = review.transcript
+        transcriptText.text = review.transcript
+        detailText.text = "Tik Opnieuw of Annuleren als dit niet klopt."
+        correctionRow.visibility = View.VISIBLE
+        setState("reviewing", "Versturen…")
+
+        val runnable = Runnable {
+            val text = pendingTranscript ?: return@Runnable
+            pendingTranscript = null
+            pendingReviewRunnable = null
+            correctionRow.visibility = View.GONE
+            submit(text)
+        }
+        pendingReviewRunnable = runnable
+        mainHandler.postDelayed(runnable, review.autoSubmitDelayMs)
+    }
+
+    private fun cancelPendingReview() {
+        pendingReviewRunnable?.let(mainHandler::removeCallbacks)
+        pendingReviewRunnable = null
+        pendingTranscript = null
+        if (::correctionRow.isInitialized) {
+            correctionRow.visibility = View.GONE
+        }
+    }
+
+    private fun cancelAndFinish() {
+        submitted = true
+        cancelPendingReview()
+        recognizer?.cancel()
+        NativeSessionState.set("idle")
+        finish()
+    }
+
     private fun submit(text: String) {
         if (submitted) return
         submitted = true
+        cancelPendingReview()
         recognizer?.stopListening()
         transcriptText.text = text
 
@@ -300,6 +375,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     private fun showError(message: String) {
+        cancelPendingReview()
         NativeSessionState.set("error")
         statusText.text = message
         orbAnimator?.cancel()
@@ -325,6 +401,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        cancelPendingReview()
         orbAnimator?.cancel()
         recognizer?.cancel()
         recognizer?.destroy()
