@@ -45,6 +45,8 @@ adb kill-server
 adb start-server
 ```
 
+Before starting the frozen v1.5.2 acceptance session, make `adb devices` show **only the intended Galaxy Watch 7** as an active `device`. Disconnect other ADB phones, emulators or watches for this session. The preserved v1.5.2 evidence-pull scripts predate strict `ANDROID_SERIAL` enforcement, so this one-device condition prevents later diagnostics/trial export from silently selecting another target without changing the frozen artifact.
+
 ## 2. Fetch the exact preserved handoff
 
 The canonical frozen bytes are preserved as GitHub Release asset `611084738` under tag
