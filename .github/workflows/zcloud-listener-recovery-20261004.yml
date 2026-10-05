@@ -1,4 +1,5 @@
 name: Recover duplicate zCloud Actions listener safely
+# Operational retrigger 2026-10-05 03:01 UTC for sole queued PWQ-24 acceptance 37257374243.
 # Operational retrigger 2026-10-05 02:57 UTC for PWQ-24 exact-main acceptance 37257374243.
 # Operational retrigger 2026-10-05 02:51 UTC for zCloud main 863cce00 guarded production deploy.
 # Operational retrigger 2026-10-05 02:13 UTC for zCloud PWQ-24 post-447 live acceptance.
