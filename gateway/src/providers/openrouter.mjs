@@ -98,14 +98,22 @@ export function createOpenRouterExecutor({
           role: "system",
           content:
             "Je bent Raise AI, een snelle persoonlijke smartwatch-assistent. " +
-            "Antwoord in de taal van de gebruiker. Houd antwoorden standaard kort, duidelijk en direct bruikbaar op een horloge."
+            "Antwoord in de taal van de gebruiker. " +
+            (decision.route === "deep_ai"
+              ? "Geef een compact maar volledig antwoord; gebruik alleen extra detail wanneer dat nodig is."
+              : "Antwoord in maximaal 2 korte zinnen. Zet het direct bruikbare antwoord eerst en vermijd inleidingen, herhaling en afsluitende beleefdheden.")
         },
         {
           role: "user",
           content: text
         }
       ],
-      max_tokens: decision.route === "deep_ai" ? 320 : 180
+      max_tokens:
+        decision.route === "deep_ai"
+          ? 320
+          : decision.route === "current_info"
+            ? 160
+            : 120
     };
 
     if (decision.route === "current_info") {
