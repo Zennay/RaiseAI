@@ -219,6 +219,24 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
             result.stdout,
         )
 
+    def test_preflight_rejects_extra_arguments_before_side_effects(self):
+        result = self.run_launcher(
+            args=["--preflight-only", str(self.profile), "unexpected-extra"]
+        )
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Usage:", result.stdout)
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
+
+    def test_run_mode_rejects_extra_arguments_before_side_effects(self):
+        result = self.run_launcher(args=[str(self.profile), "unexpected-extra"])
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Usage:", result.stdout)
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
+
     def test_help_exits_without_profile_device_or_fetch_side_effects(self):
         missing_profile = self.root / "missing.properties"
         result = self.run_launcher(
