@@ -10,8 +10,34 @@ if [ "${1:-}" = "--verify-only" ]; then
 fi
 
 IDENTITY="$ARTIFACT_DIR/BUILD-IDENTITY.txt"
-APK="$ARTIFACT_DIR/RaiseAI-v1.5.2-debug.apk"
-BUNDLE="$ARTIFACT_DIR/RaiseAI-v1.5.2-source.bundle"
+
+shopt -s nullglob
+apk_matches=("$ARTIFACT_DIR"/RaiseAI-v*-debug.apk)
+bundle_matches=("$ARTIFACT_DIR"/RaiseAI-v*-source.bundle)
+shopt -u nullglob
+
+[ "${#apk_matches[@]}" -eq 1 ] || {
+  echo "Physical handoff must contain exactly one RaiseAI-v*-debug.apk"
+  exit 1
+}
+[ "${#bundle_matches[@]}" -eq 1 ] || {
+  echo "Physical handoff must contain exactly one RaiseAI-v*-source.bundle"
+  exit 1
+}
+
+APK="${apk_matches[0]}"
+BUNDLE="${bundle_matches[0]}"
+apk_name="${APK##*/}"
+bundle_name="${BUNDLE##*/}"
+handoff_version="${apk_name#RaiseAI-v}"
+handoff_version="${handoff_version%-debug.apk}"
+bundle_version="${bundle_name#RaiseAI-v}"
+bundle_version="${bundle_version%-source.bundle}"
+
+[ -n "$handoff_version" ] && [ "$handoff_version" = "$bundle_version" ] || {
+  echo "Physical handoff APK/source bundle versions do not match."
+  exit 1
+}
 
 if [ "$VERIFY_ONLY" -eq 0 ]; then
   if [ -z "$PROFILE" ] || [ ! -f "$PROFILE" ]; then
@@ -91,7 +117,7 @@ if [ "$VERIFY_ONLY" -eq 1 ] && [ -z "${RAISE_RESTORE_DIR:-}" ]; then
   RESTORE_DIR="$VERIFY_TMP_ROOT/source"
   trap 'rm -rf "$VERIFY_TMP_ROOT"' EXIT
 else
-  RESTORE_DIR="${RAISE_RESTORE_DIR:-$ARTIFACT_DIR/RaiseAI-v1.5.2-source}"
+  RESTORE_DIR="${RAISE_RESTORE_DIR:-$ARTIFACT_DIR/RaiseAI-v${handoff_version}-source}"
 fi
 
 [ ! -e "$RESTORE_DIR" ] || {
