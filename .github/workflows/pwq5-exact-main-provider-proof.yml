@@ -1,6 +1,11 @@
 name: PWQ-5 exact-main OpenRouter proof
 
 on:
+  push:
+    branches:
+      - "ops/pwq5-exact-main-provider-proof-20261005-0438"
+    paths:
+      - ".github/workflows/pwq5-exact-main-provider-proof.yml"
   pull_request:
     paths:
       - ".github/workflows/pwq5-exact-main-provider-proof.yml"
