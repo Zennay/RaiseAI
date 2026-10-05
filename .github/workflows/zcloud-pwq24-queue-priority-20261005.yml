@@ -1,0 +1,87 @@
+name: Prioritize zCloud PWQ-24 self-hosted queue
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-pwq24-queue-priority-20261005.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raiseai-zcloud-pwq24-queue-priority
+  cancel-in-progress: true
+
+jobs:
+  prioritize:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 5
+    steps:
+      - name: Cancel only superseded zCloud recovery and deferred draft checks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          gh auth status >/dev/null 2>&1
+
+          repo="Zennay/zCloud"
+          expected_main="7574568dec8fd26b037170cc64d9fb8acec69b8c"
+          protected_head="e12f97cd0c117b5edd35f082e73ca2a5c4906a94"
+          recovery_head="ac34a377d855f8132027feccfa79dda4e1eb3748"
+          deferred_head="f989de26e57e519909556651d6535a6ac3187074"
+
+          test "$(gh api "repos/$repo/branches/main" --jq .commit.sha)" = "$expected_main"
+          test "$(gh api "repos/$repo/pulls/493" --jq .state)" = "open"
+          test "$(gh api "repos/$repo/pulls/493" --jq .head.sha)" = "$protected_head"
+          test "$(gh api "repos/$repo/pulls/493" --jq .base.sha)" = "$expected_main"
+          test "$(gh api "repos/$repo/pulls/494" --jq .head.sha)" = "$recovery_head"
+          test "$(gh api "repos/$repo/pulls/495" --jq .draft)" = "true"
+          test "$(gh api "repos/$repo/pulls/495" --jq .head.sha)" = "$deferred_head"
+
+          cancel_if_exact() {
+            local run_id="$1"
+            local expected_sha="$2"
+            local reason="$3"
+            local payload status actual_sha
+            payload="$(gh api "repos/$repo/actions/runs/$run_id")"
+            status="$(jq -r .status <<<"$payload")"
+            actual_sha="$(jq -r .head_sha <<<"$payload")"
+            test "$actual_sha" = "$expected_sha"
+            case "$status" in
+              queued|pending|waiting|requested)
+                gh api --method POST "repos/$repo/actions/runs/$run_id/cancel" >/dev/null
+                echo "ZCLOUD_PWQ24_CANCEL_REQUESTED run=$run_id reason=$reason status=$status"
+                ;;
+              completed)
+                echo "ZCLOUD_PWQ24_CANCEL_SKIP_COMPLETED run=$run_id reason=$reason"
+                ;;
+              in_progress)
+                echo "ZCLOUD_PWQ24_CANCEL_PRESERVE_IN_PROGRESS run=$run_id reason=$reason"
+                ;;
+              *)
+                echo "unexpected status for $run_id: $status" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          # Current and older PR #494 recovery carriers are superseded by the
+          # successful RaiseAI recovery run 37309296111.
+          cancel_if_exact 37308805040 "$recovery_head" "recovery-carrier-superseded"
+          cancel_if_exact 37308805067 "$recovery_head" "recovery-carrier-superseded"
+          cancel_if_exact 37308805016 "$recovery_head" "recovery-carrier-superseded"
+          cancel_if_exact 37306853005 "0dc65914b3579028779e927b51a0a7e03c5d9cca" "older-recovery-head"
+          cancel_if_exact 37306784961 "060ad8c9297d4299bfb587f962d06ad72326cb33" "older-recovery-head"
+          cancel_if_exact 37306785163 "060ad8c9297d4299bfb587f962d06ad72326cb33" "older-recovery-head"
+
+          # PR #495 is intentionally deferred until PWQ-24/#493 releases the gate.
+          cancel_if_exact 37307090647 "$deferred_head" "deferred-pr495"
+          cancel_if_exact 37307090696 "$deferred_head" "deferred-pr495"
+
+          echo "ZCLOUD_PWQ24_PROTECTED_RUNS"
+          for run_id in 37306121152 37306121320 37306121155 37306121202 37306121334; do
+            gh api "repos/$repo/actions/runs/$run_id"               --jq '"run=" + (.id|tostring) + " status=" + .status + " sha=" + .head_sha'
+          done
+          echo "ZCLOUD_PWQ24_QUEUE_PRIORITY_GREEN"
