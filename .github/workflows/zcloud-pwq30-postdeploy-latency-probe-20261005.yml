@@ -1,0 +1,113 @@
+name: Measure zCloud PWQ-30 post-deploy latency
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-pwq30-postdeploy-latency-probe-20261005.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 5
+    steps:
+      - name: Measure live read-model latency without mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          python3 - <<'PY'
+          import json
+          import sqlite3
+          import statistics
+          import subprocess
+          import time
+          import urllib.request
+
+          BASE = "http://127.0.0.1:8765"
+          EXPECTED = "759fa629a8a40fe255ea490e27a59e79827fe472"
+          DB = "/home/ubuntu/zennay-cloud/history.db"
+
+          def service_state():
+              out = subprocess.check_output([
+                  "systemctl","show","zennay-cloud.service",
+                  "--property=MainPID,NRestarts,ActiveState,SubState",
+                  "--value"
+              ], text=True).splitlines()
+              return {
+                  "main_pid": out[0] if len(out) > 0 else "",
+                  "nrestarts": out[1] if len(out) > 1 else "",
+                  "active_state": out[2] if len(out) > 2 else "",
+                  "sub_state": out[3] if len(out) > 3 else "",
+              }
+
+          def db_state():
+              with sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=5) as conn:
+                  return {
+                      "runner_commands": conn.execute("SELECT COUNT(*) FROM runner_commands").fetchone()[0],
+                      "runner_events": conn.execute("SELECT COUNT(*) FROM runner_events").fetchone()[0],
+                  }
+
+          def get(path, timeout=35):
+              started = time.monotonic()
+              with urllib.request.urlopen(BASE + path, timeout=timeout) as response:
+                  payload = json.load(response)
+              return round(time.monotonic() - started, 3), payload
+
+          before_service = service_state()
+          before_db = db_state()
+
+          receipt_elapsed, status = get("/api/status")
+          cloud = next((p for p in status.get("projects", []) if p.get("id") == "cloud"), {})
+          state = cloud.get("execution_state") or {}
+          if cloud.get("state_source") != "evidence_receipt" or state.get("commit_sha") != EXPECTED or state.get("ci_status") != "success":
+              raise SystemExit("PWQ30_POSTDEPLOY_RECEIPT_MISMATCH=" + json.dumps({
+                  "state_source": cloud.get("state_source"),
+                  "execution_state": state,
+              }, sort_keys=True))
+
+          samples = {"/api/runner-live": [], "/api/status": []}
+          for _ in range(3):
+              for path in ("/api/runner-live", "/api/status"):
+                  elapsed, payload = get(path)
+                  samples[path].append(elapsed)
+                  if not isinstance(payload, dict):
+                      raise SystemExit(f"invalid JSON object for {path}")
+              time.sleep(1)
+
+          after_db = db_state()
+          after_service = service_state()
+
+          summary = {}
+          for path, values in samples.items():
+              summary[path] = {
+                  "samples": values,
+                  "median": round(statistics.median(values), 3),
+                  "max": max(values),
+                  "min": min(values),
+              }
+
+          result = {
+              "expected_main": EXPECTED,
+              "receipt_probe_seconds": receipt_elapsed,
+              "latency": summary,
+              "baseline": {"/api/runner-live": 16.413, "/api/status": 10.419},
+              "db_before": before_db,
+              "db_after": after_db,
+              "service_before": before_service,
+              "service_after": after_service,
+              "runner_command_delta": after_db["runner_commands"] - before_db["runner_commands"],
+              "service_restart_changed": before_service["main_pid"] != after_service["main_pid"] or before_service["nrestarts"] != after_service["nrestarts"],
+          }
+          print("PWQ30_POSTDEPLOY_LATENCY=" + json.dumps(result, sort_keys=True))
+
+          if result["runner_command_delta"] != 0:
+              raise SystemExit("read probe caused runner-command churn")
+          if result["service_restart_changed"]:
+              raise SystemExit("zCloud service restarted during read-only latency probe")
+          print("PWQ30_POSTDEPLOY_PROBE_GREEN")
+          PY
