@@ -210,17 +210,11 @@ Run `pull-diagnostics.command` after a test session to export Raise AI logcat, p
 
 ## Next proof gate
 
-Before recorder-style AI dictation or more UI:
+The current product gate is the **frozen v1.5.2 physical acceptance session** from merged-main revision `8f719bb273f9b997848864f342598e7df5f090e5`.
 
-1. install on the physical Watch 7;
-2. confirm **Test Gemini voice** opens Gemini and note whether `VOICE_COMMAND` or `ASSIST` was used;
-3. confirm **Test AI question** gets a normal Gemini answer;
-4. confirm **Test Google Home command** actually changes a harmless Home device;
-5. confirm raises increment **Triggers**;
-6. see whether the background trigger opens Gemini hands-free;
-7. collect labeled mouth/time-check/normal traces;
-8. measure false positives and battery impact.
+Do not use the older Gemini-first checklist as the acceptance path. Follow [PHYSICAL-ACCEPTANCE.md](PHYSICAL-ACCEPTANCE.md) to verify the exact published handoff, install/provision it on the Galaxy Watch 7, prove one Watch → VPS → provider → Watch `quick_ai` round trip, and collect the provenance-bound 30 intentional / 100 non-trigger V1 reliability set.
 
+`DEVICE-TEST.md` is retained as historical V0.3 Gemini-fallback context only.
 
 ## v0.6: hands-free Gemini fix
 - Removed generic `ACTION_VOICE_COMMAND` because Samsung routed it to Bixby.
