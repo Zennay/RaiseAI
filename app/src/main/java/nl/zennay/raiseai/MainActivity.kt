@@ -135,24 +135,49 @@ class MainActivity : Activity(), SensorEventListener {
             recreate()
         }, matchWrap(bottom = 8))
 
+        val selectedAssistant = AssistantModeStore.get(this)
         column.addView(TextView(this).apply {
-            text = "Native Raise AI · VPS routed"
+            text = "Main AI · ${selectedAssistant.label}"
             setTextColor(Color.WHITE)
             textSize = 13f
             gravity = android.view.Gravity.CENTER
         }, matchWrap(top = 2, bottom = 6))
 
-        column.addView(button("Open native Raise AI") {
-            if (!NativeVoiceLauncher.launchFromActivity(this)) {
-                toast("Native Raise AI could not be opened")
+        column.addView(button(
+            if (selectedAssistant == AssistantMode.GEMINI) "✓ Gemini (default)" else "Use Gemini"
+        ) {
+            AssistantModeStore.set(this, AssistantMode.GEMINI)
+            if (CalibrationStore.isMonitoringEnabled(this)) {
+                stopService(Intent(this, GestureMonitorService::class.java))
+                startForegroundService(Intent(this, GestureMonitorService::class.java))
+            }
+            toast("Gemini is now the main AI")
+            recreate()
+        }, matchWrap(bottom = 6))
+
+        column.addView(button(
+            if (selectedAssistant == AssistantMode.NATIVE) "✓ Native Raise AI" else "Use Native Raise AI"
+        ) {
+            AssistantModeStore.set(this, AssistantMode.NATIVE)
+            if (CalibrationStore.isMonitoringEnabled(this)) {
+                stopService(Intent(this, GestureMonitorService::class.java))
+                startForegroundService(Intent(this, GestureMonitorService::class.java))
+            }
+            toast("Native Raise AI is now the main AI")
+            recreate()
+        }, matchWrap(bottom = 6))
+
+        column.addView(button("Open main AI") {
+            if (!PreferredAssistantLauncher.launchFromActivity(this)) {
+                toast("Selected assistant could not be opened")
             }
         }, matchWrap(bottom = 6))
 
         column.addView(TextView(this).apply {
             text = if (GatewayConfig.isConfigured(this@MainActivity)) {
-                "✓ Secure VPS gateway configured"
+                "✓ Secure VPS gateway configured for Native Raise AI"
             } else {
-                "○ VPS gateway not configured yet"
+                "○ VPS gateway not configured for Native Raise AI"
             }
             setTextColor(Color.LTGRAY)
             textSize = 11f
