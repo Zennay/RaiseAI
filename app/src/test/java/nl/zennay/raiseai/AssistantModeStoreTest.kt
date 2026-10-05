@@ -25,8 +25,30 @@ class AssistantModeStoreTest {
     }
 
     @Test
-    fun assistantModesExposeTheOtherModeAsAlternate() {
-        assertEquals(AssistantMode.NATIVE, AssistantMode.GEMINI.alternate())
-        assertEquals(AssistantMode.GEMINI, AssistantMode.NATIVE.alternate())
+    fun explicitChatGptPreferenceUsesChatGpt() {
+        assertEquals(AssistantMode.CHATGPT, AssistantModeStore.resolve(AssistantMode.CHATGPT.storedValue))
+    }
+
+    @Test
+    fun legacyPreferenceSchemaMigratesBackToGemini() {
+        assertEquals(
+            AssistantMode.GEMINI,
+            AssistantModeStore.resolve(AssistantMode.NATIVE.storedValue, AssistantModeStore.CURRENT_MODE_SCHEMA - 1)
+        )
+    }
+
+    @Test
+    fun currentPreferenceSchemaKeepsUserSelection() {
+        assertEquals(
+            AssistantMode.CHATGPT,
+            AssistantModeStore.resolve(AssistantMode.CHATGPT.storedValue, AssistantModeStore.CURRENT_MODE_SCHEMA)
+        )
+    }
+
+    @Test
+    fun assistantModesCycleThroughAllAvailableChoices() {
+        assertEquals(AssistantMode.NATIVE, AssistantMode.GEMINI.next())
+        assertEquals(AssistantMode.CHATGPT, AssistantMode.NATIVE.next())
+        assertEquals(AssistantMode.GEMINI, AssistantMode.CHATGPT.next())
     }
 }
