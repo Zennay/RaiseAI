@@ -10,6 +10,6 @@ object VoiceTranscriptReview {
 
     fun prepare(rawTranscript: String?): Pending? {
         val normalized = rawTranscript?.trim().orEmpty()
-        return normalized.takeIf { it.isNotEmpty() }?.let(::Pending)
+        return normalized.takeIf { it.isNotEmpty() }?.let { Pending(it) }
     }
 }
