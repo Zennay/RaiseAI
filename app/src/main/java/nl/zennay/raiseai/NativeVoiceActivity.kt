@@ -37,6 +37,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var recognizer: SpeechRecognizer? = null
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
+    private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -172,9 +173,17 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         val retryable = error == SpeechRecognizer.ERROR_NO_MATCH ||
             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
 
-        if (retryable) {
-            transcriptText.text = "Ik hoorde niets"
-            mainHandler.postDelayed({ startListening() }, 700L)
+        if (retryable && retryPolicy.tryConsumeRetry()) {
+            transcriptText.text = "Ik hoorde niets — nog één keer"
+            mainHandler.postDelayed({
+                if (!isFinishing && !isDestroyed) {
+                    startListening()
+                }
+            }, RETRY_DELAY_MS)
+        } else if (retryable) {
+            showError("Ik hoor niets")
+            detailText.text =
+                "Automatisch opnieuw luisteren is gestopt om de microfoon niet actief te houden."
         } else {
             showError("Spraakherkenning fout: $error")
         }
@@ -300,6 +309,8 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     private fun showError(message: String) {
+        submitted = true
+        recognizer?.cancel()
         NativeSessionState.set("error")
         statusText.text = message
         orbAnimator?.cancel()
@@ -325,6 +336,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
         orbAnimator?.cancel()
         recognizer?.cancel()
         recognizer?.destroy()
@@ -335,5 +347,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
     companion object {
         private const val REQUEST_AUDIO = 201
+        private const val MAX_AUTOMATIC_RETRIES = 1
+        private const val RETRY_DELAY_MS = 700L
     }
 }
