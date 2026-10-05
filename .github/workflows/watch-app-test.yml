@@ -145,6 +145,24 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
 
+      - name: Frozen physical handoff release carrier
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tmp_root="$(mktemp -d)"
+          trap 'rm -rf "$tmp_root"' EXIT
+          output="$tmp_root/handoff"
+          restore="$tmp_root/restored-source"
+          python3 tools/fetch-frozen-physical-handoff.py --output "$output"
+          test -f "$output/BUILD-IDENTITY.txt"
+          test -f "$output/RaiseAI-v1.5.2-debug.apk"
+          test -f "$output/RaiseAI-v1.5.2-source.bundle"
+          test -f "$output/start-physical-handoff.command"
+          RAISE_RESTORE_DIR="$restore" \
+            bash "$output/start-physical-handoff.command" --verify-only
+
       - name: Evidence identity negative controls
         shell: bash
         run: |
