@@ -1,0 +1,86 @@
+name: LightUp PR21 exact-head proof on VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/lightup-pr21-exact-head-proof-20261005.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raiseai-lightup-pr21-exact-head-proof
+  cancel-in-progress: true
+
+jobs:
+  prove:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 12
+    env:
+      LIGHTUP_TARGET_SHA: 113d31308baf397ca51f0d6f7cbcc9ff79001f53
+      LIGHTUP_PR: "21"
+    steps:
+      - name: Verify VPS runner identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          echo "LIGHTUP_PROOF_RUNNER=$(hostname)"
+
+      - name: Checkout exact LightUp PR head
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          work="$RUNNER_TEMP/lightup-pr21-$GITHUB_RUN_ID"
+          rm -rf "$work"
+          git init -q "$work"
+          git -C "$work" remote add origin https://github.com/Zennay/Lightup.git
+          git -C "$work" -c protocol.version=2 fetch -q --depth=1 origin "$LIGHTUP_TARGET_SHA"
+          git -C "$work" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$work" rev-parse HEAD)" = "$LIGHTUP_TARGET_SHA"
+          echo "LIGHTUP_EXACT_HEAD=$LIGHTUP_TARGET_SHA"
+
+      - name: Compile and run full unit suite
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          work="$RUNNER_TEMP/lightup-pr21-$GITHUB_RUN_ID"
+          cd "$work"
+          export PYTHONPATH=src
+          python3 -m compileall -q src tests
+          python3 -m unittest discover -s tests -v
+
+      - name: Prove fail-closed public target
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          work="$RUNNER_TEMP/lightup-pr21-$GITHUB_RUN_ID"
+          cd "$work"
+          export PYTHONPATH=src
+          set +e
+          python3 -m lightup.cli scope-check 8.8.8.8 > "$RUNNER_TEMP/lightup-pr21-scope.json"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/lightup-pr21-scope.json"
+          test "$code" -eq 2
+          grep -q '"allowed": false' "$RUNNER_TEMP/lightup-pr21-scope.json"
+
+      - name: Prove plan-only local target
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          work="$RUNNER_TEMP/lightup-pr21-$GITHUB_RUN_ID"
+          cd "$work"
+          export PYTHONPATH=src
+          python3 -m lightup.cli plan 127.0.0.1 > "$RUNNER_TEMP/lightup-pr21-plan.json"
+          cat "$RUNNER_TEMP/lightup-pr21-plan.json"
+          grep -q '"execution_enabled": false' "$RUNNER_TEMP/lightup-pr21-plan.json"
+
+      - name: Emit receipt
+        if: always()
+        shell: bash
+        run: |
+          printf 'LIGHTUP_PR=%s TARGET_SHA=%s RUNNER_HOST=%s RUNNER_NAME=%s RUN_ID=%s\n' "$LIGHTUP_PR" "$LIGHTUP_TARGET_SHA" "$(hostname)" "${RUNNER_NAME:-}" "$GITHUB_RUN_ID"
