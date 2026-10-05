@@ -21,6 +21,8 @@ on:
       - "tools/analyze-watch-sensor-traces.py"
       - "tools/analyze-watch-sensor-trials.py"
       - "tools/verify-watch-apk-identity.py"
+      - "tools/fetch-frozen-physical-handoff.py"
+      - "tests/test_frozen_physical_handoff_fetcher.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -44,6 +46,8 @@ on:
       - "tools/analyze-watch-sensor-traces.py"
       - "tools/analyze-watch-sensor-trials.py"
       - "tools/verify-watch-apk-identity.py"
+      - "tools/fetch-frozen-physical-handoff.py"
+      - "tests/test_frozen_physical_handoff_fetcher.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -101,7 +105,7 @@ jobs:
           bash -n provision-watch-gateway.command
           bash -n install-watch-apk.command
           bash -n upgrade-watch.command
-          python3 -m py_compile tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/verify-watch-apk-identity.py
+          python3 -m py_compile tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/verify-watch-apk-identity.py tools/fetch-frozen-physical-handoff.py
 
       - name: Prebuilt artifact digest contract
         shell: bash
@@ -135,10 +139,29 @@ jobs:
 
       - name: Watch evidence contracts
         run: |
+          python3 -m unittest discover -s tests -p 'test_frozen_physical_handoff_fetcher.py'
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
+
+      - name: Frozen physical handoff release carrier
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tmp_root="$(mktemp -d)"
+          trap 'rm -rf "$tmp_root"' EXIT
+          output="$tmp_root/handoff"
+          restore="$tmp_root/restored-source"
+          python3 tools/fetch-frozen-physical-handoff.py --output "$output"
+          test -f "$output/BUILD-IDENTITY.txt"
+          test -f "$output/RaiseAI-v1.5.2-debug.apk"
+          test -f "$output/RaiseAI-v1.5.2-source.bundle"
+          test -f "$output/start-physical-handoff.command"
+          RAISE_RESTORE_DIR="$restore" \
+            bash "$output/start-physical-handoff.command" --verify-only
 
       - name: Evidence identity negative controls
         shell: bash
