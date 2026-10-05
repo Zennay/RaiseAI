@@ -37,6 +37,8 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var recognizer: SpeechRecognizer? = null
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
+    private var listenAttempt = 0
+    private var listenRequestedElapsedMs: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -142,12 +144,25 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             )
         }
 
+        listenAttempt += 1
+        listenRequestedElapsedMs = SystemClock.elapsedRealtime()
         submitted = false
         setState("listening", "Ik luister")
         recognizer?.startListening(intent)
     }
 
     override fun onReadyForSpeech(params: Bundle?) {
+        listenRequestedElapsedMs?.let { requestedElapsedMs ->
+            VoiceStartupEvidence.record(
+                context = applicationContext,
+                attempt = listenAttempt,
+                listenRequestToReadyMs = VoiceStartupEvidence.elapsedMs(
+                    requestedElapsedMs,
+                    SystemClock.elapsedRealtime()
+                )
+            )
+            listenRequestedElapsedMs = null
+        }
         setState("listening", "Ik luister")
     }
 
