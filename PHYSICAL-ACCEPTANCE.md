@@ -47,6 +47,18 @@ adb start-server
 
 Before starting the frozen v1.5.2 acceptance session, make `adb devices` show **only the intended Galaxy Watch 7** as an active `device`. Disconnect other ADB phones, emulators or watches for this session. The preserved v1.5.2 evidence-pull scripts predate strict `ANDROID_SERIAL` enforcement, so this one-device condition prevents later diagnostics/trial export from silently selecting another target without changing the frozen artifact.
 
+### Preferred guarded start
+
+From a current RaiseAI checkout, start the canonical frozen session with:
+
+```bash
+bash ./start-frozen-acceptance.command ~/.config/raiseai/watch-gateway.properties
+```
+
+This wrapper fail-closes unless exactly one active ADB device is connected and its model is the intended Galaxy Watch 7 (`SM-L315F` / `SM_L315F`). It then downloads only the preserved Release asset, runs the frozen launcher in verify-only mode, creates a temporary SDK shim with no build-tools so macOS cannot re-sign the APK, binds `ANDROID_SERIAL` to that Watch, and starts the frozen physical-validation flow with a disposable source restore.
+
+If the guarded launcher reaches the on-Watch interaction prompt, sections 2–4 below have already been completed automatically; continue at section 5. The manual steps remain documented as the transparent fallback/debug path.
+
 ## 2. Fetch the exact preserved handoff
 
 The canonical frozen bytes are preserved as GitHub Release asset `611084738` under tag
