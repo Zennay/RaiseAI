@@ -29,7 +29,7 @@ jobs:
           import urllib.request
 
           BASE = "http://127.0.0.1:8765"
-          EXPECTED = "759fa629a8a40fe255ea490e27a59e79827fe472"
+          EXPECTED = "9fdd0d94249d13902f093a916a09ccb6fedf2862"
           DB = "/home/ubuntu/zennay-cloud/history.db"
 
           def service_state():
