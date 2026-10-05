@@ -2,6 +2,7 @@ package nl.zennay.raiseai
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -137,35 +138,26 @@ class MainActivity : Activity(), SensorEventListener {
 
         val selectedAssistant = AssistantModeStore.get(this)
         column.addView(TextView(this).apply {
-            text = "Main AI · ${selectedAssistant.label}"
+            text = "Raise-to-mouth main AI"
             setTextColor(Color.WHITE)
             textSize = 13f
             gravity = android.view.Gravity.CENTER
         }, matchWrap(top = 2, bottom = 6))
 
-        column.addView(button(
-            if (selectedAssistant == AssistantMode.GEMINI) "✓ Gemini (default)" else "Use Gemini"
-        ) {
-            AssistantModeStore.set(this, AssistantMode.GEMINI)
-            if (CalibrationStore.isMonitoringEnabled(this)) {
-                stopService(Intent(this, GestureMonitorService::class.java))
-                startForegroundService(Intent(this, GestureMonitorService::class.java))
-            }
-            toast("Gemini is now the main AI")
-            recreate()
-        }, matchWrap(bottom = 6))
+        column.addView(button("Main AI · ${selectedAssistant.label} ▾") {
+            showAssistantPicker(selectedAssistant)
+        }, matchWrap(bottom = 4))
 
-        column.addView(button(
-            if (selectedAssistant == AssistantMode.NATIVE) "✓ Native Raise AI" else "Use Native Raise AI"
-        ) {
-            AssistantModeStore.set(this, AssistantMode.NATIVE)
-            if (CalibrationStore.isMonitoringEnabled(this)) {
-                stopService(Intent(this, GestureMonitorService::class.java))
-                startForegroundService(Intent(this, GestureMonitorService::class.java))
+        column.addView(TextView(this).apply {
+            text = if (selectedAssistant == AssistantMode.GEMINI) {
+                "Gemini is the default. Tap above to use Native Raise AI or ChatGPT instead."
+            } else {
+                "Selected: ${selectedAssistant.label}. You can switch back to Gemini at any time."
             }
-            toast("Native Raise AI is now the main AI")
-            recreate()
-        }, matchWrap(bottom = 6))
+            setTextColor(Color.LTGRAY)
+            textSize = 11f
+            gravity = android.view.Gravity.CENTER
+        }, matchWrap(bottom = 8))
 
         column.addView(button("Open main AI") {
             if (!PreferredAssistantLauncher.launchFromActivity(this)) {
@@ -184,14 +176,14 @@ class MainActivity : Activity(), SensorEventListener {
             gravity = android.view.Gravity.CENTER
         }, matchWrap(bottom = 6))
 
-        column.addView(button("Open ChatGPT Web fallback") {
+        column.addView(button("Open ChatGPT directly") {
             if (!ChatGptLauncher.launchFromActivity(this)) {
                 toast("ChatGPT fallback could not be opened")
             }
         }, matchWrap(bottom = 12))
 
         column.addView(TextView(this).apply {
-            text = "Gemini + Google Home fallback"
+            text = "Gemini + Google Home"
             setTextColor(Color.WHITE)
             textSize = 13f
             gravity = android.view.Gravity.CENTER
@@ -252,6 +244,29 @@ class MainActivity : Activity(), SensorEventListener {
 
         scroll.addView(column)
         return scroll
+    }
+
+    private fun showAssistantPicker(current: AssistantMode) {
+        val modes = AssistantMode.values()
+        val labels = modes.map { mode ->
+            if (mode == AssistantMode.GEMINI) "${mode.label} · default" else mode.label
+        }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("Choose main AI")
+            .setSingleChoiceItems(labels, modes.indexOf(current)) { dialog, which ->
+                val selected = modes[which]
+                AssistantModeStore.set(this, selected)
+                if (CalibrationStore.isMonitoringEnabled(this)) {
+                    stopService(Intent(this, GestureMonitorService::class.java))
+                    startForegroundService(Intent(this, GestureMonitorService::class.java))
+                }
+                toast("${selected.label} is now the main AI")
+                dialog.dismiss()
+                recreate()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun addCaptureButton(column: LinearLayout, label: String, trace: String) {
