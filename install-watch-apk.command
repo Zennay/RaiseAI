@@ -165,7 +165,7 @@ INSTALL_APK="$APK"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/raiseai-install.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-if [ "$(uname -s)" = "Darwin" ]; then
+if [ "$(uname -s)" = "Darwin" ] && [ "${RAISE_PRESERVE_APK_BYTES:-0}" != "1" ]; then
   APKSIGNER="$(find "$SDK_DIR/build-tools" -type f -name apksigner 2>/dev/null | sort | tail -n 1)"
   SOURCE_DEBUG_KEY="$HOME/.android/debug.keystore"
   STABLE_KEY="$SIGNING_DIR/raiseai-debug.keystore"
@@ -183,6 +183,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
     INSTALL_APK="$SIGNED_APK"
     echo "APK signed with the pinned Mac Raise AI key."
   fi
+elif [ "$(uname -s)" = "Darwin" ]; then
+  echo "Preserving exact prebuilt APK bytes; local re-signing is disabled for this install."
 fi
 
 install_once() {

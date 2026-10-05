@@ -23,6 +23,7 @@ on:
       - "tools/verify-watch-apk-identity.py"
       - "tools/fetch-frozen-physical-handoff.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
+      - "tests/test_adb_device_binding.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -48,6 +49,7 @@ on:
       - "tools/verify-watch-apk-identity.py"
       - "tools/fetch-frozen-physical-handoff.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
+      - "tests/test_adb_device_binding.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -140,6 +142,7 @@ jobs:
       - name: Watch evidence contracts
         run: |
           python3 -m unittest discover -s tests -p 'test_frozen_physical_handoff_fetcher.py'
+          python3 -m unittest discover -s tests -p 'test_adb_device_binding.py'
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
@@ -258,8 +261,7 @@ jobs:
           set -euo pipefail
           version="$(tr -d '\r\n' < VERSION.txt)"
           handoff_dir="$RUNNER_TEMP/raiseai-physical-handoff"
-          restore_dir="$RUNNER_TEMP/raiseai-physical-handoff-verify"
-          rm -rf "$handoff_dir" "$restore_dir"
+          rm -rf "$handoff_dir"
           mkdir -p "$handoff_dir"
 
           apk="$handoff_dir/RaiseAI-v${version}-debug.apk"
@@ -282,9 +284,9 @@ jobs:
           source_bundle_sha256=$bundle_sha
           EOF
 
-          RAISE_RESTORE_DIR="$restore_dir" \
-            bash "$handoff_dir/start-physical-handoff.command" --verify-only
-          rm -rf "$restore_dir"
+          bash "$handoff_dir/start-physical-handoff.command" --verify-only
+          bash "$handoff_dir/start-physical-handoff.command" --verify-only
+          test ! -e "$handoff_dir/RaiseAI-v${version}-source"
 
           echo "RAISE_HANDOFF_DIR=$handoff_dir" >> "$GITHUB_ENV"
           echo "RAISE_HANDOFF_VERSION=$version" >> "$GITHUB_ENV"

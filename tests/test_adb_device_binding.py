@@ -111,8 +111,11 @@ class InstallWatchBindingTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        self.home = self.root / "home"
+        self.home.mkdir()
         self.sdk = self.root / "sdk"
         (self.sdk / "platform-tools").mkdir(parents=True)
+        (self.sdk / "build-tools" / "35.0.0").mkdir(parents=True)
         self.log = self.root / "adb-install.log"
         self.serial_file = self.root / "installed-watch-serial"
         self.installed_apk_sha_file = self.root / "installed-apk-sha256"
@@ -227,11 +230,29 @@ exit 2
         )
         unzip.chmod(0o755)
 
+        uname = self.bin / "uname"
+        uname.write_text(
+            "#!/bin/bash\n"
+            "if [ \"${FAKE_DARWIN:-0}\" = \"1\" ]; then echo Darwin; else echo Linux; fi\n",
+            encoding="utf-8",
+        )
+        uname.chmod(0o755)
+
+        apksigner = self.sdk / "build-tools" / "35.0.0" / "apksigner"
+        apksigner.write_text(
+            "#!/bin/bash\n"
+            "printf 'invoked\\n' >> \"${APKSIGNER_LOG:?}\"\n"
+            "exit 91\n",
+            encoding="utf-8",
+        )
+        apksigner.chmod(0o755)
+
     def tearDown(self):
         self.temp.cleanup()
 
     def run_installer(self, serial=None, extra_env=None):
         env = os.environ.copy()
+        env["HOME"] = str(self.home)
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
         if serial is None:
             env.pop("ANDROID_SERIAL", None)
@@ -271,6 +292,32 @@ exit 2
         )
         self.assertTrue(self.used_serials())
         self.assertEqual(set(self.used_serials()), {"watch-b"})
+    def test_preserve_apk_bytes_skips_darwin_resigning(self):
+        signing_dir = self.home / ".raiseai" / "signing"
+        signing_dir.mkdir(parents=True)
+        (signing_dir / "raiseai-debug.keystore").write_bytes(b"synthetic-key")
+        (self.home / ".raiseai" / "autoconnect-installed").write_text("1\n", encoding="utf-8")
+        apksigner_log = self.root / "apksigner.log"
+
+        result = self.run_installer(
+            "watch-b",
+            {
+                "FAKE_DARWIN": "1",
+                "RAISE_PRESERVE_APK_BYTES": "1",
+                "APKSIGNER_LOG": str(apksigner_log),
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(apksigner_log.exists())
+        self.assertIn(
+            "Preserving exact prebuilt APK bytes; local re-signing is disabled",
+            result.stdout,
+        )
+        self.assertEqual(
+            self.installed_apk_sha_file.read_text(encoding="utf-8").strip(),
+            hashlib.sha256(self.apk.read_bytes()).hexdigest(),
+        )
 
     def test_installer_rejects_non_watch_android_serial(self):
         result = self.run_installer("phone-a")
@@ -477,8 +524,17 @@ class PhysicalPrepareBindingTest(unittest.TestCase):
 set -euo pipefail
 : "${RAISE_INSTALLED_WATCH_SERIAL_FILE:?missing install serial output}"
 : "${RAISE_INSTALLED_APK_SHA256_FILE:?missing installed APK digest output}"
+[ "${RAISE_PRESERVE_APK_BYTES:-}" = "1" ] || {
+  echo "prebuilt prepare did not require exact APK byte preservation"
+  exit 43
+}
 printf 'watch-b\\n' > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
-printf '%s\\n' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' > "$RAISE_INSTALLED_APK_SHA256_FILE"
+if [ -n "${FORCE_INSTALLED_APK_SHA256:-}" ]; then
+  digest="$FORCE_INSTALLED_APK_SHA256"
+else
+  digest="$(sha256sum "$1" | awk '{print $1}')"
+fi
+printf '%s\\n' "$digest" > "$RAISE_INSTALLED_APK_SHA256_FILE"
 """,
             encoding="utf-8",
         )
@@ -579,8 +635,36 @@ exit 2
         self.assertEqual(len(sessions), 1)
         payload = json.loads((sessions[0] / "session.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["watch_serial"], "watch-b")
-        self.assertEqual(payload["apk_sha256"], hashlib.sha256(self.apk.read_bytes()).hexdigest())
-        self.assertEqual(payload["installed_apk_sha256"], "b" * 64)
+        expected_apk_sha = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        self.assertEqual(payload["apk_sha256"], expected_apk_sha)
+        self.assertEqual(payload["installed_apk_sha256"], expected_apk_sha)
+
+    def test_prepare_rejects_installed_prebuilt_apk_byte_mismatch(self):
+        provision_log = self.root / "provision-serial-mismatch"
+        env = os.environ.copy()
+        env["PATH"] = f"{self.bin}:{env['PATH']}"
+        env["RAISE_EVIDENCE_ROOT"] = str(self.evidence)
+        env["RAISE_PREBUILT_APK"] = str(self.apk)
+        env["RAISE_EXPECT_APK_SHA256"] = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        env["PROVISION_SERIAL_LOG"] = str(provision_log)
+        env["FORCE_INSTALLED_APK_SHA256"] = "b" * 64
+        env.pop("ANDROID_SERIAL", None)
+
+        result = subprocess.run(
+            ["bash", str(self.repo / "physical-validation.command"), "prepare", str(self.profile)],
+            cwd=self.repo,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Installed APK SHA-256 does not match the exact prepared prebuilt APK.",
+            result.stdout,
+        )
+        self.assertFalse(provision_log.exists())
 
 
 if __name__ == "__main__":
