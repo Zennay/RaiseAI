@@ -45,13 +45,27 @@ adb kill-server
 adb start-server
 ```
 
-## 2. Download the exact handoff
+## 2. Fetch the exact preserved handoff
 
-From GitHub Actions run `37241768528`, download:
+The canonical frozen bytes are preserved as GitHub Release asset `611084738` under tag
+`physical-handoff-v1.5.2-8f719bb`. From any current RaiseAI checkout, use the
+fetcher below. The checkout only supplies the fetch tool; it does **not** become
+the acceptance source and it does not rebuild the APK.
 
-`RaiseAI-Watch7-v1.5.2-physical-handoff-37241768528`
+```bash
+python3 tools/fetch-frozen-physical-handoff.py \
+  --output ~/Downloads/raiseai-v1.5.2-frozen
+cd ~/Downloads/raiseai-v1.5.2-frozen
+```
 
-If GitHub CLI is authenticated:
+The fetcher downloads only release asset `611084738`, requires archive SHA-256
+`867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce`,
+rejects unsafe archive paths/symlinks and refuses to overwrite an existing output
+directory.
+
+If the preserved Release asset is temporarily unavailable and the original
+Actions artifact is still retained, the original artifact is an equivalent
+byte source:
 
 ```bash
 mkdir -p ~/Downloads/raiseai-v1-acceptance
