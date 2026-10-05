@@ -135,11 +135,29 @@ class RecoveryComparisonTests(unittest.TestCase):
         self.assertEqual(result["before"]["app_version"], "1.5.2")
         self.assertEqual(result["after"]["app_version"], "1.6.0")
 
-    def test_package_update_rejects_unchanged_identity(self):
-        with self.assertRaisesRegex(ValueError, "changed app/source/APK identity"):
+    def test_package_update_requires_changed_source_revision(self):
+        with self.assertRaisesRegex(ValueError, "changed source_revision"):
             MODULE.compare(
                 snapshot("2026-10-05T06:00:00Z", boot_id=BOOT_A),
-                snapshot("2026-10-05T06:03:00Z", boot_id=BOOT_A),
+                snapshot(
+                    "2026-10-05T06:03:00Z",
+                    boot_id=BOOT_A,
+                    version="1.6.0",
+                    apk_sha=APK_B,
+                ),
+                mode="package-update",
+            )
+
+    def test_package_update_requires_changed_apk_digest(self):
+        with self.assertRaisesRegex(ValueError, "changed installed_apk_sha256"):
+            MODULE.compare(
+                snapshot("2026-10-05T06:00:00Z", boot_id=BOOT_A),
+                snapshot(
+                    "2026-10-05T06:03:00Z",
+                    boot_id=BOOT_A,
+                    version="1.6.0",
+                    revision=REVISION_B,
+                ),
                 mode="package-update",
             )
 
