@@ -258,8 +258,7 @@ jobs:
           set -euo pipefail
           version="$(tr -d '\r\n' < VERSION.txt)"
           handoff_dir="$RUNNER_TEMP/raiseai-physical-handoff"
-          restore_dir="$RUNNER_TEMP/raiseai-physical-handoff-verify"
-          rm -rf "$handoff_dir" "$restore_dir"
+          rm -rf "$handoff_dir"
           mkdir -p "$handoff_dir"
 
           apk="$handoff_dir/RaiseAI-v${version}-debug.apk"
@@ -282,9 +281,9 @@ jobs:
           source_bundle_sha256=$bundle_sha
           EOF
 
-          RAISE_RESTORE_DIR="$restore_dir" \
-            bash "$handoff_dir/start-physical-handoff.command" --verify-only
-          rm -rf "$restore_dir"
+          bash "$handoff_dir/start-physical-handoff.command" --verify-only
+          bash "$handoff_dir/start-physical-handoff.command" --verify-only
+          test ! -e "$handoff_dir/RaiseAI-v${version}-source"
 
           echo "RAISE_HANDOFF_DIR=$handoff_dir" >> "$GITHUB_ENV"
           echo "RAISE_HANDOFF_VERSION=$version" >> "$GITHUB_ENV"
