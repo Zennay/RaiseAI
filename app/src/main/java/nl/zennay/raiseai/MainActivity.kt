@@ -431,17 +431,16 @@ class MainActivity : Activity(), SensorEventListener {
     private fun refreshUi() {
         val calibrated = CalibrationStore.loadPose(this) != null
         val enabled = CalibrationStore.isMonitoringEnabled(this)
-        statusText.text = buildString {
-            append(if (calibrated) "✓ Calibrated" else "○ Needs calibration")
-            append("\n")
-            append(if (enabled) "● Monitoring on" else "○ Monitoring off")
-            append("\n")
-            append(if (Settings.canDrawOverlays(this@MainActivity)) "✓ Hands-free Raise AI grant" else "○ Hands-free Raise AI grant missing")
-            append("\n")
-            append(if (AssistantSessionGuard(this@MainActivity).hasUsageAccess()) "✓ Assistant session guard" else "○ Session guard fallback: 30 sec")
-            append("\n")
-            append(if (CalibrationStore.isSleepDndPauseEnabled(this@MainActivity)) "✓ Sleep/DND pause" else "○ Sleep/DND pause off")
-        }
+        statusText.text = WatchReadinessPolicy.summarize(
+            WatchReadinessInputs(
+                calibrated = calibrated,
+                monitoringEnabled = enabled,
+                handsFreeGrant = Settings.canDrawOverlays(this@MainActivity),
+                sessionGuardAccess = AssistantSessionGuard(this@MainActivity).hasUsageAccess(),
+                gatewayConfigured = GatewayConfig.isConfigured(this@MainActivity),
+                sleepDndPauseEnabled = CalibrationStore.isSleepDndPauseEnabled(this@MainActivity)
+            )
+        ).asDisplayText()
         monitorButton.text = if (enabled) "Disable raise-to-talk" else "Enable raise-to-talk"
 
         val triggers = CalibrationStore.triggerCount(this)
