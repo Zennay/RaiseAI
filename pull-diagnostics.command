@@ -43,6 +43,9 @@ fi
 if ! $ADB -s "$TARGET" exec-out run-as nl.zennay.raiseai cat files/voice-startup-evidence.json > "$OUT/voice-startup-evidence.json" 2>/dev/null; then
   rm -f "$OUT/voice-startup-evidence.json"
 fi
+if ! $ADB -s "$TARGET" exec-out run-as nl.zennay.raiseai cat files/voice-startup-evidence.jsonl > "$OUT/voice-startup-evidence.jsonl" 2>/dev/null; then
+  rm -f "$OUT/voice-startup-evidence.jsonl"
+fi
 
 echo "Saved diagnostics to: $OUT"
 if [ -s "$OUT/watch-e2e-evidence.json" ]; then
@@ -93,4 +96,9 @@ if [ -s "$OUT/voice-startup-evidence.json" ]; then
   else
     echo "python3 unavailable; voice startup evidence saved but not validated locally"
   fi
+fi
+
+if [ -s "$OUT/voice-startup-evidence.jsonl" ]; then
+  samples="$(grep -cve '^[[:space:]]*$' "$OUT/voice-startup-evidence.jsonl" || true)"
+  echo "Voice startup history included: $OUT/voice-startup-evidence.jsonl ($samples samples; Watch retains the newest 50)"
 fi
