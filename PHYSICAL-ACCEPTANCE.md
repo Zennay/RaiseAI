@@ -78,13 +78,20 @@ cd ~/Downloads/raiseai-v1-acceptance
 
 ## 3. Verify before installing
 
-From the extracted artifact directory:
+From the extracted artifact directory, use a disposable restore path for the verification pass:
 
 ```bash
-bash ./start-physical-handoff.command --verify-only
+verify_root="$(mktemp -d)"
+RAISE_RESTORE_DIR="$verify_root/source" \
+  bash ./start-physical-handoff.command --verify-only
+verify_status=$?
+rm -rf "$verify_root"
+test "$verify_status" -eq 0
 ```
 
 Continue only after `VERIFY-ONLY PASS`. The verifier checks the bundled source revision, source-bundle SHA-256 and APK identity.
+
+The preserved v1.5.2 launcher predates automatic verify-only cleanup. Running its verify-only mode with the default restore directory would leave `RaiseAI-v1.5.2-source` behind and make the subsequent real start refuse to reuse that path. The disposable override above preserves the frozen artifact exactly while keeping the real acceptance start clean.
 
 ## 4. Start the provenance-bound physical session
 
