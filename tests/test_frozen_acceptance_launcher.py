@@ -121,7 +121,9 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 fi
                 if [ "${1:-}" = "devices" ]; then
                   printf 'List of devices attached\n'
-                  if [ "${FAKE_MULTIPLE_DEVICES:-0}" = "1" ]; then
+                  if [ "${FAKE_NO_DEVICES:-0}" = "1" ]; then
+                    :
+                  elif [ "${FAKE_MULTIPLE_DEVICES:-0}" = "1" ]; then
                     printf 'watch-1\tdevice\nphone-1\tdevice\n'
                   else
                     printf 'watch-1\tdevice\n'
@@ -216,6 +218,29 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
             "No APK was installed and no physical acceptance session was started.",
             result.stdout,
         )
+
+    def test_help_exits_without_profile_device_or_fetch_side_effects(self):
+        missing_profile = self.root / "missing.properties"
+        result = self.run_launcher(
+            {"FAKE_NO_DEVICES": "1"},
+            args=["--help", str(missing_profile)],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Usage:", result.stdout)
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
+
+    def test_rejects_no_active_adb_device_before_fetch(self):
+        result = self.run_launcher({"FAKE_NO_DEVICES": "1"})
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Frozen acceptance requires exactly one active ADB device; found 0.",
+            result.stdout,
+        )
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
 
     def test_unknown_option_fails_before_fetch(self):
         result = self.run_launcher(args=["--definitely-not-a-real-option"])
