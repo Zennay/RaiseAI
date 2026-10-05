@@ -34,6 +34,13 @@ function isRetryableStatus(status) {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
+function isRetryableThrownError(error) {
+  const name = String(error?.name ?? "");
+  const message = String(error?.message ?? "");
+  if (name === "TimeoutError" || name === "AbortError") return false;
+  return !message.startsWith("openrouter_");
+}
+
 function defaultSleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -81,6 +88,11 @@ export function createOpenRouterExecutor({
 
     const request = {
       models,
+      provider: {
+        sort: "latency",
+        preferred_max_latency: { p90: 3 },
+        allow_fallbacks: true
+      },
       messages: [
         {
           role: "system",
@@ -146,9 +158,8 @@ export function createOpenRouterExecutor({
         };
       } catch (error) {
         lastError = error;
-        const isHttpError = String(error?.message ?? "").startsWith("openrouter_http_");
 
-        if (attempt < attempts && !isHttpError) {
+        if (attempt < attempts && isRetryableThrownError(error)) {
           await sleepImpl(retryDelayMs * attempt);
           continue;
         }

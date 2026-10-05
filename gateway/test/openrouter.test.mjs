@@ -47,6 +47,11 @@ test("quick AI uses GLM 5.3 Flash with Gemini fallback by default", async () => 
     "z-ai/glm-5.3-flash",
     "google/gemini-3.8-flash"
   ]);
+  assert.deepEqual(calls[0].request.provider, {
+    sort: "latency",
+    preferred_max_latency: { p90: 3 },
+    allow_fallbacks: true
+  });
   assert.equal(calls[0].url, "https://openrouter.ai/api/v1/chat/completions");
 });
 
@@ -120,6 +125,27 @@ test("transient fetch failure is retried once", async () => {
   const result = await execute({ route: "quick_ai" }, "hoi");
   assert.equal(calls, 2);
   assert.equal(result.answer, "ok");
+});
+
+test("provider timeout fails fast without a second request", async () => {
+  let calls = 0;
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      const error = new Error("The operation was aborted due to timeout");
+      error.name = "TimeoutError";
+      throw error;
+    }
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    /timeout/
+  );
+  assert.equal(calls, 1);
 });
 
 test("permanent OpenRouter 4xx fails closed without retry", async () => {
