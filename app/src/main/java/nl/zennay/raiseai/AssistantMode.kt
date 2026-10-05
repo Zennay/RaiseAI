@@ -8,7 +8,13 @@ enum class AssistantMode(
     val label: String
 ) {
     GEMINI("gemini", "Gemini"),
-    NATIVE("native", "Native Raise AI")
+    NATIVE("native", "Native Raise AI");
+
+    fun alternate(): AssistantMode =
+        when (this) {
+            GEMINI -> NATIVE
+            NATIVE -> GEMINI
+        }
 }
 
 object AssistantModeStore {
