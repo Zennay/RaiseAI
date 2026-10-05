@@ -246,7 +246,9 @@ class GestureMonitorService : Service(), SensorEventListener {
             Intent(this, GestureMonitorService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val preferredAssistantIntent = when (AssistantModeStore.get(this)) {
+        val selectedAssistant = AssistantModeStore.get(this)
+        val alternateAssistant = selectedAssistant.alternate()
+        val preferredAssistantIntent = when (selectedAssistant) {
             AssistantMode.GEMINI -> Intent(this, AssistantProxyActivity::class.java)
             AssistantMode.NATIVE -> Intent(this, NativeVoiceActivity::class.java)
         }
@@ -256,10 +258,14 @@ class GestureMonitorService : Service(), SensorEventListener {
             preferredAssistantIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val geminiPending = PendingIntent.getActivity(
+        val alternateAssistantIntent = when (alternateAssistant) {
+            AssistantMode.GEMINI -> Intent(this, AssistantProxyActivity::class.java)
+            AssistantMode.NATIVE -> Intent(this, NativeVoiceActivity::class.java)
+        }
+        val alternatePending = PendingIntent.getActivity(
             this,
             4,
-            Intent(this, AssistantProxyActivity::class.java),
+            alternateAssistantIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -269,8 +275,8 @@ class GestureMonitorService : Service(), SensorEventListener {
             .setContentText(status)
             .setOngoing(true)
             .setContentIntent(openPending)
-            .addAction(Notification.Action.Builder(null, "Raise AI", talkPending).build())
-            .addAction(Notification.Action.Builder(null, "Gemini", geminiPending).build())
+            .addAction(Notification.Action.Builder(null, selectedAssistant.label, talkPending).build())
+            .addAction(Notification.Action.Builder(null, alternateAssistant.label, alternatePending).build())
             .addAction(Notification.Action.Builder(null, "Stop", stopPending).build())
             .build()
     }
