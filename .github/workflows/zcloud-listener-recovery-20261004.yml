@@ -1,4 +1,5 @@
 name: Recover duplicate zCloud Actions listener safely
+# Operational retrigger 2026-10-05 13:11 UTC to land zCloud #497 self-heal in production.
 # Operational retrigger 2026-10-05 13:02 UTC for PWQ-30 post-deploy activation.
 # Operational retrigger 2026-10-05 12:30 UTC for remaining zCloud PR493 dashboard/VPS gates.
 # Operational retrigger 2026-10-05 12:24 UTC for zCloud PWQ-24 listener recovery after r12 exit-137.
