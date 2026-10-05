@@ -30,17 +30,29 @@ function outputText(response) {
   return null;
 }
 
+function isRetryableStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function defaultSleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function createOpenRouterExecutor({
   apiKey,
   fastModel = "z-ai/glm-5.3-flash",
   deepModel = "z-ai/glm-5.3-flash",
   fallbackModels = ["google/gemini-3.8-flash"],
   allowWebSearch = false,
-  fetchImpl = globalThis.fetch
+  fetchImpl = globalThis.fetch,
+  maxAttempts = 2,
+  retryDelayMs = 250,
+  sleepImpl = defaultSleep
 }) {
   const fallbacks = Array.isArray(fallbackModels)
     ? fallbackModels
     : parseFallbackModels(fallbackModels);
+  const attempts = Math.max(1, Math.min(Number(maxAttempts) || 1, 3));
 
   return async function execute(decision, text) {
     const supported =
@@ -88,38 +100,63 @@ export function createOpenRouterExecutor({
       request.tools = [{ type: "openrouter:web_search" }];
     }
 
-    const response = await fetchImpl(API_URL, {
-      method: "POST",
-      headers: {
-        authorization: "Bearer " + apiKey,
-        "content-type": "application/json",
-        "x-title": "Raise AI"
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(9_000)
-    });
+    let lastError = null;
 
-    const body = await response.json().catch(() => ({}));
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const response = await fetchImpl(API_URL, {
+          method: "POST",
+          headers: {
+            authorization: "Bearer " + apiKey,
+            "content-type": "application/json",
+            "x-title": "Raise AI"
+          },
+          body: JSON.stringify(request),
+          signal: AbortSignal.timeout(9_000)
+        });
 
-    if (!response.ok) {
-      const error = new Error("openrouter_http_" + response.status);
-      error.statusCode = 502;
-      throw error;
+        const body = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const error = new Error("openrouter_http_" + response.status);
+          error.statusCode = 502;
+          lastError = error;
+
+          if (attempt < attempts && isRetryableStatus(response.status)) {
+            await sleepImpl(retryDelayMs * attempt);
+            continue;
+          }
+
+          throw error;
+        }
+
+        const answer = outputText(body);
+        if (!answer) {
+          const error = new Error("openrouter_empty_response");
+          error.statusCode = 502;
+          throw error;
+        }
+
+        return {
+          enabled: true,
+          provider: "openrouter",
+          model: body.model ?? primaryModel,
+          requestedModels: models,
+          answer
+        };
+      } catch (error) {
+        lastError = error;
+        const isHttpError = String(error?.message ?? "").startsWith("openrouter_http_");
+
+        if (attempt < attempts && !isHttpError) {
+          await sleepImpl(retryDelayMs * attempt);
+          continue;
+        }
+
+        throw error;
+      }
     }
 
-    const answer = outputText(body);
-    if (!answer) {
-      const error = new Error("openrouter_empty_response");
-      error.statusCode = 502;
-      throw error;
-    }
-
-    return {
-      enabled: true,
-      provider: "openrouter",
-      model: body.model ?? primaryModel,
-      requestedModels: models,
-      answer
-    };
+    throw lastError ?? new Error("openrouter_request_failed");
   };
 }

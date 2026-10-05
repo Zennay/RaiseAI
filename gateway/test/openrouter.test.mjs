@@ -22,6 +22,16 @@ function fakeResponse(answer, calls, model = "z-ai/glm-5.3-flash") {
   };
 }
 
+function httpResponse(status, body = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      return body;
+    }
+  };
+}
+
 test("quick AI uses GLM 5.3 Flash with Gemini fallback by default", async () => {
   const calls = [];
   const execute = createOpenRouterExecutor({
@@ -68,6 +78,86 @@ test("OpenRouter fallback list can be configured as CSV", async () => {
     "google/gemini-3.8-flash",
     "openai/gpt-5.6-luna"
   ]);
+});
+
+test("transient OpenRouter 5xx is retried once and then succeeds", async () => {
+  let calls = 0;
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) return httpResponse(500, { error: "temporary" });
+      return httpResponse(200, {
+        model: "z-ai/glm-5.3-flash",
+        choices: [{ message: { content: "gereed" } }]
+      });
+    }
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(calls, 2);
+  assert.equal(result.answer, "gereed");
+});
+
+test("transient fetch failure is retried once", async () => {
+  let calls = 0;
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("temporary_network_failure");
+      return httpResponse(200, {
+        model: "z-ai/glm-5.3-flash",
+        choices: [{ message: { content: "ok" } }]
+      });
+    }
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(calls, 2);
+  assert.equal(result.answer, "ok");
+});
+
+test("permanent OpenRouter 4xx fails closed without retry", async () => {
+  let calls = 0;
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      return httpResponse(401, { error: "unauthorized" });
+    }
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    /openrouter_http_401/
+  );
+  assert.equal(calls, 1);
+});
+
+test("persistent OpenRouter 5xx still fails closed after bounded retry", async () => {
+  let calls = 0;
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      return httpResponse(503, { error: "unavailable" });
+    }
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    /openrouter_http_503/
+  );
+  assert.equal(calls, 2);
 });
 
 test("missing API key fails closed", async () => {
