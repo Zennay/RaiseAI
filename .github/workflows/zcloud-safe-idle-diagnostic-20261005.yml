@@ -1,0 +1,65 @@
+name: Diagnose zCloud guarded safe-idle
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-safe-idle-diagnostic-20261005.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 3
+    steps:
+      - name: Read current zCloud safe-idle blockers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          echo "=== memory ==="
+          grep -E 'MemAvailable|SwapFree' /proc/meminfo
+          echo "=== zCloud services ==="
+          systemctl is-active zennay-cloud.service || true
+          systemctl is-active actions.runner.Zennay-zCloud.zcloud-vps-1.service || true
+          echo "=== safe-idle database ==="
+          python3 - <<'PY'
+          import json, sqlite3
+          db="/home/ubuntu/zennay-cloud/history.db"
+          with sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=3) as conn:
+              conn.row_factory=sqlite3.Row
+              slots=[dict(r) for r in conn.execute(
+                  "SELECT slot,project_id,worker_slot FROM ai_global_slots ORDER BY slot"
+              )]
+              out=[]
+              for slot in slots:
+                  project=str(slot["project_id"])
+                  worker_slot=int(slot["worker_slot"] or 1)
+                  state=conn.execute(
+                      "SELECT desired_state FROM runner_workers WHERE project_id=? AND worker_slot=?",
+                      (project,worker_slot)
+                  ).fetchone()
+                  event=conn.execute(
+                      "SELECT id,ts,event,generating,sending,reason,error FROM runner_events "
+                      "WHERE project_id=? AND worker_slot=? ORDER BY id DESC LIMIT 1",
+                      (project,worker_slot)
+                  ).fetchone()
+                  key=f"{project}::w{worker_slot}"
+                  drain=conn.execute(
+                      "SELECT id,status,created_at,updated_at,result FROM runner_commands "
+                      "WHERE project_id=? AND action='drain' ORDER BY id DESC LIMIT 1",
+                      (key,)
+                  ).fetchone()
+                  out.append({
+                      "slot":int(slot["slot"]),
+                      "worker":key,
+                      "desired_state": None if state is None else state["desired_state"],
+                      "latest_event": None if event is None else dict(event),
+                      "latest_drain": None if drain is None else dict(drain),
+                  })
+              print("ZCLOUD_SAFE_IDLE_READONLY="+json.dumps(out,sort_keys=True))
+          PY
+          echo "ZCLOUD_SAFE_IDLE_DIAGNOSTIC_GREEN"
