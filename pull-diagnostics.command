@@ -40,6 +40,9 @@ $ADB -s "$TARGET" exec-out run-as nl.zennay.raiseai cat files/sensor-traces.csv 
 if ! $ADB -s "$TARGET" exec-out run-as nl.zennay.raiseai cat files/watch-e2e-evidence.json > "$OUT/watch-e2e-evidence.json" 2>/dev/null; then
   rm -f "$OUT/watch-e2e-evidence.json"
 fi
+if ! $ADB -s "$TARGET" exec-out run-as nl.zennay.raiseai cat files/voice-startup-evidence.json > "$OUT/voice-startup-evidence.json" 2>/dev/null; then
+  rm -f "$OUT/voice-startup-evidence.json"
+fi
 
 echo "Saved diagnostics to: $OUT"
 if [ -s "$OUT/watch-e2e-evidence.json" ]; then
@@ -63,5 +66,31 @@ if [ -s "$OUT/watch-e2e-evidence.json" ]; then
     fi
   else
     echo "python3 unavailable; evidence saved but not validated locally"
+  fi
+fi
+
+if [ -s "$OUT/voice-startup-evidence.json" ]; then
+  echo "Voice startup evidence included: $OUT/voice-startup-evidence.json"
+  if command -v python3 >/dev/null 2>&1; then
+    VOICE_VALIDATOR_ARGS=(
+      "$OUT/voice-startup-evidence.json"
+      --max-age-seconds "${RAISE_VOICE_MAX_AGE_SECONDS:-300}"
+    )
+    if [ -n "${RAISE_VOICE_MAX_READY_MS:-}" ]; then
+      VOICE_VALIDATOR_ARGS+=(--max-listen-ready-ms "$RAISE_VOICE_MAX_READY_MS")
+    fi
+    if [ -n "${RAISE_E2E_EXPECT_APP_VERSION:-}" ]; then
+      VOICE_VALIDATOR_ARGS+=(--expect-app-version "$RAISE_E2E_EXPECT_APP_VERSION")
+    fi
+    if [ -n "${RAISE_E2E_EXPECT_SOURCE_REVISION:-}" ]; then
+      VOICE_VALIDATOR_ARGS+=(--expect-source-revision "$RAISE_E2E_EXPECT_SOURCE_REVISION")
+    fi
+    if python3 tools/validate-voice-startup-evidence.py "${VOICE_VALIDATOR_ARGS[@]}"; then
+      echo "Voice startup evidence: contract PASS"
+    else
+      echo "Voice startup evidence: gate NOT PASSED"
+    fi
+  else
+    echo "python3 unavailable; voice startup evidence saved but not validated locally"
   fi
 fi
