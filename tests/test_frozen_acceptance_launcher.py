@@ -156,19 +156,23 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_launcher(self, extra_env=None):
+    def run_launcher(self, extra_env=None, args=None):
         env = os.environ.copy()
         env["PATH"] = f"{self.bin}:{env['PATH']}"
         env["FAKE_HANDOFF_LOG"] = str(self.log)
         env["FAKE_FETCH_MARKER"] = str(self.fetch_marker)
         if extra_env:
             env.update(extra_env)
+        command = [
+            "bash",
+            str(self.repo / "start-frozen-acceptance.command"),
+        ]
+        if args is None:
+            command.append(str(self.profile))
+        else:
+            command.extend(args)
         return subprocess.run(
-            [
-                "bash",
-                str(self.repo / "start-frozen-acceptance.command"),
-                str(self.profile),
-            ],
+            command,
             cwd=self.repo,
             env=env,
             text=True,
@@ -186,6 +190,22 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertTrue(lines[0].startswith("verify:"))
         self.assertTrue(lines[1].startswith("run:watch-1:"))
         self.assertTrue(lines[1].endswith(f":{self.profile.resolve()}"))
+
+    def test_preflight_only_verifies_handoff_without_starting_session(self):
+        result = self.run_launcher(
+            args=["--preflight-only", str(self.profile)]
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(self.fetch_marker.exists())
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("verify:"))
+        self.assertIn("FROZEN-ACCEPTANCE PREFLIGHT PASS", result.stdout)
+        self.assertIn(
+            "No APK was installed and no physical acceptance session was started.",
+            result.stdout,
+        )
 
     def test_rejects_multiple_active_adb_devices_before_fetch(self):
         result = self.run_launcher({"FAKE_MULTIPLE_DEVICES": "1"})
