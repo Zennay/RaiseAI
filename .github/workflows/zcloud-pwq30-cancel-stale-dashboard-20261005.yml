@@ -1,0 +1,55 @@
+name: Cancel stale zCloud PWQ-30 dashboard run
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-pwq30-cancel-stale-dashboard-20261005.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cancel:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 3
+    steps:
+      - name: Cancel only superseded zCloud dashboard recovery
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          gh auth status >/dev/null 2>&1
+
+          repo="Zennay/zCloud"
+          expected_main="1cf0c840eea28581c2dd61ca38db3be3c0b4fd13"
+          stale_run="37314618595"
+          stale_head="ee3c00f8d9ab98322494a6f7e2371217905ee680"
+
+          test "$(gh api "repos/$repo/branches/main" --jq .commit.sha)" = "$expected_main"
+          payload="$(gh api "repos/$repo/actions/runs/$stale_run")"
+          test "$(jq -r .name <<<"$payload")" = "zCloud dashboard access recovery"
+          test "$(jq -r .head_sha <<<"$payload")" = "$stale_head"
+          status="$(jq -r .status <<<"$payload")"
+
+          case "$status" in
+            queued|pending|in_progress|waiting|requested)
+              gh api --method POST "repos/$repo/actions/runs/$stale_run/cancel" >/dev/null
+              echo "ZCLOUD_PWQ30_STALE_DASHBOARD_CANCEL_REQUESTED run=$stale_run status=$status"
+              ;;
+            completed)
+              echo "ZCLOUD_PWQ30_STALE_DASHBOARD_ALREADY_TERMINAL run=$stale_run conclusion=$(jq -r .conclusion <<<"$payload")"
+              ;;
+            *)
+              echo "unexpected stale run status: $status" >&2
+              exit 1
+              ;;
+          esac
+
+          current_deploy="37315910261"
+          deploy="$(gh api "repos/$repo/actions/runs/$current_deploy")"
+          test "$(jq -r .name <<<"$deploy")" = "zCloud VPS deploy"
+          test "$(jq -r .head_sha <<<"$deploy")" = "$expected_main"
+          echo "ZCLOUD_PWQ30_CURRENT_DEPLOY_PROTECTED run=$current_deploy status=$(jq -r .status <<<"$deploy")"
+          echo "ZCLOUD_PWQ30_STALE_DASHBOARD_CANCEL_GREEN"
