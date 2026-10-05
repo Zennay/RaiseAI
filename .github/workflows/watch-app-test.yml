@@ -11,6 +11,7 @@ on:
       - "settings.gradle.kts"
       - "VERSION.txt"
       - "install-watch-apk.command"
+      - "install-watch-windows.ps1"
       - "upgrade-watch.command"
       - "physical-validation.command"
       - "start-physical-handoff.command"
@@ -39,6 +40,7 @@ on:
       - "settings.gradle.kts"
       - "VERSION.txt"
       - "install-watch-apk.command"
+      - "install-watch-windows.ps1"
       - "upgrade-watch.command"
       - "physical-validation.command"
       - "start-physical-handoff.command"
@@ -310,7 +312,7 @@ jobs:
       - name: Upload debug Watch APK
         uses: actions/upload-artifact@v4
         with:
-          name: RaiseAI-Watch7-v1.5.2-${{ github.run_id }}
+          name: RaiseAI-Watch7-v${{ env.RAISE_HANDOFF_VERSION }}-${{ github.run_id }}
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
