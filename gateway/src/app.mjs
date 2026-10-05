@@ -1,8 +1,11 @@
 import crypto from "node:crypto";
 import { classifyIntent } from "./router.mjs";
+import { createConversationMemory } from "./conversation-memory.mjs";
 
 const MAX_BODY = 16 * 1024;
 const MAX_TEXT = 4000;
+const CONVERSATION_TTL_MS = 10 * 60 * 1000;
+const CONVERSATION_ROUTES = new Set(["quick_ai", "deep_ai", "current_info"]);
 
 function json(res, status, body) {
   const payload = Buffer.from(JSON.stringify(body));
@@ -60,6 +63,10 @@ export function createHandler({
   }
 
   const buckets = new Map();
+  const conversationMemory = createConversationMemory({
+    now,
+    ttlMs: CONVERSATION_TTL_MS
+  });
 
   return async function handler(req, res) {
     const requestId = crypto.randomUUID();
@@ -97,6 +104,7 @@ export function createHandler({
     try {
       const body = await readJson(req);
       const text = String(body.text ?? "").trim();
+      const device = String(body.device ?? "").trim();
 
       if (!text) {
         return json(res, 400, { error: "text_required", requestId });
@@ -107,14 +115,23 @@ export function createHandler({
       }
 
       const decision = classifyIntent(text);
+      const conversationEligible = CONVERSATION_ROUTES.has(decision.route);
+      const priorConversation = conversationEligible
+        ? conversationMemory.get(device)
+        : [];
+
       const connectorResult = execute
-        ? await execute(decision, text)
+        ? await execute(decision, text, { conversation: priorConversation })
         : null;
 
       const execution = connectorResult ?? {
         enabled: false,
         reason: "connector_not_configured"
       };
+
+      if (conversationEligible && execution.answer) {
+        conversationMemory.record(device, text, execution.answer);
+      }
 
       return json(res, 200, {
         requestId,
@@ -126,7 +143,11 @@ export function createHandler({
           provider: execution.provider ?? null,
           model: execution.model ?? null
         },
-        answer: execution.answer ?? null
+        answer: execution.answer ?? null,
+        conversation: {
+          continued: priorConversation.length > 0,
+          inactivityTtlMs: CONVERSATION_TTL_MS
+        }
       });
     } catch (error) {
       const publicError =
