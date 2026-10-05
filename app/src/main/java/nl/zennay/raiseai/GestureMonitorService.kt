@@ -247,10 +247,12 @@ class GestureMonitorService : Service(), SensorEventListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val selectedAssistant = AssistantModeStore.get(this)
-        val alternateAssistant = selectedAssistant.alternate()
+        val alternateAssistant = selectedAssistant.next()
         val preferredAssistantIntent = when (selectedAssistant) {
             AssistantMode.GEMINI -> Intent(this, AssistantProxyActivity::class.java)
             AssistantMode.NATIVE -> Intent(this, NativeVoiceActivity::class.java)
+            AssistantMode.CHATGPT -> Intent(this, ChatGptActivity::class.java)
+                .putExtra(ChatGptActivity.EXTRA_TRY_WEBSITE_MIC, true)
         }
         val talkPending = PendingIntent.getActivity(
             this,
@@ -261,6 +263,8 @@ class GestureMonitorService : Service(), SensorEventListener {
         val alternateAssistantIntent = when (alternateAssistant) {
             AssistantMode.GEMINI -> Intent(this, AssistantProxyActivity::class.java)
             AssistantMode.NATIVE -> Intent(this, NativeVoiceActivity::class.java)
+            AssistantMode.CHATGPT -> Intent(this, ChatGptActivity::class.java)
+                .putExtra(ChatGptActivity.EXTRA_TRY_WEBSITE_MIC, true)
         }
         val alternatePending = PendingIntent.getActivity(
             this,
