@@ -101,4 +101,23 @@ fi
 if [ -s "$OUT/voice-startup-evidence.jsonl" ]; then
   samples="$(grep -cve '^[[:space:]]*$' "$OUT/voice-startup-evidence.jsonl" || true)"
   echo "Voice startup history included: $OUT/voice-startup-evidence.jsonl ($samples samples; Watch retains the newest 50)"
+  if command -v python3 >/dev/null 2>&1; then
+    SUMMARY_ARGS=(
+      "$OUT/voice-startup-evidence.jsonl"
+      --output "$OUT/voice-startup-summary.json"
+      --min-samples "${RAISE_VOICE_SUMMARY_MIN_SAMPLES:-1}"
+    )
+    if [ -n "${RAISE_E2E_EXPECT_APP_VERSION:-}" ]; then
+      SUMMARY_ARGS+=(--expect-app-version "$RAISE_E2E_EXPECT_APP_VERSION")
+    fi
+    if [ -n "${RAISE_E2E_EXPECT_SOURCE_REVISION:-}" ]; then
+      SUMMARY_ARGS+=(--expect-source-revision "$RAISE_E2E_EXPECT_SOURCE_REVISION")
+    fi
+    if python3 tools/summarize-voice-startup-history.py "${SUMMARY_ARGS[@]}"; then
+      echo "Voice startup summary: $OUT/voice-startup-summary.json"
+    else
+      rm -f "$OUT/voice-startup-summary.json"
+      echo "Voice startup summary: NOT PRODUCED"
+    fi
+  fi
 fi
