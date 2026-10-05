@@ -26,6 +26,7 @@ jobs:
           expected_main="7574568dec8fd26b037170cc64d9fb8acec69b8c"
           protected_head="e12f97cd0c117b5edd35f082e73ca2a5c4906a94"
           target_run="37309517914"
+          execution_run="37310069830"
 
           test "$(gh api "repos/$repo/branches/main" --jq .commit.sha)" = "$expected_main"
           test "$(gh api "repos/$repo/pulls/493" --jq .state)" = "open"
@@ -47,6 +48,24 @@ jobs:
               ;;
             *)
               echo "unexpected target status: $status" >&2
+              exit 1
+              ;;
+          esac
+
+          execution_payload="$(gh api "repos/$repo/actions/runs/$execution_run")"
+          test "$(jq -r .head_sha <<<"$execution_payload")" = "$expected_main"
+          test "$(jq -r .name <<<"$execution_payload")" = "zCloud VPS execution lane probe"
+          execution_status="$(jq -r .status <<<"$execution_payload")"
+          case "$execution_status" in
+            queued|pending|in_progress|waiting|requested)
+              gh api --method POST "repos/$repo/actions/runs/$execution_run/cancel" >/dev/null
+              echo "ZCLOUD_PWQ24_MAIN_EXECUTION_CANCEL_REQUESTED run=$execution_run status=$execution_status"
+              ;;
+            completed)
+              echo "ZCLOUD_PWQ24_MAIN_EXECUTION_ALREADY_TERMINAL run=$execution_run conclusion=$(jq -r .conclusion <<<"$execution_payload")"
+              ;;
+            *)
+              echo "unexpected execution target status: $execution_status" >&2
               exit 1
               ;;
           esac
