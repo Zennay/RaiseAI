@@ -1,4 +1,11 @@
-# Raise AI v1.5.2 — Galaxy Watch 7
+# Raise AI v1.5.3 — Galaxy Watch 7
+
+## v1.5.3: bounded microphone retry + Windows installer
+
+- Native voice now allows only one automatic retry after a no-match/speech-timeout error, preventing a stuck microphone retry loop.
+- New `install-watch-windows.ps1` downloads the newest successful main APK with GitHub CLI, verifies the ADB target is a Wear OS watch with the expected ABI, installs the APK, launches Raise AI and prints the installed version.
+- CI artifact names now follow `VERSION.txt` automatically instead of being hardcoded to v1.5.2.
+- v1.5.3 uses versionCode 20.
 
 ## v1.5.2: fail-closed build identity
 
