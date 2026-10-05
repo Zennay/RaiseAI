@@ -113,13 +113,13 @@ class GestureMonitorService : Service(), SensorEventListener {
         Log.i(TAG, "Raise detected similarity=${result.similarity}")
         CalibrationStore.recordTrigger(this, result.similarity)
         vibrate()
-        val launched = NativeVoiceLauncher.launchFromService(this)
+        val launched = PreferredAssistantLauncher.launchFromService(this)
         if (launched) {
             sessionGuard.markAssistantLaunched()
             updateNotification("Raise AI listening · lower wrist before the next raise")
         } else {
-            updateNotification("Gesture detected · open Raise AI to repair native launch")
-            Log.w(TAG, "Native Raise AI launch blocked")
+            updateNotification("Gesture detected · open Raise AI to repair assistant launch")
+            Log.w(TAG, "Preferred assistant launch blocked")
         }
     }
 
@@ -246,10 +246,14 @@ class GestureMonitorService : Service(), SensorEventListener {
             Intent(this, GestureMonitorService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val preferredAssistantIntent = when (AssistantModeStore.get(this)) {
+            AssistantMode.GEMINI -> Intent(this, AssistantProxyActivity::class.java)
+            AssistantMode.NATIVE -> Intent(this, NativeVoiceActivity::class.java)
+        }
         val talkPending = PendingIntent.getActivity(
             this,
             3,
-            Intent(this, NativeVoiceActivity::class.java),
+            preferredAssistantIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val geminiPending = PendingIntent.getActivity(
