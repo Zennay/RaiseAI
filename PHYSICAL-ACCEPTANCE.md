@@ -49,7 +49,15 @@ Before starting the frozen v1.5.2 acceptance session, make `adb devices` show **
 
 ### Preferred guarded start
 
-From a current RaiseAI checkout, start the canonical frozen session with:
+From a current RaiseAI checkout, you can first run a non-destructive readiness check:
+
+```bash
+bash ./start-frozen-acceptance.command --preflight-only ~/.config/raiseai/watch-gateway.properties
+```
+
+A successful preflight prints `FROZEN-ACCEPTANCE PREFLIGHT PASS`. It verifies the single intended Galaxy Watch 7 plus the preserved frozen handoff and provenance chain, then exits **before APK install or physical-session creation**.
+
+When ready for the real session, start the canonical frozen flow with:
 
 ```bash
 bash ./start-frozen-acceptance.command ~/.config/raiseai/watch-gateway.properties
