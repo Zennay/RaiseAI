@@ -210,7 +210,8 @@ prepare_session() {
       --expect-sha256 "$expected_apk_sha"
     )
     "${verify_args[@]}" | tee "$session/apk-verification.json"
-    RAISE_INSTALLED_WATCH_SERIAL_FILE="$installed_watch_serial_file" \
+    RAISE_PRESERVE_APK_BYTES=1 \
+      RAISE_INSTALLED_WATCH_SERIAL_FILE="$installed_watch_serial_file" \
       RAISE_INSTALLED_APK_SHA256_FILE="$installed_apk_sha_file" \
       bash ./install-watch-apk.command "$prebuilt_apk"
     selected_apk="$prebuilt_apk"
@@ -251,6 +252,11 @@ PY
   installed_apk_sha="$(tr -d '\r\n' < "$installed_apk_sha_file")"
   if [ "${#installed_apk_sha}" -ne 64 ] || printf '%s' "$installed_apk_sha" | grep -Eq '[^0-9a-f]'; then
     echo "Installer returned an invalid installed APK SHA-256."
+    exit 1
+  fi
+  if [ "$install_mode" = "prebuilt_apk" ] && [ "$installed_apk_sha" != "$apk_sha" ]; then
+    echo "Installed APK SHA-256 does not match the exact prepared prebuilt APK."
+    echo "Refusing physical acceptance with locally modified or re-signed APK bytes."
     exit 1
   fi
 
