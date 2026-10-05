@@ -113,13 +113,17 @@ class GestureMonitorService : Service(), SensorEventListener {
         Log.i(TAG, "Raise detected similarity=${result.similarity}")
         CalibrationStore.recordTrigger(this, result.similarity)
         vibrate()
-        val launched = NativeVoiceLauncher.launchFromService(this)
+        val target = CalibrationStore.getRaiseTarget(this)
+        val launched = when (target) {
+            RaiseTarget.GEMINI -> AssistantLauncher.launchFromService(this).success
+            RaiseTarget.NATIVE -> NativeVoiceLauncher.launchFromService(this)
+        }
         if (launched) {
             sessionGuard.markAssistantLaunched()
-            updateNotification("Raise AI listening · lower wrist before the next raise")
+            updateNotification("${target.displayName} listening · lower wrist before the next raise")
         } else {
-            updateNotification("Gesture detected · open Raise AI to repair native launch")
-            Log.w(TAG, "Native Raise AI launch blocked")
+            updateNotification("Gesture detected · open Raise AI to repair ${target.displayName} launch")
+            Log.w(TAG, "${target.displayName} launch blocked")
         }
     }
 
