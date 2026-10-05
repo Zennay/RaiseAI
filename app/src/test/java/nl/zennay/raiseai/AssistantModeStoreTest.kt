@@ -23,4 +23,10 @@ class AssistantModeStoreTest {
     fun explicitNativePreferenceUsesNativeRaiseAi() {
         assertEquals(AssistantMode.NATIVE, AssistantModeStore.resolve(AssistantMode.NATIVE.storedValue))
     }
+
+    @Test
+    fun assistantModesExposeTheOtherModeAsAlternate() {
+        assertEquals(AssistantMode.NATIVE, AssistantMode.GEMINI.alternate())
+        assertEquals(AssistantMode.GEMINI, AssistantMode.NATIVE.alternate())
+    }
 }
