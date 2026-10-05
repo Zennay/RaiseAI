@@ -34,7 +34,7 @@ class VoiceStartupEvidenceTest {
     fun historyDropsBlankLinesAndTrimsNewSample() {
         val result = VoiceStartupEvidence.boundedHistory(
             existingLines = listOf("", """{"sample":1}""", "   "),
-            newLine = "  {"sample":2}  ",
+            newLine = """  {"sample":2}  """,
             maxSamples = 10
         )
 
