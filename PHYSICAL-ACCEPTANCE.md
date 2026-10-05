@@ -99,9 +99,28 @@ The preserved v1.5.2 launcher predates automatic verify-only cleanup. Running it
 
 Use the existing gateway profile. Never paste or commit its token.
 
+The preserved v1.5.2 installer can locally re-sign an APK on macOS when Android build-tools are visible. That is useful for ordinary development upgrades but is **not allowed for this exact-byte acceptance gate**. Run the frozen handoff through a temporary SDK shim that exposes only the already-connected `adb` binary and an empty build-tools directory:
+
 ```bash
-bash ./start-physical-handoff.command ~/.config/raiseai/watch-gateway.properties
+real_adb="$(command -v adb)"
+test -n "$real_adb"
+
+acceptance_root="$(mktemp -d)"
+mkdir -p "$acceptance_root/sdk/platform-tools" "$acceptance_root/sdk/build-tools"
+ln -s "$real_adb" "$acceptance_root/sdk/platform-tools/adb"
+
+ANDROID_SDK_ROOT="$acceptance_root/sdk" \
+RAISE_RESTORE_DIR="$acceptance_root/source" \
+  bash ./start-physical-handoff.command ~/.config/raiseai/watch-gateway.properties
+acceptance_status=$?
+
+rm -rf "$acceptance_root"
+test "$acceptance_status" -eq 0
 ```
+
+The empty build-tools directory prevents the old launcher from discovering `apksigner`, so the exact frozen APK bytes are passed to `adb install` unchanged. The temporary restore path also makes a failed/retried session start cleanly without mutating the preserved handoff directory.
+
+If installation stops with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, do **not** work around it by re-signing the frozen APK. Exact-byte acceptance requires removing the differently signed old Raise AI installation before retrying; that erases Raise AI app-local data, so do it only as an explicit operator choice.
 
 The command restores the exact bundled source, installs the frozen APK, binds the session to the selected Watch, provisions the gateway profile and then runs the canonical physical-validation flow.
 
