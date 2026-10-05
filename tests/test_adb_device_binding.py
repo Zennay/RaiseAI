@@ -477,8 +477,17 @@ class PhysicalPrepareBindingTest(unittest.TestCase):
 set -euo pipefail
 : "${RAISE_INSTALLED_WATCH_SERIAL_FILE:?missing install serial output}"
 : "${RAISE_INSTALLED_APK_SHA256_FILE:?missing installed APK digest output}"
+[ "${RAISE_PRESERVE_APK_BYTES:-}" = "1" ] || {
+  echo "prebuilt prepare did not require exact APK byte preservation"
+  exit 43
+}
 printf 'watch-b\\n' > "$RAISE_INSTALLED_WATCH_SERIAL_FILE"
-printf '%s\\n' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' > "$RAISE_INSTALLED_APK_SHA256_FILE"
+if [ -n "${FORCE_INSTALLED_APK_SHA256:-}" ]; then
+  digest="$FORCE_INSTALLED_APK_SHA256"
+else
+  digest="$(sha256sum "$1" | awk '{print $1}')"
+fi
+printf '%s\\n' "$digest" > "$RAISE_INSTALLED_APK_SHA256_FILE"
 """,
             encoding="utf-8",
         )
@@ -579,8 +588,36 @@ exit 2
         self.assertEqual(len(sessions), 1)
         payload = json.loads((sessions[0] / "session.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["watch_serial"], "watch-b")
-        self.assertEqual(payload["apk_sha256"], hashlib.sha256(self.apk.read_bytes()).hexdigest())
-        self.assertEqual(payload["installed_apk_sha256"], "b" * 64)
+        expected_apk_sha = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        self.assertEqual(payload["apk_sha256"], expected_apk_sha)
+        self.assertEqual(payload["installed_apk_sha256"], expected_apk_sha)
+
+    def test_prepare_rejects_installed_prebuilt_apk_byte_mismatch(self):
+        provision_log = self.root / "provision-serial-mismatch"
+        env = os.environ.copy()
+        env["PATH"] = f"{self.bin}:{env['PATH']}"
+        env["RAISE_EVIDENCE_ROOT"] = str(self.evidence)
+        env["RAISE_PREBUILT_APK"] = str(self.apk)
+        env["RAISE_EXPECT_APK_SHA256"] = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        env["PROVISION_SERIAL_LOG"] = str(provision_log)
+        env["FORCE_INSTALLED_APK_SHA256"] = "b" * 64
+        env.pop("ANDROID_SERIAL", None)
+
+        result = subprocess.run(
+            ["bash", str(self.repo / "physical-validation.command"), "prepare", str(self.profile)],
+            cwd=self.repo,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Installed APK SHA-256 does not match the exact prepared prebuilt APK.",
+            result.stdout,
+        )
+        self.assertFalse(provision_log.exists())
 
 
 if __name__ == "__main__":
