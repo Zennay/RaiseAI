@@ -137,12 +137,10 @@ def compare(
     elif mode == "package-update":
         if before["boot_id"].lower() != after["boot_id"].lower():
             raise ValueError("package-update recovery must be isolated from a Watch reboot")
-        identity_changed = any(
-            before[field] != after[field]
-            for field in ("app_version", "source_revision", "installed_apk_sha256")
-        )
-        if not identity_changed:
-            raise ValueError("package-update recovery requires a changed app/source/APK identity")
+        if before["source_revision"] == after["source_revision"]:
+            raise ValueError("package-update recovery requires a changed source_revision")
+        if before["installed_apk_sha256"] == after["installed_apk_sha256"]:
+            raise ValueError("package-update recovery requires a changed installed_apk_sha256")
     else:
         raise ValueError(f"unsupported recovery mode: {mode}")
 
