@@ -1,4 +1,5 @@
 name: Diagnose zCloud guarded safe-idle
+# Retrigger 2026-10-05 13:14 UTC for current-main deploy 37314769012.
 # Refresh snapshot during PWQ-24 r13 live acceptance.
 
 on:
