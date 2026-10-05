@@ -189,7 +189,12 @@ def main() -> int:
     print()
     print("Next:")
     print(f"  cd {output_dir}")
-    print("  bash ./start-physical-handoff.command --verify-only")
+    print('  verify_root="$(mktemp -d)"')
+    print('  RAISE_RESTORE_DIR="$verify_root/source" \\')
+    print("    bash ./start-physical-handoff.command --verify-only")
+    print("  verify_status=$?")
+    print('  rm -rf "$verify_root"')
+    print('  test "$verify_status" -eq 0')
     return 0
 
 
