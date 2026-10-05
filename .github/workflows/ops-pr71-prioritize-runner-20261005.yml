@@ -1,0 +1,70 @@
+name: Prioritize Raise AI PR71 runner queue
+
+on:
+  push:
+    branches:
+      - ops/pr71-prioritize-runner-20261005
+    paths:
+      - ".github/workflows/ops-pr71-prioritize-runner-20261005.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-superseded:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Protect canonical runs and cancel only explicit superseded runs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          protect_run() {
+            local run_id="$1"
+            local expected_sha="$2"
+            local json sha
+            json="$(gh api "repos/$REPO/actions/runs/$run_id")"
+            sha="$(jq -r '.head_sha' <<<"$json")"
+            test "$sha" = "$expected_sha"
+            echo "protected run $run_id @ $sha"
+          }
+
+          cancel_if_exact() {
+            local run_id="$1"
+            local expected_sha="$2"
+            local json sha status
+            json="$(gh api "repos/$REPO/actions/runs/$run_id")"
+            sha="$(jq -r '.head_sha' <<<"$json")"
+            status="$(jq -r '.status' <<<"$json")"
+            test "$sha" = "$expected_sha"
+            case "$status" in
+              queued|in_progress|pending|waiting|requested)
+                gh api --method POST "repos/$REPO/actions/runs/$run_id/cancel"
+                echo "cancelled superseded run $run_id @ $sha"
+                ;;
+              completed)
+                echo "run $run_id already completed; no action"
+                ;;
+              *)
+                echo "refusing unexpected status $status for $run_id" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          # Canonical Raise AI PR #71 and current main recovery run must never be touched.
+          protect_run 37339709015 3cf92caaea27bdd3134c27990fc19665aac99e59
+          protect_run 37322776730 2dacf830e13f17e99bfe4dcc8bfa19b2af1d18f9
+
+          # Explicitly superseded runner consumers:
+          # PR #72 duplicate (closed), PR #64 stale diagnostic (closed), PR #70 old pre-merge head.
+          cancel_if_exact 37341310068 9d909439628a540f79f384449497af486f4ae818
+          cancel_if_exact 37319908890 d68f3395a629c5d409e0b34a3502e05fdeb11742
+          cancel_if_exact 37318285914 65c9f355efce9d76bc48f43e2f330cc7dc726f6f
+
+          echo "RAISE_PR71_QUEUE_PRIORITY_GREEN"
