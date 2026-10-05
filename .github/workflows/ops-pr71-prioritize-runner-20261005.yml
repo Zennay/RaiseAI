@@ -57,14 +57,15 @@ jobs:
             esac
           }
 
-          # Canonical Raise AI PR #71 and current main recovery run must never be touched.
+          # Canonical Raise AI PR #71 must never be touched.
           protect_run 37339709015 3cf92caaea27bdd3134c27990fc19665aac99e59
-          protect_run 37322776730 2dacf830e13f17e99bfe4dcc8bfa19b2af1d18f9
 
           # Explicitly superseded runner consumers:
-          # PR #72 duplicate (closed), PR #64 stale diagnostic (closed), PR #70 old pre-merge head.
+          # PR #72 duplicate (closed), PR #64 stale diagnostic (closed), PR #70 old pre-merge head,
+          # and the old zCloud listener recovery that targeted LightUp PR #27, which is already merged.
           cancel_if_exact 37341310068 9d909439628a540f79f384449497af486f4ae818
           cancel_if_exact 37319908890 d68f3395a629c5d409e0b34a3502e05fdeb11742
           cancel_if_exact 37318285914 65c9f355efce9d76bc48f43e2f330cc7dc726f6f
+          cancel_if_exact 37322776730 2dacf830e13f17e99bfe4dcc8bfa19b2af1d18f9
 
           echo "RAISE_PR71_QUEUE_PRIORITY_GREEN"
