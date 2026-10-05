@@ -1,4 +1,5 @@
 name: Recover duplicate zCloud Actions listener safely
+# Operational retrigger 2026-10-05 14:10 UTC for LightUp PR27 exact-head VPS CI head 763b1260e7adb3f7fa8f34a72a4e33e85544b0d3.
 # Operational retrigger 2026-10-05 13:11 UTC to land zCloud #497 self-heal in production.
 # Operational retrigger 2026-10-05 13:02 UTC for PWQ-30 post-deploy activation.
 # Operational retrigger 2026-10-05 12:30 UTC for remaining zCloud PR493 dashboard/VPS gates.
