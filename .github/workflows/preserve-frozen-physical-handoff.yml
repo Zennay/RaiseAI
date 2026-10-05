@@ -1,0 +1,246 @@
+name: Preserve frozen physical handoff
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/preserve-frozen-physical-handoff.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: raiseai-preserve-frozen-v152-handoff
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 10
+    env:
+      ARTIFACT_ID: "11317304352"
+      ARTIFACT_RUN_ID: "37241768528"
+      EXPECTED_ARTIFACT_DIGEST: "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce"
+      SOURCE_REVISION: "8f719bb273f9b997848864f342598e7df5f090e5"
+      RELEASE_TAG: "physical-handoff-v1.5.2-8f719bb"
+      ASSET_NAME: "RaiseAI-Watch7-v1.5.2-physical-handoff-37241768528.zip"
+      HANDOFF_NAME: "RaiseAI-Watch7-v1.5.2-physical-handoff-37241768528"
+
+    steps:
+      - name: Download exact Actions artifact archive
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/$ASSET_NAME"
+          api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
+
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api/actions/artifacts/$ARTIFACT_ID/zip" \
+            -o "$archive"
+
+          actual_digest="$(sha256sum "$archive" | awk '{print tolower($1)}')"
+          test "$actual_digest" = "$EXPECTED_ARTIFACT_DIGEST" || {
+            echo "Artifact archive digest mismatch."
+            echo "expected=$EXPECTED_ARTIFACT_DIGEST"
+            echo "actual=$actual_digest"
+            exit 1
+          }
+
+          ARCHIVE="$archive" SOURCE_REVISION="$SOURCE_REVISION" python3 - <<'PY'
+          import hashlib
+          import os
+          import zipfile
+          from pathlib import PurePosixPath
+
+          archive = os.environ["ARCHIVE"]
+          expected_revision = os.environ["SOURCE_REVISION"].lower()
+          required = {
+              "BUILD-IDENTITY.txt",
+              "RaiseAI-v1.5.2-debug.apk",
+              "RaiseAI-v1.5.2-source.bundle",
+              "start-physical-handoff.command",
+          }
+
+          with zipfile.ZipFile(archive) as zf:
+              normalized = {str(PurePosixPath(name)): name for name in zf.namelist() if not name.endswith("/")}
+              by_basename = {}
+              for normalized_name, original in normalized.items():
+                  by_basename.setdefault(PurePosixPath(normalized_name).name, []).append(original)
+
+              for name in required:
+                  matches = by_basename.get(name, [])
+                  if len(matches) != 1:
+                      raise SystemExit(f"expected exactly one {name}, found {len(matches)}")
+
+              identity_name = by_basename["BUILD-IDENTITY.txt"][0]
+              identity = {}
+              for line in zf.read(identity_name).decode("utf-8").splitlines():
+                  if "=" in line:
+                      key, value = line.split("=", 1)
+                      identity[key.strip()] = value.strip().lower()
+
+              if identity.get("source_revision") != expected_revision:
+                  raise SystemExit(
+                      f"source revision mismatch: {identity.get('source_revision')} != {expected_revision}"
+                  )
+
+              apk_bytes = zf.read(by_basename["RaiseAI-v1.5.2-debug.apk"][0])
+              bundle_bytes = zf.read(by_basename["RaiseAI-v1.5.2-source.bundle"][0])
+              apk_sha = hashlib.sha256(apk_bytes).hexdigest()
+              bundle_sha = hashlib.sha256(bundle_bytes).hexdigest()
+
+              if apk_sha != identity.get("apk_sha256"):
+                  raise SystemExit("APK digest does not match BUILD-IDENTITY.txt")
+              if bundle_sha != identity.get("source_bundle_sha256"):
+                  raise SystemExit("source bundle digest does not match BUILD-IDENTITY.txt")
+
+              print("Archive contents and BUILD-IDENTITY.txt are internally consistent.")
+              print("source_revision=", expected_revision)
+              print("apk_sha256=", apk_sha)
+              print("source_bundle_sha256=", bundle_sha)
+          PY
+
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Create immutable release carrier if needed
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
+
+          release_json="$(curl --silent --show-error \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api/releases/tags/$RELEASE_TAG" || true)"
+
+          if ! RELEASE_JSON="$release_json" python3 - <<'PY'
+          import json, os, sys
+          try:
+              payload = json.loads(os.environ.get("RELEASE_JSON", ""))
+          except json.JSONDecodeError:
+              sys.exit(1)
+          sys.exit(0 if isinstance(payload, dict) and payload.get("id") else 1)
+          PY
+          then
+            payload="$(python3 - <<'PY'
+          import json
+          import os
+
+          body = """Durable carrier for the frozen Raise AI v1.5.2 physical-acceptance input.
+
+          This release does not rebuild or replace the Watch APK. It preserves the exact GitHub Actions artifact archive from run 37241768528 / artifact 11317304352 so issue #34 can still be executed after Actions retention expires.
+
+          Canonical source revision: 8f719bb273f9b997848864f342598e7df5f090e5
+          Artifact archive SHA-256: 867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce
+          """
+          print(json.dumps({
+              "tag_name": os.environ["RELEASE_TAG"],
+              "target_commitish": os.environ["SOURCE_REVISION"],
+              "name": "Frozen physical handoff v1.5.2",
+              "body": body,
+              "draft": False,
+              "prerelease": False,
+          }))
+          PY
+          )"
+            release_json="$(curl --fail --silent --show-error \
+              -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -H "Content-Type: application/json" \
+              "$api/releases" \
+              -d "$payload")"
+          fi
+
+          release_id="$(RELEASE_JSON="$release_json" python3 - <<'PY'
+          import json, os
+          print(json.loads(os.environ["RELEASE_JSON"])["id"])
+          PY
+          )"
+          release_url="$(RELEASE_JSON="$release_json" python3 - <<'PY'
+          import json, os
+          print(json.loads(os.environ["RELEASE_JSON"])["html_url"])
+          PY
+          )"
+
+          echo "RELEASE_ID=$release_id" >> "$GITHUB_ENV"
+          echo "RELEASE_URL=$release_url" >> "$GITHUB_ENV"
+
+      - name: Upload exact archive or verify existing asset
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
+          assets_json="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api/releases/$RELEASE_ID/assets?per_page=100")"
+
+          asset_id="$(ASSETS_JSON="$assets_json" python3 - <<'PY'
+          import json, os
+          name = os.environ["ASSET_NAME"]
+          for asset in json.loads(os.environ["ASSETS_JSON"]):
+              if asset.get("name") == name:
+                  print(asset["id"])
+                  break
+          PY
+          )"
+
+          if [ -z "$asset_id" ]; then
+            encoded_name="$(python3 - <<'PY'
+          import os
+          from urllib.parse import quote
+          print(quote(os.environ["ASSET_NAME"], safe=""))
+          PY
+          )"
+            upload_url="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$encoded_name"
+            uploaded="$(curl --fail --silent --show-error \
+              -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -H "Content-Type: application/zip" \
+              --data-binary "@$ARCHIVE" \
+              "$upload_url")"
+            asset_id="$(UPLOADED="$uploaded" python3 - <<'PY'
+          import json, os
+          print(json.loads(os.environ["UPLOADED"])["id"])
+          PY
+          )"
+          fi
+
+          verify="$RUNNER_TEMP/verify-$ASSET_NAME"
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/octet-stream" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api/releases/assets/$asset_id" \
+            -o "$verify"
+
+          actual_digest="$(sha256sum "$verify" | awk '{print tolower($1)}')"
+          test "$actual_digest" = "$EXPECTED_ARTIFACT_DIGEST" || {
+            echo "Preserved release asset digest mismatch."
+            echo "expected=$EXPECTED_ARTIFACT_DIGEST"
+            echo "actual=$actual_digest"
+            exit 1
+          }
+
+          echo "PRESERVE PASS"
+          echo "release=$RELEASE_URL"
+          echo "asset_id=$asset_id"
+          echo "sha256=$actual_digest"
