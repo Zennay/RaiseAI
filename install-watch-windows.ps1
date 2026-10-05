@@ -40,6 +40,14 @@ if (-not $run) {
     throw "Geen succesvolle main build gevonden."
 }
 
+$mainSha = (gh api "repos/$Repo/commits/main" --jq ".sha").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $mainSha) {
+    throw "Kon de huidige main commit niet bepalen."
+}
+if ($run.headSha -ne $mainSha) {
+    throw "De nieuwste main commit is nog niet succesvol gebouwd. Probeer opnieuw zodra Raise Watch app CI groen is."
+}
+
 Write-Host "Download build $($run.databaseId) @ $($run.headSha)"
 gh run download $run.databaseId --repo $Repo --dir $WorkDir
 if ($LASTEXITCODE -ne 0) {
