@@ -1,0 +1,54 @@
+name: Stop superseded zCloud main activation for PWQ-24
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-pwq24-stop-main-activation-20261005.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  stop:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 3
+    steps:
+      - name: Cancel only exact current-main activation that blocks PR493
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          gh auth status >/dev/null 2>&1
+
+          repo="Zennay/zCloud"
+          expected_main="7574568dec8fd26b037170cc64d9fb8acec69b8c"
+          protected_head="e12f97cd0c117b5edd35f082e73ca2a5c4906a94"
+          target_run="37309517914"
+
+          test "$(gh api "repos/$repo/branches/main" --jq .commit.sha)" = "$expected_main"
+          test "$(gh api "repos/$repo/pulls/493" --jq .state)" = "open"
+          test "$(gh api "repos/$repo/pulls/493" --jq .head.sha)" = "$protected_head"
+          test "$(gh api "repos/$repo/pulls/493" --jq .base.sha)" = "$expected_main"
+
+          payload="$(gh api "repos/$repo/actions/runs/$target_run")"
+          test "$(jq -r .head_sha <<<"$payload")" = "$expected_main"
+          test "$(jq -r .name <<<"$payload")" = "zCloud dynamic worker pool activation"
+          status="$(jq -r .status <<<"$payload")"
+
+          case "$status" in
+            queued|pending|in_progress|waiting|requested)
+              gh api --method POST "repos/$repo/actions/runs/$target_run/cancel" >/dev/null
+              echo "ZCLOUD_PWQ24_MAIN_ACTIVATION_CANCEL_REQUESTED run=$target_run status=$status"
+              ;;
+            completed)
+              echo "ZCLOUD_PWQ24_MAIN_ACTIVATION_ALREADY_TERMINAL run=$target_run conclusion=$(jq -r .conclusion <<<"$payload")"
+              ;;
+            *)
+              echo "unexpected target status: $status" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "ZCLOUD_PWQ24_MAIN_ACTIVATION_STOP_GREEN"
