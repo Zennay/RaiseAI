@@ -16,6 +16,7 @@ on:
       - "physical-validation.command"
       - "start-physical-handoff.command"
       - "start-frozen-acceptance.command"
+      - "watch-recovery-snapshot.command"
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "provision-watch-gateway.command"
@@ -24,8 +25,11 @@ on:
       - "tools/analyze-watch-sensor-trials.py"
       - "tools/verify-watch-apk-identity.py"
       - "tools/fetch-frozen-physical-handoff.py"
+      - "tools/compare-watch-recovery-snapshots.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
       - "tests/test_frozen_acceptance_launcher.py"
+      - "tests/test_watch_recovery_evidence.py"
+      - "tests/test_watch_recovery_snapshot_command.py"
       - "tests/test_adb_device_binding.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
@@ -45,6 +49,7 @@ on:
       - "physical-validation.command"
       - "start-physical-handoff.command"
       - "start-frozen-acceptance.command"
+      - "watch-recovery-snapshot.command"
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "provision-watch-gateway.command"
@@ -53,8 +58,11 @@ on:
       - "tools/analyze-watch-sensor-trials.py"
       - "tools/verify-watch-apk-identity.py"
       - "tools/fetch-frozen-physical-handoff.py"
+      - "tools/compare-watch-recovery-snapshots.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
       - "tests/test_frozen_acceptance_launcher.py"
+      - "tests/test_watch_recovery_evidence.py"
+      - "tests/test_watch_recovery_snapshot_command.py"
       - "tests/test_adb_device_binding.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
@@ -112,10 +120,12 @@ jobs:
           bash -n start-physical-handoff.command
           bash -n start-frozen-acceptance.command
           bash start-frozen-acceptance.command --help >/dev/null
+          bash -n watch-recovery-snapshot.command
+          bash watch-recovery-snapshot.command --help >/dev/null
           bash -n provision-watch-gateway.command
           bash -n install-watch-apk.command
           bash -n upgrade-watch.command
-          python3 -m py_compile tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/verify-watch-apk-identity.py tools/fetch-frozen-physical-handoff.py
+          python3 -m py_compile tools/compare-watch-recovery-snapshots.py tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/verify-watch-apk-identity.py tools/fetch-frozen-physical-handoff.py
 
       - name: Prebuilt artifact digest contract
         shell: bash
@@ -151,6 +161,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_frozen_physical_handoff_fetcher.py'
           python3 -m unittest discover -s tests -p 'test_frozen_acceptance_launcher.py'
+          python3 -m unittest discover -s tests -p 'test_watch_recovery_evidence.py'
+          python3 -m unittest discover -s tests -p 'test_watch_recovery_snapshot_command.py'
           python3 -m unittest discover -s tests -p 'test_adb_device_binding.py'
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
