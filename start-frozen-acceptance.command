@@ -4,15 +4,24 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PROFILE="${1:-$HOME/.config/raiseai/watch-gateway.properties}"
+DEFAULT_PROFILE="$HOME/.config/raiseai/watch-gateway.properties"
 FETCHER="$SCRIPT_DIR/tools/fetch-frozen-physical-handoff.py"
+MODE="run"
+PROFILE="$DEFAULT_PROFILE"
 
 usage() {
   cat <<'EOF'
 Usage:
   bash ./start-frozen-acceptance.command [gateway-profile]
+  bash ./start-frozen-acceptance.command --preflight-only [gateway-profile]
 
 Starts the canonical frozen Raise AI v1.5.2 physical acceptance flow.
+
+--preflight-only:
+  Validate the intended Galaxy Watch 7, fetch the preserved frozen handoff and
+  run its verify-only provenance checks, then stop before APK install or session
+  creation.
+
 Exactly one active ADB device must be connected, and it must be the intended
 Galaxy Watch 7 (SM-L315F / SM_L315F).
 EOF
@@ -22,6 +31,23 @@ case "${1:-}" in
   -h|--help|help)
     usage
     exit 0
+    ;;
+  --preflight-only)
+    MODE="preflight"
+    PROFILE="${2:-$DEFAULT_PROFILE}"
+    if [ "$#" -gt 2 ]; then
+      usage
+      exit 2
+    fi
+    ;;
+  "")
+    ;;
+  *)
+    PROFILE="$1"
+    if [ "$#" -gt 1 ]; then
+      usage
+      exit 2
+    fi
     ;;
 esac
 
@@ -126,6 +152,13 @@ rm -rf "$VERIFY_SOURCE"
 echo
 echo "Frozen handoff verified."
 echo "Bound Watch: $MODEL ($TARGET)"
+
+if [ "$MODE" = "preflight" ]; then
+  echo "FROZEN-ACCEPTANCE PREFLIGHT PASS"
+  echo "No APK was installed and no physical acceptance session was started."
+  exit 0
+fi
+
 echo "Starting provenance-bound physical acceptance..."
 echo
 
