@@ -5,7 +5,11 @@
 //   - GET /health is healthy and serves the exact expected revision;
 //   - unauthenticated assistant requests are rejected (401).
 //
-// Dependency probe:
+// Dependency probes:
+//   - when OPENROUTER_API_KEY exists in the VPS env, one authenticated quick_ai
+//     request must return a real OpenRouter answer;
+//   - when the key is absent, that exact missing-credential state is recorded as
+//     degraded evidence without failing an otherwise healthy gateway deploy;
 //   - authenticated custom zCloud task must route to the zCloud connector;
 //   - normal refusal proves the connector is reachable;
 //   - zcloud_unavailable is reported as degraded but does not fail a gateway
@@ -39,6 +43,7 @@ const certFile = env.get("RAISE_TLS_CERT") ?? "";
 const expectedRevision =
   process.env.RAISE_EXPECTED_REVISION ?? env.get("RAISE_DEPLOY_REVISION") ?? "";
 const requireZCloud = process.env.RAISE_REQUIRE_ZCLOUD === "1";
+const openRouterConfigured = Boolean(env.get("OPENROUTER_API_KEY"));
 
 if (token.length < 32) throw new Error("gateway token missing or too short");
 if (!certFile) throw new Error("RAISE_TLS_CERT not configured");
@@ -115,6 +120,39 @@ await check("unauthenticated_rejected", async () => {
   });
   expect(status === 401, `expected 401, got ${status}`);
   return { status };
+});
+
+await check("openrouter_quick_ai_probe", async () => {
+  if (!openRouterConfigured) {
+    return {
+      route: "quick_ai",
+      configured: false,
+      reason: "openrouter_not_configured",
+      degraded: true
+    };
+  }
+
+  const { status, json } = await request("POST", "/v1/assistant", {
+    auth: true,
+    body: { text: "Antwoord met één kort woord: gereed" }
+  });
+
+  expect(status === 200, `expected provider status 200, got ${status}`);
+  expect(json?.route === "quick_ai", `expected quick_ai route, got ${json?.route ?? "missing"}`);
+  expect(json?.execution?.enabled === true, "OpenRouter execution was not enabled");
+  expect(json?.execution?.provider === "openrouter", `unexpected provider ${json?.execution?.provider ?? "missing"}`);
+  expect(
+    typeof json?.answer === "string" && json.answer.trim().length > 0,
+    "OpenRouter returned no answer"
+  );
+
+  return {
+    status,
+    route: json.route,
+    configured: true,
+    provider: json.execution.provider,
+    model: json.execution.model ?? null
+  };
 });
 
 await check("zcloud_dependency_probe", async () => {
