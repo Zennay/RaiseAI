@@ -67,4 +67,64 @@ class RaiseGestureDetectorTest {
         }
         assertTrue(triggered)
     }
+    @Test
+    fun nonFiniteSensorSampleFailsClosedWithFiniteDebugValues() {
+        val detector = RaiseGestureDetector()
+        val mouth = MouthPose(0f, 0f, 1f)
+
+        val result = detector.onAccelerometer(Float.NaN, 0f, 9.81f, 0L, mouth)
+
+        assertFalse(result.triggered)
+        assertTrue(result.similarity.isFinite())
+        assertTrue(result.dynamicAcceleration.isFinite())
+    }
+
+    @Test
+    fun invalidMouthPoseCannotTriggerDetector() {
+        val detector = RaiseGestureDetector().apply {
+            similarityThreshold = 0.1f
+            movementThreshold = 0.1f
+            requiredMovementHits = 1
+            holdMs = 0L
+        }
+        val invalid = MouthPose(Float.POSITIVE_INFINITY, 0f, 1f)
+
+        var triggered = false
+        for (t in 0L..500L step 50L) {
+            triggered = triggered ||
+                detector.onAccelerometer(0f, 0f, 9.81f, t, invalid).triggered
+        }
+
+        assertFalse(triggered)
+    }
+
+    @Test
+    fun rejectedSensorSampleDoesNotPoisonFollowingValidRaise() {
+        val detector = RaiseGestureDetector().apply {
+            similarityThreshold = 0.94f
+            movementThreshold = 0.7f
+            approachStartSimilarityThreshold = 0.94f
+            minimumApproachRise = 0.02f
+            requiredMovementHits = 2
+            holdMs = 100
+            cooldownMs = 1_000
+        }
+        val mouth = MouthPose(0f, 0f, 1f)
+
+        detector.onAccelerometer(Float.NaN, 0f, 9.81f, 0L, mouth)
+        for (t in 50L..400L step 50L) {
+            detector.onAccelerometer(9.81f, 0f, 0f, t, mouth)
+        }
+        detector.onAccelerometer(7f, 0f, 7f, 450L, mouth)
+        detector.onAccelerometer(4f, 0f, 10f, 500L, mouth)
+
+        var triggered = false
+        for (t in 550L..1_500L step 50L) {
+            triggered = triggered ||
+                detector.onAccelerometer(0f, 0f, 9.81f, t, mouth).triggered
+        }
+
+        assertTrue(triggered)
+    }
+
 }
