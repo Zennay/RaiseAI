@@ -48,6 +48,31 @@ test("rejects a stale or miswired loaded systemd service", () => {
   assert.equal(report.checks.environment_file, false);
 });
 
+test("rejects prefix-spoofed runtime paths and executable names", () => {
+  const spoofedPaths = healthySystemctl()
+    .replace(serverFile + " ;", serverFile + ".old ;")
+    .replace(envFile + " (ignore_errors=no)", envFile + ".bak (ignore_errors=no)");
+
+  const pathReport = attestRuntimeWiring({
+    systemctlOutput: spoofedPaths,
+    home
+  });
+  assert.equal(pathReport.ok, false);
+  assert.equal(pathReport.checks.exec_start, false);
+  assert.equal(pathReport.checks.environment_file, false);
+
+  const spoofedBinary = healthySystemctl()
+    .replace("path=/usr/bin/node ;", "path=/usr/bin/node-wrapper ;")
+    .replace("argv[]=/usr/bin/node ", "argv[]=/usr/bin/node-wrapper ");
+
+  const binaryReport = attestRuntimeWiring({
+    systemctlOutput: spoofedBinary,
+    home
+  });
+  assert.equal(binaryReport.ok, false);
+  assert.equal(binaryReport.checks.exec_start, false);
+});
+
 test("rejects an inactive service even when paths are correct", () => {
   const report = attestRuntimeWiring({
     systemctlOutput: healthySystemctl()
