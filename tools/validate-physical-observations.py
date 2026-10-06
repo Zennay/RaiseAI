@@ -39,6 +39,19 @@ class ObservationError(ValueError):
     pass
 
 
+def _reject_duplicate_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ObservationError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _strict_json_loads(text: str) -> Any:
+    return json.loads(text, object_pairs_hook=_reject_duplicate_object_pairs)
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ObservationError(message)
@@ -157,8 +170,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        session = json.loads(args.session.read_text(encoding="utf-8"))
-        observations = json.loads(args.observations.read_text(encoding="utf-8"))
+        session = _strict_json_loads(args.session.read_text(encoding="utf-8"))
+        observations = _strict_json_loads(args.observations.read_text(encoding="utf-8"))
         result = validate_observations(session, observations)
         if args.output is not None:
             try:
