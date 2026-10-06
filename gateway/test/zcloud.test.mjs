@@ -35,6 +35,7 @@ function targets({ active = true } = {}) {
         project_id: "ftmo::w1",
         base_project_id: "ftmo",
         worker_slot: 1,
+        worker_count: 2,
         name: "FTMO · worker 1/2",
         active
       },
@@ -42,6 +43,7 @@ function targets({ active = true } = {}) {
         project_id: "ftmo::w2",
         base_project_id: "ftmo",
         worker_slot: 2,
+        worker_count: 2,
         name: "FTMO · worker 2/2",
         active
       },
@@ -49,6 +51,7 @@ function targets({ active = true } = {}) {
         project_id: "haxlab::w1",
         base_project_id: "haxlab",
         worker_slot: 1,
+        worker_count: 1,
         name: "HaxLab · worker 1/1",
         active: true
       }
@@ -155,6 +158,7 @@ test("malformed target state fails closed before runner control", async () => {
             project_id: "ftmo::w1",
             base_project_id: "ftmo",
             worker_slot: 1,
+            worker_count: 1,
             name: "FTMO · worker 1/1",
             active: "false"
           }
@@ -178,6 +182,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           project_id: "ftmo::w1",
           base_project_id: " ftmo",
           worker_slot: 1,
+          worker_count: 2,
           name: "FTMO · worker 1/2",
           active: true
         }
@@ -189,6 +194,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           project_id: "ftmo::w1",
           base_project_id: "ftmo",
           worker_slot: 1,
+          worker_count: 2,
           name: "FTMO · worker 1/2",
           active: true
         },
@@ -196,6 +202,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           project_id: "ftmo::w2",
           base_project_id: "ftmo",
           worker_slot: 2,
+          worker_count: 2,
           name: "HaxLab · worker 2/2",
           active: false
         }
@@ -207,6 +214,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           project_id: "ftmo::w1",
           base_project_id: "ftmo",
           worker_slot: 1,
+          worker_count: 1,
           name: " · worker 1/1",
           active: true
         }
@@ -239,6 +247,7 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           project_id: "haxlab::w1",
           base_project_id: "ftmo",
           worker_slot: 1,
+          worker_count: 1,
           name: "FTMO · worker 1/1",
           active: true
         }
@@ -250,6 +259,7 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           project_id: "ftmo::w2",
           base_project_id: "ftmo",
           worker_slot: 1,
+          worker_count: 1,
           name: "FTMO · worker 1/1",
           active: true
         }
@@ -261,6 +271,7 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           project_id: "ftmo::w1",
           base_project_id: "haxlab",
           worker_slot: 1,
+          worker_count: 1,
           name: "FTMO · worker 1/1",
           active: true
         }
@@ -272,7 +283,73 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           project_id: "ftmo::w1",
           base_project_id: "ftmo",
           worker_slot: "1",
+          worker_count: 1,
           name: "FTMO · worker 1/1",
+          active: true
+        }
+      }
+    }
+  ];
+
+  for (const snapshot of invalidSnapshots) {
+    const calls = [];
+    const execute = createZCloudExecutor({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        return response(200, snapshot);
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_targets_invalid");
+    assert.equal(calls.length, 1);
+  }
+});
+
+test("incomplete or inconsistent worker-count snapshots fail closed", async () => {
+  const invalidSnapshots = [
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "ftmo::w1",
+          base_project_id: "ftmo",
+          worker_slot: 1,
+          worker_count: 2,
+          name: "FTMO · worker 1/2",
+          active: true
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "ftmo::w1",
+          base_project_id: "ftmo",
+          worker_slot: 1,
+          worker_count: 2,
+          name: "FTMO · worker 1/2",
+          active: true
+        },
+        "ftmo::w2": {
+          project_id: "ftmo::w2",
+          base_project_id: "ftmo",
+          worker_slot: 2,
+          worker_count: 3,
+          name: "FTMO · worker 2/3",
+          active: false
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w2": {
+          project_id: "ftmo::w2",
+          base_project_id: "ftmo",
+          worker_slot: 2,
+          worker_count: 1,
+          name: "FTMO · worker 2/1",
           active: true
         }
       }
@@ -307,6 +384,7 @@ test("ambiguous project aliases never dispatch a command", async () => {
             project_id: "alpha::w1",
             base_project_id: "alpha",
             worker_slot: 1,
+            worker_count: 1,
             name: "Shared · worker 1/1",
             active: true
           },
@@ -314,6 +392,7 @@ test("ambiguous project aliases never dispatch a command", async () => {
             project_id: "beta::w1",
             base_project_id: "beta",
             worker_slot: 1,
+            worker_count: 1,
             name: "Shared · worker 1/1",
             active: false
           }
