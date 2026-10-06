@@ -220,6 +220,40 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             self.assertFalse(target.exists())
             self.assertIn("refusing to overwrite", output.getvalue())
 
+    def test_cli_rejects_duplicate_session_json_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            raw_session = json.dumps(session_payload())
+            raw_session = raw_session[:-1] + ', "schema_version": 1}'
+            session.write_text(raw_session, encoding="utf-8")
+            observations.write_text(json.dumps(observation_payload()), encoding="utf-8")
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = validator.main([str(session), str(observations)])
+
+        self.assertEqual(code, 1)
+        self.assertIn("duplicate JSON field: schema_version", output.getvalue())
+
+    def test_cli_rejects_duplicate_observation_json_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            session.write_text(json.dumps(session_payload()), encoding="utf-8")
+            raw_observations = json.dumps(observation_payload())
+            raw_observations = raw_observations[:-1] + ', "screen_off_tested": true}'
+            observations.write_text(raw_observations, encoding="utf-8")
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = validator.main([str(session), str(observations)])
+
+        self.assertEqual(code, 1)
+        self.assertIn("duplicate JSON field: screen_off_tested", output.getvalue())
+
     def test_cli_failure_does_not_echo_sensitive_observation_values(self):
         secret = "private spoken content must never be echoed"
         with tempfile.TemporaryDirectory() as tmp:

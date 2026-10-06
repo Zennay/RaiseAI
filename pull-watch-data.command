@@ -85,6 +85,8 @@ if command -v python3 >/dev/null 2>&1; then
   if [ -s "$TRIALS_OUT" ]; then
     echo "V1 detector reliability:"
     python3 tools/analyze-watch-sensor-trials.py "$TRIALS_OUT" || true
+    echo "V1 trace/trial pairing:"
+    python3 tools/validate-watch-v1-evidence-pair.py "$OUT" "$TRIALS_OUT" || true
   else
     echo "No sensor trial outcomes recorded yet. Install this build and use the Record buttons."
   fi
@@ -94,6 +96,7 @@ if command -v python3 >/dev/null 2>&1; then
   fi
   if [ "${RAISE_REQUIRE_V1_TRIAL_GATE:-0}" = "1" ]; then
     [ -s "$TRIALS_OUT" ] || { echo "V1 trial gate requested but no trial evidence exists"; exit 1; }
+    python3 tools/validate-watch-v1-evidence-pair.py "$OUT" "$TRIALS_OUT"
     python3 tools/analyze-watch-sensor-trials.py "$TRIALS_OUT" --require-v1-gate
   fi
 else

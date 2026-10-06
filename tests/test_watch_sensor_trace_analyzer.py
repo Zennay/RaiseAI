@@ -65,6 +65,20 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
         self.assertFalse(sessions[0].monotonic)
         self.assertFalse(sessions[0].qualifying)
 
+    def test_duplicate_elapsed_timestamp_is_rejected(self):
+        samples = make_session(1, "normal_move")
+        samples[8] = analyzer.Sample(
+            "normal_move",
+            1,
+            samples[7].elapsed_ms,
+            0.1,
+            0.2,
+            9.7,
+        )
+        sessions = analyzer.summarize_sessions(samples)
+        self.assertFalse(sessions[0].monotonic)
+        self.assertFalse(sessions[0].qualifying)
+
     def test_read_samples_rejects_mixed_labels_for_same_session(self):
         content = (
             "label,session_id,elapsed_ms,x,y,z\n"
@@ -75,6 +89,28 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
             path = pathlib.Path(tmp) / "traces.csv"
             path.write_text(content, encoding="utf-8")
             with self.assertRaisesRegex(analyzer.TraceError, "mixes labels"):
+                analyzer.read_samples(path)
+
+    def test_read_samples_rejects_duplicate_required_columns(self):
+        content = (
+            "label,session_id,elapsed_ms,x,y,z,x\n"
+            "mouth_raise,1,0,0.1,0.2,9.7,8.8\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "traces.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(analyzer.TraceError, "duplicate columns: x"):
+                analyzer.read_samples(path)
+
+    def test_read_samples_rejects_extra_row_fields(self):
+        content = (
+            "label,session_id,elapsed_ms,x,y,z\n"
+            "mouth_raise,1,0,0.1,0.2,9.7,unexpected\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "traces.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(analyzer.TraceError, "unexpected extra CSV fields"):
                 analyzer.read_samples(path)
 
     def test_read_samples_rejects_unknown_columns(self):

@@ -35,10 +35,24 @@ SUCCESS_KEYS = COMMON_KEYS | {
 }
 FAILURE_KEYS = COMMON_KEYS | {"error_code"}
 MAX_FUTURE_SKEW_SECONDS = 60
+MAX_GATEWAY_INPUT_LENGTH_CHARS = 4_000
 
 
 class EvidenceError(ValueError):
     pass
+
+
+def _reject_duplicate_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise EvidenceError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _strict_json_loads(text: str) -> Any:
+    return json.loads(text, object_pairs_hook=_reject_duplicate_object_pairs)
 
 
 def _require(condition: bool, message: str) -> None:
@@ -153,10 +167,18 @@ def validate_evidence(
     route = payload["route"]
     status = payload["status"]
     _require(isinstance(route, str) and route in KNOWN_ROUTES, f"unknown route: {route!r}")
-    _require(isinstance(status, str) and status and status != "unknown", "status must be a known non-empty value")
+    _require(status in {"answered", "routed"}, "status must be answered or routed")
     _require(input_length > 0, "successful evidence must record a non-empty input")
+    _require(
+        input_length <= MAX_GATEWAY_INPUT_LENGTH_CHARS,
+        f"successful input_length_chars must be at most {MAX_GATEWAY_INPUT_LENGTH_CHARS}",
+    )
     for key in ("execution_enabled", "execution_reason_present", "answer_present"):
         _require(type(payload[key]) is bool, f"{key} must be boolean")
+    _require(
+        (status == "answered") == payload["answer_present"],
+        "status and answer_present must describe the same gateway outcome",
+    )
 
     if expect_route is not None:
         _require(route == expect_route, f"route {route!r} does not match expected {expect_route!r}")
@@ -200,7 +222,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        payload = json.loads(args.evidence.read_text(encoding="utf-8"))
+        payload = _strict_json_loads(args.evidence.read_text(encoding="utf-8"))
         result = validate_evidence(
             payload,
             expect_route=args.expect_route,

@@ -75,6 +75,11 @@ def read_samples(path: Path) -> list[Sample]:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
             raise TraceError("trace CSV has no header")
+        duplicate_columns = sorted(
+            name for name, count in Counter(reader.fieldnames).items() if count > 1
+        )
+        if duplicate_columns:
+            raise TraceError(f"duplicate columns: {', '.join(duplicate_columns)}")
         missing = REQUIRED_COLUMNS - set(reader.fieldnames)
         unexpected = set(reader.fieldnames) - REQUIRED_COLUMNS
         if missing:
@@ -85,6 +90,8 @@ def read_samples(path: Path) -> list[Sample]:
         samples: list[Sample] = []
         labels_by_session: dict[int, str] = {}
         for line, row in enumerate(reader, start=2):
+            if None in row:
+                raise TraceError(f"line {line}: unexpected extra CSV fields")
             label = (row.get("label") or "").strip()
             if label not in ALLOWED_LABELS:
                 raise TraceError(f"line {line}: unknown label {label!r}")
@@ -136,7 +143,7 @@ def summarize_sessions(
     for session_id, rows in sorted(grouped.items()):
         label = rows[0].label
         elapsed = [row.elapsed_ms for row in rows]
-        monotonic = all(current >= previous for previous, current in zip(elapsed, elapsed[1:]))
+        monotonic = all(current > previous for previous, current in zip(elapsed, elapsed[1:]))
         duration_ms = max(elapsed) - min(elapsed) if elapsed else 0
         qualifying = monotonic and len(rows) >= min_samples and duration_ms >= min_duration_ms
         summaries.append(

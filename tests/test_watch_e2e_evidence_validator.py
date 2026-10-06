@@ -20,7 +20,7 @@ def success_payload(**overrides):
         "input_length_chars": 18,
         "latency_ms": 742,
         "route": "quick_ai",
-        "status": "ok",
+        "status": "answered",
         "execution_enabled": False,
         "execution_reason_present": False,
         "answer_present": True,
@@ -34,7 +34,7 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         result = validator.validate_evidence(
             success_payload(),
             expect_route="quick_ai",
-            expect_status="ok",
+            expect_status="answered",
             max_latency_ms=2_000,
             max_age_seconds=300,
             require_answer=True,
@@ -44,6 +44,12 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         )
         self.assertTrue(result["valid"])
         self.assertEqual(result["route"], "quick_ai")
+
+    def test_rejects_duplicate_json_fields_before_validation(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "duplicate JSON field: route"):
+            validator._strict_json_loads(
+                '{"schema_version":2,"route":"quick_ai","route":"deep_ai"}'
+            )
 
     def test_rejects_unexpected_field_to_keep_evidence_secret_safe(self):
         with self.assertRaisesRegex(validator.EvidenceError, "unexpected evidence fields"):
@@ -69,9 +75,29 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.EvidenceError, "unknown route"):
             validator.validate_evidence(success_payload(route="unknown"))
 
+    def test_rejects_unknown_success_status(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "status must be answered or routed"):
+            validator.validate_evidence(success_payload(status="ok"))
+
+    def test_rejects_answered_status_without_answer(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "same gateway outcome"):
+            validator.validate_evidence(
+                success_payload(status="answered", answer_present=False)
+            )
+
+    def test_rejects_routed_status_with_answer(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "same gateway outcome"):
+            validator.validate_evidence(
+                success_payload(status="routed", answer_present=True)
+            )
+
     def test_rejects_excessive_latency(self):
         with self.assertRaisesRegex(validator.EvidenceError, "exceeds maximum"):
             validator.validate_evidence(success_payload(latency_ms=15_001), max_latency_ms=15_000)
+
+    def test_rejects_success_input_longer_than_gateway_limit(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "must be at most 4000"):
+            validator.validate_evidence(success_payload(input_length_chars=4001))
 
     def test_rejects_route_mismatch(self):
         with self.assertRaisesRegex(validator.EvidenceError, "does not match expected"):

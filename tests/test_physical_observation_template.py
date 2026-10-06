@@ -78,6 +78,19 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
             second = generator.main([str(session_path)])
             self.assertEqual(second, 1)
 
+    def test_cli_rejects_duplicate_session_json_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session_path = root / "session.json"
+            raw_session = json.dumps(session_payload())
+            raw_session = raw_session[:-1] + ', "source_revision": "ffffffffffffffffffffffffffffffffffffffff"}'
+            session_path.write_text(raw_session, encoding="utf-8")
+
+            code = generator.main([str(session_path)])
+
+            self.assertEqual(code, 1)
+            self.assertFalse((root / "operator-observations.json").exists())
+
     def test_cli_refuses_broken_symlink_without_creating_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)

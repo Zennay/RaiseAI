@@ -24,6 +24,19 @@ class TemplateError(ValueError):
     pass
 
 
+def _reject_duplicate_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise TemplateError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _strict_json_loads(text: str) -> Any:
+    return json.loads(text, object_pairs_hook=_reject_duplicate_object_pairs)
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise TemplateError(message)
@@ -114,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     output = args.output or args.session.with_name("operator-observations.json")
     try:
-        session = json.loads(args.session.read_text(encoding="utf-8"))
+        session = _strict_json_loads(args.session.read_text(encoding="utf-8"))
         payload = build_template(session)
         try:
             with output.open("x", encoding="utf-8") as output_file:
