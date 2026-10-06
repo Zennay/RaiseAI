@@ -150,8 +150,13 @@ def main(argv: list[str] | None = None) -> int:
         observations = json.loads(args.observations.read_text(encoding="utf-8"))
         result = validate_observations(session, observations)
         if args.output is not None:
-            _require(not args.output.exists(), f"refusing to overwrite existing quality result: {args.output}")
-            args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            try:
+                with args.output.open("x", encoding="utf-8") as output_file:
+                    output_file.write(json.dumps(result, indent=2, sort_keys=True) + "\n")
+            except FileExistsError as exc:
+                raise ObservationError(
+                    f"refusing to overwrite existing quality result: {args.output}"
+                ) from exc
     except (OSError, json.JSONDecodeError, ObservationError) as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
         return 1
