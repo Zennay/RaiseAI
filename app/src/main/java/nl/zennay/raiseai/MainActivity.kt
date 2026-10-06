@@ -294,11 +294,11 @@ class MainActivity : Activity(), SensorEventListener {
         }
 
         handler.postDelayed({ if (calibrationCapturing) statusText.text = "2…" }, 700)
-        handler.postDelayed({ if (calibrationCapturing) statusText.text = "1… hold it at your mouth" }, 1_400)
+        handler.postDelayed({ if (calibrationCapturing) statusText.text = "1… hold still at your mouth" }, 1_400)
         handler.postDelayed({
             if (calibrationCapturing) {
                 calibrationSamples.clear()
-                statusText.text = "Hold…"
+                statusText.text = "Hold still…"
             }
         }, 2_000)
         handler.postDelayed({ if (calibrationCapturing) finishCalibration() }, 2_900)
