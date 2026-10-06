@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateZCloudProbe } from "../deploy/smoke-policy.mjs";
+import { evaluateZCloudProbe, hasJsonMediaType } from "../deploy/smoke-policy.mjs";
 
 function refusalExecution(overrides = {}) {
   return {
@@ -19,6 +19,27 @@ function unavailableExecution(overrides = {}) {
     ...overrides
   };
 }
+
+test("live smoke JSON media type is strict but parameter tolerant", () => {
+  for (const value of [
+    "application/json",
+    "application/json; charset=utf-8",
+    "Application/JSON; Charset=UTF-8"
+  ]) {
+    assert.equal(hasJsonMediaType(value), true, value);
+  }
+
+  for (const value of [
+    undefined,
+    null,
+    "",
+    "text/plain",
+    "application/problem+json",
+    "text/html; charset=utf-8"
+  ]) {
+    assert.equal(hasJsonMediaType(value), false, String(value));
+  }
+});
 
 test("healthy zCloud refusal is a strict pass", () => {
   assert.deepEqual(
