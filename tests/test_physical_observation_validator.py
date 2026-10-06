@@ -1,5 +1,9 @@
+import contextlib
 import importlib.util
+import io
+import json
 import pathlib
+import tempfile
 import unittest
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "validate-physical-observations.py"
@@ -124,6 +128,41 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 observation_payload(visible_ux_failures=[{"kind": "slow"}]),
             )
 
+
+    def test_cli_success_returns_machine_readable_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            session.write_text(json.dumps(session_payload()), encoding="utf-8")
+            observations.write_text(json.dumps(observation_payload()), encoding="utf-8")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = validator.main([str(session), str(observations)])
+        self.assertEqual(code, 0)
+        payload = json.loads(output.getvalue())
+        self.assertTrue(payload["quality_evidence_complete"])
+        self.assertNotIn("screen_off_behavior", payload)
+        self.assertNotIn("background_behavior", payload)
+
+    def test_cli_failure_does_not_echo_sensitive_observation_values(self):
+        secret = "private spoken content must never be echoed"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            session.write_text(json.dumps(session_payload()), encoding="utf-8")
+            observations.write_text(
+                json.dumps(observation_payload(transcript=secret)),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = validator.main([str(session), str(observations)])
+        self.assertEqual(code, 1)
+        payload = json.loads(output.getvalue())
+        self.assertFalse(payload["valid"])
+        self.assertNotIn(secret, output.getvalue())
 
 if __name__ == "__main__":
     unittest.main()
