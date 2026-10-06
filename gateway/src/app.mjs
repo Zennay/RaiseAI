@@ -204,9 +204,10 @@ export function createHandler({
         answer: execution.answer
       });
     } catch (error) {
+      const errorMessage = error?.message;
       const publicError =
-        error.message === "invalid_json" || error.message === "payload_too_large"
-          ? error.message
+        errorMessage === "invalid_json" || errorMessage === "payload_too_large"
+          ? errorMessage
           : "internal_error";
 
       return json(res, safeErrorStatus(error), {
