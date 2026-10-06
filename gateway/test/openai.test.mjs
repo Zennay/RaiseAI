@@ -130,6 +130,61 @@ test("OpenAI response preserves every non-empty output_text block", async () => 
   assert.equal(result.answer, "Eerste regel.\nTweede regel.\nDerde regel.");
 });
 
+test("OpenAI refusal content is returned when no normal output_text exists", async () => {
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          output: [{
+            type: "message",
+            content: [
+              { type: "refusal", refusal: "Ik kan daar niet mee helpen." },
+              { type: "refusal", refusal: "Ik kan wel een veilig alternatief geven." }
+            ]
+          }]
+        };
+      }
+    })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "test refusal");
+
+  assert.equal(
+    result.answer,
+    "Ik kan daar niet mee helpen.\nIk kan wel een veilig alternatief geven."
+  );
+  assert.equal(result.enabled, true);
+  assert.equal(result.provider, "openai");
+});
+
+test("normal OpenAI output_text takes precedence over refusal content", async () => {
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          output: [{
+            type: "message",
+            content: [
+              { type: "refusal", refusal: "Fallback refusal" },
+              { type: "output_text", text: "Normaal antwoord." }
+            ]
+          }]
+        };
+      }
+    })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "test mixed response");
+
+  assert.equal(result.answer, "Normaal antwoord.");
+});
+
 test("malformed successful OpenAI response shapes fail as upstream 502 errors", async () => {
   const malformedBodies = [
     null,
