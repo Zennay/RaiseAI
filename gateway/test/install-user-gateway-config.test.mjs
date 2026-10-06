@@ -38,13 +38,23 @@ function writeExecutable(file, content) {
   fs.writeFileSync(file, content, { mode: 0o755 });
 }
 
-function runInstallerWithStubbedRuntime(host, { configDir } = {}) {
+function runInstallerWithStubbedRuntime(host, { configDir, existingToken } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-installer-san-"));
   const home = path.join(root, "home");
   const bin = path.join(root, "bin");
   const opensslLog = path.join(root, "openssl.log");
   fs.mkdirSync(home);
   fs.mkdirSync(bin);
+
+  const effectiveConfigDir =
+    configDir ?? path.join(home, ".config", "raiseai");
+  if (existingToken !== undefined) {
+    fs.mkdirSync(effectiveConfigDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(effectiveConfigDir, "gateway.env"),
+      `RAISE_GATEWAY_TOKEN=${existingToken}\n`
+    );
+  }
 
   writeExecutable(
     path.join(bin, "openssl"),
@@ -101,8 +111,10 @@ esac
         ...(configDir ? { RAISE_CONFIG_DIR: configDir } : {})
       }
     });
-    const effectiveConfigDir =
-      configDir ?? path.join(home, ".config", "raiseai");
+    const envPath = path.join(effectiveConfigDir, "gateway.env");
+    const envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
+    const gatewayToken =
+      envText.match(/^RAISE_GATEWAY_TOKEN=(.*)$/m)?.[1] ?? null;
     return {
       status: result.status,
       stderr: result.stderr,
@@ -110,7 +122,8 @@ esac
         ? fs.readFileSync(opensslLog, "utf8")
         : "",
       configDir: effectiveConfigDir,
-      envCreated: fs.existsSync(path.join(effectiveConfigDir, "gateway.env")),
+      envCreated: fs.existsSync(envPath),
+      gatewayToken,
       profileCreated: fs.existsSync(
         path.join(effectiveConfigDir, "watch-gateway.properties")
       ),
@@ -131,6 +144,27 @@ test("installer uses a certificate SAN matching the public host identity", () =>
     const result = runInstallerWithStubbedRuntime(host);
     assert.equal(result.status, 0, result.stderr);
     assert.ok(result.opensslLog.includes(expectedSan), result.opensslLog);
+  }
+});
+
+test("installer preserves only gateway tokens accepted by the server contract", () => {
+  const safeToken = "s".repeat(40);
+  const safe = runInstallerWithStubbedRuntime("raise.example", {
+    existingToken: safeToken
+  });
+  assert.equal(safe.status, 0, safe.stderr);
+  assert.equal(safe.gatewayToken, safeToken);
+
+  for (const invalidToken of [
+    "x".repeat(31),
+    "x".repeat(32) + " bad",
+    "x".repeat(32) + "\tbad"
+  ]) {
+    const repaired = runInstallerWithStubbedRuntime("raise.example", {
+      existingToken: invalidToken
+    });
+    assert.equal(repaired.status, 0, repaired.stderr);
+    assert.equal(repaired.gatewayToken, "a".repeat(64));
   }
 });
 
