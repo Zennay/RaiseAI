@@ -2,7 +2,6 @@ import os
 import pathlib
 import subprocess
 import tempfile
-import textwrap
 import unittest
 
 
@@ -32,37 +31,34 @@ class PullWatchDataPairingTests(unittest.TestCase):
             output_dir.mkdir()
             adb = fake_bin / "adb"
             adb.write_text(
-                textwrap.dedent(
-                    f"""\
-                    #!/bin/bash
-                    set -euo pipefail
-                    case "$*" in
-                      "devices")
-                        printf 'List of devices attached\\nwatch-1\\tdevice\\n'
-                        ;;
-                      "-s watch-1 shell getprop ro.build.characteristics")
-                        echo "watch"
-                        ;;
-                      "-s watch-1 shell pm list features")
-                        echo "feature:android.hardware.type.watch"
-                        ;;
-                      "-s watch-1 shell run-as nl.zennay.raiseai cat files/sensor-traces.csv")
-                        cat <<'EOF'
-                    {trace_csv}
-                    EOF
-                        ;;
-                      "-s watch-1 shell run-as nl.zennay.raiseai cat files/sensor-trials.csv")
-                        cat <<'EOF'
-                    {trial_csv}
-                    EOF
-                        ;;
-                      *)
-                        echo "unexpected fake adb invocation: $*" >&2
-                        exit 64
-                        ;;
-                    esac
-                    """
-                ),
+                f"""#!/bin/bash
+set -euo pipefail
+case "$*" in
+  "devices")
+    printf 'List of devices attached\\nwatch-1\\tdevice\\n'
+    ;;
+  "-s watch-1 shell getprop ro.build.characteristics")
+    echo "watch"
+    ;;
+  "-s watch-1 shell pm list features")
+    echo "feature:android.hardware.type.watch"
+    ;;
+  "-s watch-1 shell run-as nl.zennay.raiseai cat files/sensor-traces.csv")
+    cat <<'EOF'
+{trace_csv}
+EOF
+    ;;
+  "-s watch-1 shell run-as nl.zennay.raiseai cat files/sensor-trials.csv")
+    cat <<'EOF'
+{trial_csv}
+EOF
+    ;;
+  *)
+    echo "unexpected fake adb invocation: $*" >&2
+    exit 64
+    ;;
+esac
+""",
                 encoding="utf-8",
             )
             adb.chmod(0o755)
