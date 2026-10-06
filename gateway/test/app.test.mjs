@@ -252,7 +252,9 @@ test("enabled AI execution requires canonical provider and model provenance", as
     { enabled: true, answer: "ok", provider: "test-provider ", model: "test-model" },
     { enabled: true, answer: "ok", provider: "test-provider", model: "" },
     { enabled: true, answer: "ok", provider: "test-provider", model: " test-model" },
-    { enabled: true, answer: "ok", provider: "test-provider", model: "test-model " }
+    { enabled: true, answer: "ok", provider: "test-provider", model: "test-model " },
+    { enabled: true, answer: "ok", provider: "test provider", model: "test-model" },
+    { enabled: true, answer: "ok", provider: "test-provider", model: "test\nmodel" }
   ];
 
   for (const executionResult of malformed) {
@@ -271,6 +273,57 @@ test("enabled AI execution requires canonical provider and model provenance", as
       assert.equal(body.error, "internal_error");
       assert.equal("answer" in body, false);
       assert.equal("execution" in body, false);
+    }, {
+      execute: async () => executionResult
+    });
+  }
+});
+
+test("execution metadata tokens reject whitespace and control characters on every route", async () => {
+  const malformedResults = [
+    {
+      enabled: true,
+      provider: "google home"
+    },
+    {
+      enabled: true,
+      provider: "google_home\nproxy"
+    },
+    {
+      enabled: false,
+      provider: "zcloud",
+      reason: "zcloud unavailable",
+      answer: "Connector tijdelijk niet beschikbaar."
+    },
+    {
+      enabled: false,
+      provider: "zcloud",
+      reason: "zcloud_unavailable\t",
+      answer: "Connector tijdelijk niet beschikbaar."
+    },
+    {
+      enabled: true,
+      provider: "google_home",
+      model: "unexpected model"
+    }
+  ];
+
+  for (const executionResult of malformedResults) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Zet de lampen in de woonkamer uit" })
+      });
+
+      assert.equal(res.status, 502);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+      assert.equal("execution" in body, false);
+      assert.equal("answer" in body, false);
     }, {
       execute: async () => executionResult
     });
