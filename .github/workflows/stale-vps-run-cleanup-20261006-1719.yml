@@ -1,0 +1,59 @@
+name: Cancel superseded RaiseAI VPS runs
+
+on:
+  push:
+    branches:
+      - ops/stale-vps-run-cleanup-20261006-1719
+    paths:
+      - ".github/workflows/stale-vps-run-cleanup-20261006-1719.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      REPO: Zennay/RaiseAI
+      CURRENT_MAIN: a0c67eb554a9e45180bab1d0b6742500695efc7d
+    steps:
+      - name: Cancel only exact superseded queued runs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          actual_main="$(gh api "repos/$REPO/branches/main" --jq .commit.sha)"
+          test "$actual_main" = "$CURRENT_MAIN"
+
+          cancel_if_exact() {
+            run_id="$1"
+            expected_name="$2"
+            expected_sha="$3"
+            expected_event="$4"
+
+            name="$(gh api "repos/$REPO/actions/runs/$run_id" --jq .name)"
+            sha="$(gh api "repos/$REPO/actions/runs/$run_id" --jq .head_sha)"
+            event="$(gh api "repos/$REPO/actions/runs/$run_id" --jq .event)"
+            status="$(gh api "repos/$REPO/actions/runs/$run_id" --jq .status)"
+            branch_name="$(gh api "repos/$REPO/actions/runs/$run_id" --jq .head_branch)"
+
+            echo "CHECK run=$run_id name=$name sha=$sha event=$event status=$status branch=$branch_name"
+            test "$name" = "$expected_name"
+            test "$sha" = "$expected_sha"
+            test "$event" = "$expected_event"
+            test "$branch_name" = "main"
+            test "$sha" != "$CURRENT_MAIN"
+
+            if [[ "$status" == "queued" || "$status" == "in_progress" ]]; then
+              gh api --method POST "repos/$REPO/actions/runs/$run_id/cancel"
+              echo "CANCELLED run=$run_id"
+            else
+              echo "PRESERVED run=$run_id terminal_status=$status"
+            fi
+          }
+
+          cancel_if_exact 37447984058 "Raise Watch app CI" "6f6c3eb784d8536b8165678dac8ff1b0bd65807a" "push"
+          cancel_if_exact 37450114367 "Raise gateway deploy + live smoke" "9262f90ee6699862157fe425c39ca59dd518fe13" "push"
