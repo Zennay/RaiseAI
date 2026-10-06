@@ -86,6 +86,42 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
             self.assertFalse((root / "escape.txt").exists())
             self.assertFalse(output.exists())
 
+    def test_rejects_dot_alias_that_collides_with_required_member(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            with zipfile.ZipFile(archive, "a") as package:
+                package.writestr("./BUILD-IDENTITY.txt", b"shadowed\n")
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+
+            with self.assertRaisesRegex(MODULE.HandoffError, "Unsafe archive member path"):
+                MODULE.extract_verified_archive(
+                    archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertFalse(output.exists())
+
+    def test_rejects_backslash_archive_member_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            with zipfile.ZipFile(archive, "a") as package:
+                package.writestr(r"nested\\alias.txt", b"ambiguous")
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+
+            with self.assertRaisesRegex(MODULE.HandoffError, "Unsafe archive member path"):
+                MODULE.extract_verified_archive(
+                    archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertFalse(output.exists())
+
     def test_rejects_missing_required_member(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
