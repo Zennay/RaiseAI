@@ -22,6 +22,19 @@ test("project questions never dispatch work from execution-like words", () => {
   assert.equal(classifyIntent("Kan je Supa builden en testen?").route, "zcloud_task");
 });
 
+test("project explanation prompts stay informational even with execution vocabulary", () => {
+  for (const text of [
+    "Kun je uitleggen hoe ik HaxLab test?",
+    "Kan je me vertellen waarom zCloud deze build test?",
+    "Leg me uit hoe ik Supa build",
+    "Vertel me hoe ik Raise AI test"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "zcloud_task", text);
+  }
+
+  assert.equal(classifyIntent("Kan je Raise AI testen?").route, "zcloud_task");
+});
+
 test("routes home device commands directly", () => {
   assert.equal(classifyIntent("Zet de lampen in de woonkamer uit").route, "smart_home");
   assert.equal(classifyIntent("Zet de thermostaat op 20 graden").route, "smart_home");

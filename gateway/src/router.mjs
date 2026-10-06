@@ -1,6 +1,7 @@
 const PROJECTS = /\b(ftmo|haxlab|ulab|zcloud|raise\s*ai|supa|flowly)\b/i;
 const EXECUTION = /\b(ga\s+door|werk\s+verder|fix|repareer|voer\s+uit|uitvoeren|deploy|build(?:en)?|bouw|commit|push|test(?:en)?|implementeer|update|maak|onderzoek\s+en)\b/i;
 const PROJECT_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
+const PROJECT_EXPLANATION = /^\s*(?:(?:kun|kan)\s+je(?:\s+me)?\s+(?:uitleggen|vertellen)|leg(?:\s+me)?\s+uit|vertel(?:\s+me)?\s+(?:hoe|waarom))\b/i;
 const HOME = /\b(google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermostaat|verwarming|speaker|tv|televisie|woonkamer|slaapkamer|keuken)\b/i;
 const HOME_ACTION = /\b(aan|uit|zet|dim|verhoog|verlaag|speel|pauzeer|stop)\b/i;
 const HOME_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
@@ -11,7 +12,12 @@ export function classifyIntent(rawText) {
   const text = String(rawText ?? "").trim();
   if (!text) throw new TypeError("text is required");
 
-  if (PROJECTS.test(text) && EXECUTION.test(text) && !PROJECT_QUESTION.test(text)) {
+  if (
+    PROJECTS.test(text) &&
+    EXECUTION.test(text) &&
+    !PROJECT_QUESTION.test(text) &&
+    !PROJECT_EXPLANATION.test(text)
+  ) {
     return {
       route: "zcloud_task",
       target: "zcloud.worker",
