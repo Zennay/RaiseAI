@@ -139,4 +139,20 @@ class SensorTrialProgressTest {
         )
     }
 
+
+    @Test
+    fun unexpectedCsvHeaderFailsClosed() {
+        val revision = "d".repeat(40)
+        val progress = SensorTrialRecorder.summarizeRows(
+            sequenceOf(
+                "label,session_id,wrong_schema",
+                "mouth_raise,3001,4000,40,true,0.98,1.5.3,$revision,raise-detector-v1"
+            )
+        )
+
+        assertTrue(progress.mouthTrials == 0)
+        assertTrue(progress.rejectedTrials == 1)
+        assertFalse(progress.v1GatePassed)
+    }
+
 }
