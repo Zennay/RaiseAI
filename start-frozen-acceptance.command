@@ -88,7 +88,7 @@ if not hasattr(os, "O_NOFOLLOW"):
     raise SystemExit("Gateway profile snapshot requires O_NOFOLLOW support")
 
 try:
-    source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+    source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
 except OSError as exc:
     raise SystemExit(
         f"Gateway profile must be a regular non-symlink file: {source}: {exc}"

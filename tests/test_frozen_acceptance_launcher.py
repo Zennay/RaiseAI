@@ -246,6 +246,20 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertFalse(self.fetch_marker.exists())
         self.assertFalse(self.log.exists())
 
+    def test_rejects_fifo_gateway_profile_before_fetch(self):
+        fifo_profile = self.root / "fifo-watch-gateway.properties"
+        os.mkfifo(fifo_profile)
+
+        result = self.run_launcher(args=[str(fifo_profile)])
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Gateway profile must be a regular non-symlink file",
+            result.stdout,
+        )
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
+
     def test_preflight_only_verifies_handoff_without_starting_session(self):
         result = self.run_launcher(
             args=["--preflight-only", str(self.profile)]
