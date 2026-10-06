@@ -15,6 +15,23 @@ class AssistantModeStoreTest {
     }
 
     @Test
+    fun unreadablePreferenceFailsClosedToGemini() {
+        val resolved = AssistantModeStore.resolveStored {
+            throw ClassCastException("legacy preference has the wrong type")
+        }
+
+        assertEquals(AssistantMode.GEMINI, resolved)
+    }
+
+    @Test
+    fun readableStoredPreferenceStillUsesConfiguredMode() {
+        assertEquals(
+            AssistantMode.NATIVE,
+            AssistantModeStore.resolveStored { AssistantMode.NATIVE.storedValue }
+        )
+    }
+
+    @Test
     fun explicitGeminiPreferenceUsesGemini() {
         assertEquals(AssistantMode.GEMINI, AssistantModeStore.resolve(AssistantMode.GEMINI.storedValue))
     }
