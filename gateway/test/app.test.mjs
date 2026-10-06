@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { createHandler } from "../src/app.mjs";
+import { createHandler, createRateLimiter } from "../src/app.mjs";
 
 const TOKEN = "test-token-abcdefghijklmnopqrstuvwxyz-123456";
 
@@ -16,6 +16,38 @@ async function withServer(fn, options = {}) {
     await new Promise(resolve => server.close(resolve));
   }
 }
+
+test("rate limiter caps active client buckets and resets them on minute rollover", () => {
+  const limiter = createRateLimiter({ requestsPerMinute: 2, maxBuckets: 3 });
+
+  assert.equal(limiter.allow("client-a", 100), true);
+  assert.equal(limiter.allow("client-b", 100), true);
+  assert.equal(limiter.allow("client-c", 100), true);
+  assert.equal(limiter.allow("client-d", 100), false);
+
+  assert.equal(limiter.allow("client-a", 100), true);
+  assert.equal(limiter.allow("client-a", 100), false);
+
+  assert.equal(limiter.allow("client-d", 101), true);
+  assert.equal(limiter.allow("client-e", 101), true);
+  assert.equal(limiter.allow("client-f", 101), true);
+  assert.equal(limiter.allow("client-g", 101), false);
+});
+
+test("rate limiter fails closed on invalid minute input and invalid configuration", () => {
+  const limiter = createRateLimiter({ requestsPerMinute: 1, maxBuckets: 1 });
+  assert.equal(limiter.allow("client-a", Number.NaN), false);
+  assert.equal(limiter.allow("client-a", 1.5), false);
+
+  for (const options of [
+    { requestsPerMinute: 0, maxBuckets: 1 },
+    { requestsPerMinute: 1.5, maxBuckets: 1 },
+    { requestsPerMinute: 1, maxBuckets: 0 },
+    { requestsPerMinute: 1, maxBuckets: Number.MAX_SAFE_INTEGER + 1 }
+  ]) {
+    assert.throws(() => createRateLimiter(options), /invalid_rate_limit_config/);
+  }
+});
 
 test("health is public and includes deploy revision", async () => {
   await withServer(async base => {
