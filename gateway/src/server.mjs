@@ -2,7 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { createHandler } from "./app.mjs";
-import { parseServerPort, validateServerConfig } from "./server-policy.mjs";
+import { parseDeployRevision, parseServerPort, validateServerConfig } from "./server-policy.mjs";
 import { createZCloudExecutor } from "./connectors/zcloud.mjs";
 import { createOpenRouterExecutor } from "./providers/openrouter.mjs";
 
@@ -11,7 +11,7 @@ const port = parseServerPort(process.env.RAISE_PORT);
 const token = process.env.RAISE_GATEWAY_TOKEN ?? "";
 const tlsCert = process.env.RAISE_TLS_CERT ?? "";
 const tlsKey = process.env.RAISE_TLS_KEY ?? "";
-const revision = process.env.RAISE_DEPLOY_REVISION ?? "unknown";
+const revision = parseDeployRevision(process.env.RAISE_DEPLOY_REVISION);
 
 validateServerConfig({ host, port, tlsCert, tlsKey });
 
