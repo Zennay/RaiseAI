@@ -1,5 +1,6 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const REQUEST_BUDGET_MS = 7_000;\nconst MAX_RESPONSE_TEXT_CHARS = 4_096;
+const REQUEST_BUDGET_MS = 7_000;
+const MAX_RESPONSE_TEXT_CHARS = 4_096;
 
 function hasWhitespaceOrControl(value) {
   return /[\s\u0000-\u001f\u007f]/u.test(value);
