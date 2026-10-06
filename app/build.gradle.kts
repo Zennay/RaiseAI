@@ -15,26 +15,28 @@ fun normalizeSourceRevisionOverride(raw: String?): String? {
 fun resolveSourceRevision(projectDir: java.io.File): String {
     return try {
         val override = normalizeSourceRevisionOverride(System.getenv("RAISE_BUILD_REVISION"))
-        if (override != null) return override
+        if (override == "unknown") return "unknown"
 
-        val statusProcess = ProcessBuilder("git", "status", "--porcelain", "--untracked-files=normal")
-            .directory(projectDir)
-            .redirectErrorStream(true)
-            .start()
-        val status = statusProcess.inputStream.bufferedReader().use { it.readText() }
-        if (statusProcess.waitFor() != 0 || status.isNotBlank()) {
+        val (statusCode, statusOutput) = runGit(
+            projectDir,
+            "status",
+            "--porcelain",
+            "--untracked-files=normal"
+        )
+        if (statusCode != 0 || statusOutput.isNotBlank()) {
             return "unknown"
         }
 
-        val process = ProcessBuilder("git", "rev-parse", "HEAD")
-            .directory(projectDir)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        if (process.waitFor() == 0 && output.matches(sourceRevisionPattern)) {
-            output.lowercase()
-        } else {
+        val (headCode, headOutput) = runGit(projectDir, "rev-parse", "HEAD")
+        val checkedOutRevision = headOutput.trim().lowercase()
+        if (headCode != 0 || !checkedOutRevision.matches(sourceRevisionPattern)) {
+            return "unknown"
+        }
+
+        if (override != null && override != checkedOutRevision) {
             "unknown"
+        } else {
+            override ?: checkedOutRevision
         }
     } catch (_: Exception) {
         "unknown"
