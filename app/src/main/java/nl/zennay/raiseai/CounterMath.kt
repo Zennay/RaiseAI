@@ -1,6 +1,10 @@
 package nl.zennay.raiseai
 
 internal object CounterMath {
+    fun nonNegative(value: Long): Long = value.coerceAtLeast(0L)
+
+    fun nonNegative(value: Int): Int = value.coerceAtLeast(0)
+
     fun addNonNegative(current: Long, delta: Long): Long {
         val safeCurrent = current.coerceAtLeast(0L)
         val safeDelta = delta.coerceAtLeast(0L)
