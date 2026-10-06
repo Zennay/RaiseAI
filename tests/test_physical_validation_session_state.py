@@ -91,6 +91,33 @@ class PhysicalValidationSessionStateTests(unittest.TestCase):
         self.assertIn("latest-session pointer must contain an absolute path", completed.stdout)
         self.assertIn("No valid previous physical validation session found.", completed.stdout)
 
+    def test_verify_e2e_rejects_existing_result_before_diagnostics_pull(self):
+        (self.session / "e2e-result.json").write_text(
+            '{"valid":true}\n',
+            encoding="utf-8",
+        )
+        completed = self.run_validation("verify-e2e", str(self.session))
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("Refusing to reuse physical validation result path", completed.stdout)
+        self.assertEqual(list(self.session.glob("watch-diagnostics-*")), [])
+
+    def test_verify_v1_rejects_existing_result_before_watch_data_pull(self):
+        payload = session_payload()
+        payload["e2e_passed"] = True
+        payload["e2e_verified_at_utc"] = "2026-10-06T09:05:00Z"
+        (self.session / "session.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        (self.session / "v1-result.json").write_text(
+            '{"v1_gate_passed":true}\n',
+            encoding="utf-8",
+        )
+        completed = self.run_validation("verify-v1", str(self.session))
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("Refusing to reuse physical validation result path", completed.stdout)
+        self.assertEqual(list(self.session.glob("watch-sensor-trials-*.csv")), [])
+
     def test_status_fails_closed_on_latest_pointer_symlink(self):
         self.state.mkdir(parents=True, exist_ok=True)
         target = self.base / "pointer-target"
