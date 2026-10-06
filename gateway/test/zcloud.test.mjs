@@ -211,7 +211,7 @@ test("current portfolio projects accept canonical werk-verder-aan continuation",
     }
   });
 
-  const result = await execute({ route: "zcloud_task" }, "Werk verder aan LightUp");
+  const result = await execute({ route: "zcloud_task" }, "Werk verder aan Light Up");
 
   assert.equal(result.enabled, true);
   assert.equal(result.provider, "zcloud");
