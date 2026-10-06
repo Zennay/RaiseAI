@@ -19,22 +19,24 @@ object HomeLauncher {
             Uri.parse("$PLAY_STORE_WEB_BASE$HOME_PACKAGE")
         )
 
-        val target = HomeLaunchPolicy.choose(
+        val intents = mapOf(
+            HomeLaunchTarget.INSTALLED_APP to installedApp,
+            HomeLaunchTarget.PLAY_STORE to playStore,
+            HomeLaunchTarget.WEB_STORE to webStore
+        )
+
+        val candidates = HomeLaunchPolicy.orderedAvailableTargets(
             installedAppAvailable = installedApp != null,
             playStoreAvailable = playStore.resolveActivity(activity.packageManager) != null,
             webStoreAvailable = webStore.resolveActivity(activity.packageManager) != null
         )
 
-        val intent = when (target) {
-            HomeLaunchTarget.INSTALLED_APP -> installedApp
-            HomeLaunchTarget.PLAY_STORE -> playStore
-            HomeLaunchTarget.WEB_STORE -> webStore
-            HomeLaunchTarget.UNAVAILABLE -> null
-        } ?: return false
-
-        return runCatching {
-            activity.startActivity(intent)
-            true
-        }.getOrDefault(false)
+        return candidates.any { target ->
+            val intent = intents[target] ?: return@any false
+            runCatching {
+                activity.startActivity(intent)
+                true
+            }.getOrDefault(false)
+        }
     }
 }
