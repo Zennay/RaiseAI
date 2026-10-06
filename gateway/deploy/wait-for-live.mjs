@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { httpsOrigin, positiveInteger } from "./readiness-config.mjs";
 import { evaluateReadinessResponse } from "./readiness-policy.mjs";
+import { readReadinessJson } from "./readiness-http.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
@@ -80,15 +81,9 @@ function requestHealth() {
         timeout: Math.min(5_000, timeoutMs)
       },
       res => {
-        const chunks = [];
-        res.on("data", chunk => chunks.push(chunk));
-        res.on("end", () => {
-          let json = null;
-          try {
-            json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          } catch {}
-          resolve({ status: res.statusCode, json });
-        });
+        readReadinessJson(res)
+          .then(json => resolve({ status: res.statusCode, json }))
+          .catch(reject);
       }
     );
     req.on("timeout", () => req.destroy(new Error("timeout")));
