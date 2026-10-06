@@ -86,10 +86,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     output = args.output or args.session.with_name("operator-observations.json")
     try:
-        _require(not output.exists(), f"refusing to overwrite existing observation file: {output}")
         session = json.loads(args.session.read_text(encoding="utf-8"))
         payload = build_template(session)
-        output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        try:
+            with output.open("x", encoding="utf-8") as output_file:
+                output_file.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        except FileExistsError as exc:
+            raise TemplateError(
+                f"refusing to overwrite existing observation file: {output}"
+            ) from exc
     except (OSError, json.JSONDecodeError, TemplateError) as exc:
         print(json.dumps({"created": False, "reason": str(exc)}, separators=(",", ":")))
         return 1
