@@ -523,6 +523,73 @@ exit 2
         self.assertIn("Refusing gateway provisioning to non-Wear ADB target: phone-a", result.stdout)
         self.assertEqual(set(self.used_serials()), {"phone-a"})
 
+class WatchPreflightBindingTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.sdk = self.root / "sdk"
+        (self.sdk / "platform-tools").mkdir(parents=True)
+        adb = self.sdk / "platform-tools" / "adb"
+        adb.write_text(
+            textwrap.dedent(
+                r"""#!/bin/bash
+set -eu
+if [ "${1:-}" = "devices" ]; then
+  printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\nwatch-c\tdevice\n'
+  exit 0
+fi
+if [ "${1:-}" = "-s" ]; then
+  serial="$2"
+  shift 2
+  args="$*"
+  case "$args" in
+    "shell pm list features")
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+        echo "feature:android.hardware.type.watch"
+      else
+        echo "feature:android.hardware.telephony"
+      fi
+      ;;
+    "shell getprop ro.product.model")
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "SM_L315F"; else echo "Pixel_Test"; fi
+      ;;
+    "shell getprop ro.product.device")
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "freshbl"; else echo "phone"; fi
+      ;;
+    *)
+      echo "unexpected adb invocation: $serial $args" >&2
+      exit 2
+      ;;
+  esac
+  exit 0
+fi
+echo "unexpected adb invocation: $*" >&2
+exit 2
+"""
+            ),
+            encoding="utf-8",
+        )
+        adb.chmod(0o755)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_preflight_rejects_ambiguous_multiple_watches_without_serial(self):
+        env = os.environ.copy()
+        env["ANDROID_SDK_ROOT"] = str(self.sdk)
+        env.pop("ANDROID_SERIAL", None)
+        result = subprocess.run(
+            ["bash", str(ROOT / "watch-preflight.command")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Multiple Wear OS watches are connected", result.stdout)
+
+
 class PhysicalPrepareBindingTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
