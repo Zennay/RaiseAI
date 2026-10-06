@@ -163,6 +163,7 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             self.assertEqual(first, 0)
             persisted = result.read_text(encoding="utf-8")
             self.assertNotIn(secret, persisted)
+            self.assertNotIn(session_payload()["watch_serial"], persisted)
             self.assertTrue(json.loads(persisted)["quality_evidence_complete"])
 
             second_output = io.StringIO()
