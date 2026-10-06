@@ -131,7 +131,9 @@ if [ "${1:-}" = "start-server" ]; then
   exit 0
 fi
 if [ "${1:-}" = "devices" ]; then
-  if [ "${SWITCH_AFTER_FAILED_INSTALL:-}" = "1" ] && [ -f "${INSTALL_ATTEMPT_FILE:-}" ]; then
+  if [ "${MULTI_WATCH:-}" = "1" ]; then
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\nwatch-c\tdevice\n'
+  elif [ "${SWITCH_AFTER_FAILED_INSTALL:-}" = "1" ] && [ -f "${INSTALL_ATTEMPT_FILE:-}" ]; then
     printf 'List of devices attached\nphone-a\tdevice\nwatch-c\tdevice\n'
   else
     printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
@@ -164,7 +166,11 @@ if [ "${1:-}" = "-s" ]; then
          [ "$serial" = "watch-b" ]; then
         echo "phone"
       else
-        [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
+        if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+          echo "freshbl"
+        else
+          echo "phone"
+        fi
       fi
       ;;
     "shell getprop ro.build.characteristics")
@@ -173,7 +179,11 @@ if [ "${1:-}" = "-s" ]; then
          [ "$serial" = "watch-b" ]; then
         echo "nosdcard"
       else
-        [ "$serial" = "watch-b" ] && echo "watch" || echo "nosdcard"
+        if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+          echo "watch"
+        else
+          echo "nosdcard"
+        fi
       fi
       ;;
     "shell pm list features")
@@ -181,7 +191,7 @@ if [ "${1:-}" = "-s" ]; then
          [ -f "${INSTALL_ATTEMPT_FILE:-}" ] &&
          [ "$serial" = "watch-b" ]; then
         echo "feature:android.hardware.telephony"
-      elif [ "$serial" = "watch-b" ]; then
+      elif [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
         echo "feature:android.hardware.type.watch"
       else
         echo "feature:android.hardware.telephony"
@@ -319,6 +329,13 @@ exit 2
             hashlib.sha256(self.apk.read_bytes()).hexdigest(),
         )
 
+    def test_installer_rejects_ambiguous_multiple_watches_without_serial(self):
+        result = self.run_installer(None, {"MULTI_WATCH": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Multiple Wear OS watches are connected", result.stdout)
+        self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
+
     def test_installer_rejects_non_watch_android_serial(self):
         result = self.run_installer("phone-a")
         self.assertNotEqual(result.returncode, 0)
@@ -392,7 +409,11 @@ if [ "${1:-}" = "start-server" ]; then
   exit 0
 fi
 if [ "${1:-}" = "devices" ]; then
-  printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
+  if [ "${MULTI_WATCH:-}" = "1" ]; then
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\nwatch-c\tdevice\n'
+  else
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
+  fi
   exit 0
 fi
 if [ "${1:-}" = "-s" ]; then
@@ -402,16 +423,16 @@ if [ "${1:-}" = "-s" ]; then
   args="$*"
   case "$args" in
     "shell getprop ro.product.model")
-      [ "$serial" = "watch-b" ] && echo "SM_L315F" || echo "Pixel_Test"
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "SM_L315F"; else echo "Pixel_Test"; fi
       ;;
     "shell getprop ro.product.device")
-      [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "freshbl"; else echo "phone"; fi
       ;;
     "shell getprop ro.build.characteristics")
-      [ "$serial" = "watch-b" ] && echo "watch" || echo "nosdcard"
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "watch"; else echo "nosdcard"; fi
       ;;
     "shell pm list features")
-      if [ "$serial" = "watch-b" ]; then
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
         echo "feature:android.hardware.type.watch"
       else
         echo "feature:android.hardware.telephony"
@@ -450,10 +471,15 @@ exit 2
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_provisioner(self, serial):
+    def run_provisioner(self, serial=None, extra_env=None):
         env = os.environ.copy()
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
-        env["ANDROID_SERIAL"] = serial
+        if serial is None:
+            env.pop("ANDROID_SERIAL", None)
+        else:
+            env["ANDROID_SERIAL"] = serial
+        if extra_env:
+            env.update(extra_env)
         env["ADB_LOG"] = str(self.log)
         return subprocess.run(
             ["bash", str(ROOT / "provision-watch-gateway.command"), str(self.profile)],
@@ -479,6 +505,12 @@ exit 2
         self.assertTrue(self.used_serials())
         self.assertEqual(set(self.used_serials()), {"watch-b"})
         self.assertIn("Gateway profile installed on Watch: watch-b", result.stdout)
+
+    def test_gateway_provisioning_rejects_ambiguous_multiple_watches_without_serial(self):
+        result = self.run_provisioner(None, {"MULTI_WATCH": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Multiple Wear OS watches are connected", result.stdout)
+        self.assertNotIn("Gateway profile installed", result.stdout)
 
     def test_gateway_temp_credential_path_uses_process_id(self):
         source = (ROOT / "provision-watch-gateway.command").read_text(encoding="utf-8")
