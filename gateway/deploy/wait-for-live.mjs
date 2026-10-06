@@ -7,6 +7,7 @@ import fs from "node:fs";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
+import { positiveInteger } from "./readiness-config.mjs";
 import { evaluateReadinessResponse } from "./readiness-policy.mjs";
 
 const configDir =
@@ -22,10 +23,6 @@ function readKeyValueFile(file) {
   return out;
 }
 
-function positiveInteger(value, fallback) {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
 
 const env = readKeyValueFile(path.join(configDir, "gateway.env"));
 const profile = readKeyValueFile(
