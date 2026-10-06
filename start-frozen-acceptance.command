@@ -80,8 +80,10 @@ trap 'exit 143' TERM
 PROFILE_SNAPSHOT="$RUN_ROOT/watch-gateway.properties"
 PROFILE="$(python3 - "$PROFILE" "$PROFILE_SNAPSHOT" <<'PY'
 import os
+import re
 import stat
 import sys
+from urllib.parse import urlsplit
 
 source = os.path.abspath(os.path.expanduser(sys.argv[1]))
 destination = sys.argv[2]
@@ -106,6 +108,58 @@ try:
         payload = handle.read()
 finally:
     os.close(source_fd)
+
+try:
+    text = payload.decode("utf-8")
+except UnicodeDecodeError as exc:
+    raise SystemExit("Gateway profile is invalid: expected UTF-8 text") from exc
+
+required_keys = {"url", "token", "spki_sha256"}
+values = {}
+for raw_line in text.splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if "=" not in line:
+        raise SystemExit("Gateway profile is invalid: malformed property line")
+    key, value = line.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if key in required_keys:
+        if key in values:
+            raise SystemExit(f"Gateway profile is invalid: duplicate {key} property")
+        values[key] = value
+
+missing = sorted(required_keys - values.keys())
+if missing:
+    raise SystemExit(
+        "Gateway profile is invalid: missing required properties: "
+        + ", ".join(missing)
+    )
+
+try:
+    parsed_url = urlsplit(values["url"])
+    parsed_port = parsed_url.port
+except ValueError as exc:
+    raise SystemExit("Gateway profile is invalid: malformed HTTPS origin") from exc
+if (
+    parsed_url.scheme.lower() != "https"
+    or not parsed_url.hostname
+    or parsed_url.username is not None
+    or parsed_url.password is not None
+    or parsed_url.path not in ("", "/")
+    or parsed_url.query
+    or parsed_url.fragment
+    or parsed_port is None
+):
+    raise SystemExit("Gateway profile is invalid: expected HTTPS origin with explicit port")
+
+token = values["token"]
+if len(token) < 32 or any(char.isspace() for char in token):
+    raise SystemExit("Gateway profile is invalid: token is missing or malformed")
+
+if re.fullmatch(r"[0-9a-fA-F]{64}", values["spki_sha256"]) is None:
+    raise SystemExit("Gateway profile is invalid: SPKI pin must be 64 hex characters")
 
 destination_fd = os.open(
     destination,
