@@ -5,7 +5,7 @@ SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
 ADB="$SDK_DIR/platform-tools/adb"
 [ -x "$ADB" ] || { echo "ADB not found at $ADB"; exit 1; }
 
-find_watch() {
+find_watches() {
   "$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
     [ -z "$serial" ] && continue
     features="$($ADB -s "$serial" shell pm list features 2>/dev/null | tr -d '\r' || true)"
@@ -13,12 +13,21 @@ find_watch() {
     device="$($ADB -s "$serial" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
     if printf '%s\n' "$features" | grep -q 'android.hardware.type.watch' || [ "$model" = "SM_L315F" ] || printf '%s' "$device" | grep -qi '^fresh'; then
       printf '%s\n' "$serial"
-      return 0
     fi
   done
 }
 
-TARGET="${ANDROID_SERIAL:-$(find_watch | head -n 1)}"
+if [ -n "${ANDROID_SERIAL:-}" ]; then
+  TARGET="$ANDROID_SERIAL"
+else
+  WATCHES="$(find_watches)"
+  WATCH_COUNT="$(printf '%s\n' "$WATCHES" | awk 'NF {count++} END {print count+0}')"
+  if [ "$WATCH_COUNT" -gt 1 ]; then
+    echo "Multiple Wear OS watches are connected; set ANDROID_SERIAL to the intended Watch."
+    exit 1
+  fi
+  TARGET="$(printf '%s\n' "$WATCHES" | awk 'NF {print; exit}')"
+fi
 [ -n "$TARGET" ] || { echo "No connected Wear OS watch found."; "$ADB" devices -l; exit 1; }
 
 echo "Watch: $TARGET"
