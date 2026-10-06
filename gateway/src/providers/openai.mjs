@@ -31,7 +31,7 @@ export function createOpenAIExecutor({
 
     if (!supported) return null;
 
-    if (!apiKey) {
+    if (!hasUsableApiKey(apiKey)) {
       return {
         enabled: false,
         reason: "openai_not_configured"
