@@ -29,7 +29,17 @@ function outputText(response) {
   const refusalChunks = [];
 
   for (const item of output) {
-    const content = Array.isArray(item?.content) ? item.content : [];
+    if (
+      item === null ||
+      typeof item !== "object" ||
+      Array.isArray(item) ||
+      item.type !== "message" ||
+      item.role !== "assistant"
+    ) {
+      continue;
+    }
+
+    const content = Array.isArray(item.content) ? item.content : [];
 
     for (const part of content) {
       if (part?.type === "output_text" && typeof part.text === "string") {
