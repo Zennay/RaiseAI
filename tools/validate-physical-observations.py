@@ -72,7 +72,14 @@ def _require_sha(value: Any, field: str, length: int) -> str:
 def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
     _require(isinstance(session, dict), "session root must be a JSON object")
     _require(isinstance(observations, dict), "observations root must be a JSON object")
-    _require(observations.get("schema_version") == 1, "schema_version must equal 1")
+    _require(
+        type(observations.get("schema_version")) is int and observations["schema_version"] == 1,
+        "schema_version must equal 1",
+    )
+    _require(
+        type(session.get("schema_version")) is int and session["schema_version"] == 1,
+        "session schema_version must equal 1",
+    )
 
     actual_keys = set(observations)
     missing = sorted(OBSERVATION_KEYS - actual_keys)
