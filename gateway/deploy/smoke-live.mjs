@@ -21,7 +21,7 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { httpsOrigin } from "./readiness-config.mjs";
-import { evaluateZCloudProbe } from "./smoke-policy.mjs";
+import { evaluateZCloudProbe, hasJsonMediaType } from "./smoke-policy.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
@@ -79,11 +79,14 @@ function request(method, route, { auth = false, body = null } = {}) {
         const chunks = [];
         res.on("data", chunk => chunks.push(chunk));
         res.on("end", () => {
+          const jsonMediaType = hasJsonMediaType(res.headers["content-type"]);
           let json = null;
-          try {
-            json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          } catch {}
-          resolve({ status: res.statusCode, json });
+          if (jsonMediaType) {
+            try {
+              json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            } catch {}
+          }
+          resolve({ status: res.statusCode, json, jsonMediaType });
         });
       }
     );
@@ -109,7 +112,8 @@ function expect(condition, message) {
 }
 
 await check("health_revision", async () => {
-  const { status, json } = await request("GET", "/health");
+  const { status, json, jsonMediaType } = await request("GET", "/health");
+  expect(jsonMediaType, "health response is not application/json");
   expect(status === 200 && json?.ok === true, `unexpected health ${status}`);
   expect(
     json?.revision === expectedRevision,
@@ -119,9 +123,10 @@ await check("health_revision", async () => {
 });
 
 await check("unauthenticated_rejected", async () => {
-  const { status } = await request("POST", "/v1/assistant", {
+  const { status, jsonMediaType } = await request("POST", "/v1/assistant", {
     body: { text: "hallo" }
   });
+  expect(jsonMediaType, "unauthenticated response is not application/json");
   expect(status === 401, `expected 401, got ${status}`);
   return { status };
 });
@@ -136,11 +141,12 @@ await check("openrouter_quick_ai_probe", async () => {
     };
   }
 
-  const { status, json } = await request("POST", "/v1/assistant", {
+  const { status, json, jsonMediaType } = await request("POST", "/v1/assistant", {
     auth: true,
     body: { text: "Antwoord met één kort woord: gereed" }
   });
 
+  expect(jsonMediaType, "OpenRouter probe response is not application/json");
   expect(status === 200, `expected provider status 200, got ${status}`);
   expect(json?.route === "quick_ai", `expected quick_ai route, got ${json?.route ?? "missing"}`);
   expect(json?.execution?.enabled === true, "OpenRouter execution was not enabled");
@@ -160,11 +166,12 @@ await check("openrouter_quick_ai_probe", async () => {
 });
 
 await check("zcloud_dependency_probe", async () => {
-  const { status, json } = await request("POST", "/v1/assistant", {
+  const { status, json, jsonMediaType } = await request("POST", "/v1/assistant", {
     auth: true,
     body: { text: "Ga door met Raise AI en fix de zaak" }
   });
 
+  expect(jsonMediaType, "zCloud probe response is not application/json");
   const result = evaluateZCloudProbe({
     status,
     json,
