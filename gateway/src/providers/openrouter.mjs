@@ -39,7 +39,29 @@ function normalizeFallbackModels(models) {
 }
 
 function outputText(response) {
-  const content = response?.choices?.[0]?.message?.content;
+  if (
+    response === null ||
+    typeof response !== "object" ||
+    Array.isArray(response) ||
+    !Array.isArray(response.choices) ||
+    response.choices.length === 0
+  ) {
+    return null;
+  }
+
+  const firstChoice = response.choices[0];
+  if (
+    firstChoice === null ||
+    typeof firstChoice !== "object" ||
+    Array.isArray(firstChoice) ||
+    firstChoice.message === null ||
+    typeof firstChoice.message !== "object" ||
+    Array.isArray(firstChoice.message)
+  ) {
+    return null;
+  }
+
+  const content = firstChoice.message.content;
   if (typeof content === "string") {
     const text = content.trim();
     return text || null;
@@ -191,7 +213,7 @@ export function createOpenRouterExecutor({
           body.model === undefined || body.model === null
             ? primaryModel
             : normalizeModelName(body.model);
-        if (!responseModel) {
+        if (!responseModel || !models.includes(responseModel)) {
           const error = new Error("openrouter_invalid_response");
           error.statusCode = 502;
           throw error;
