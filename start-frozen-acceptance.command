@@ -73,7 +73,9 @@ RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/raiseai-frozen-acceptance.XXXXXX")"
 cleanup() {
   rm -rf "$RUN_ROOT"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 PROFILE_SNAPSHOT="$RUN_ROOT/watch-gateway.properties"
 PROFILE="$(python3 - "$PROFILE" "$PROFILE_SNAPSHOT" <<'PY'
