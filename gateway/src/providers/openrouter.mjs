@@ -1,5 +1,9 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+function hasUsableApiKey(value) {
+  return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
+}
+
 function parseFallbackModels(value) {
   return String(value ?? "")
     .split(",")
