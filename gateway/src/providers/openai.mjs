@@ -1,4 +1,5 @@
 const API_URL = "https://api.openai.com/v1/responses";
+const REQUEST_BUDGET_MS = 7_000;
 const MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 
 function hasUsableApiKey(value) {
@@ -225,7 +226,7 @@ export function createOpenAIExecutor({
           "content-type": "application/json"
         },
         body: JSON.stringify(request),
-        signal: AbortSignal.timeout(9_000)
+        signal: AbortSignal.timeout(REQUEST_BUDGET_MS)
       });
     } catch (cause) {
       throw upstreamFailure("openai_request_failed", cause);
