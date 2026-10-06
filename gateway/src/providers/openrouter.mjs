@@ -191,7 +191,7 @@ export function createOpenRouterExecutor({
           body.model === undefined || body.model === null
             ? primaryModel
             : normalizeModelName(body.model);
-        if (!responseModel) {
+        if (!responseModel || !models.includes(responseModel)) {
           const error = new Error("openrouter_invalid_response");
           error.statusCode = 502;
           throw error;
