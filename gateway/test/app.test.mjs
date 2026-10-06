@@ -238,3 +238,65 @@ test("disabled connector result may return a user-facing string without claiming
     })
   });
 });
+
+
+test("handler rejects unsafe configured gateway tokens", () => {
+  for (const token of [
+    "x".repeat(31),
+    "x".repeat(32) + " ",
+    "x".repeat(16) + "\t" + "y".repeat(16),
+    "x".repeat(16) + "\n" + "y".repeat(16)
+  ]) {
+    assert.throws(
+      () => createHandler({ token }),
+      /at least 32 characters with no whitespace or control characters/
+    );
+  }
+
+  assert.doesNotThrow(() => createHandler({ token: "A1-._~".repeat(6) }));
+});
+
+test("authenticated JSON endpoints reject unsupported media types before execution", async () => {
+  let executeCalls = 0;
+
+  await withServer(async base => {
+    for (const contentType of ["text/plain", "application/x-www-form-urlencoded"]) {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": contentType,
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Dit lijkt op JSON maar heeft het verkeerde mediatype." })
+      });
+
+      assert.equal(res.status, 415);
+      const body = await res.json();
+      assert.equal(body.error, "unsupported_media_type");
+    }
+  }, {
+    execute: async () => {
+      executeCalls += 1;
+      return { enabled: true, answer: "must not run" };
+    }
+  });
+
+  assert.equal(executeCalls, 0);
+});
+
+test("application/json media type is case-insensitive and permits parameters", async () => {
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "Application/JSON; charset=UTF-8",
+        authorization: "Bearer " + TOKEN
+      },
+      body: JSON.stringify({ text: "Leg kubernetes pods simpel uit" })
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.route, "quick_ai");
+  });
+});
