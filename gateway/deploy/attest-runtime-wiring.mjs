@@ -34,13 +34,16 @@ export function attestRuntimeWiring({
   const execStart = properties.ExecStart ?? "";
   const environmentFiles = properties.EnvironmentFiles ?? "";
 
+  const expectedExecStartPrefix =
+    "{ path=/usr/bin/node ; argv[]=/usr/bin/node " + expected.serverFile + " ;";
+  const expectedEnvironmentFiles =
+    expected.envFile + " (ignore_errors=no)";
+
   const checks = {
     fragment_path: properties.FragmentPath === expected.unitFile,
     working_directory: properties.WorkingDirectory === expected.installDir,
-    exec_start:
-      execStart.includes("path=/usr/bin/node") &&
-      execStart.includes(expected.serverFile),
-    environment_file: environmentFiles.includes(expected.envFile)
+    exec_start: execStart.startsWith(expectedExecStartPrefix),
+    environment_file: environmentFiles === expectedEnvironmentFiles
   };
 
   const activeState = properties.ActiveState ?? null;
