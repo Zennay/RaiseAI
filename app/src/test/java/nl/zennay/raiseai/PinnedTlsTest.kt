@@ -18,4 +18,57 @@ class PinnedTlsTest {
         assertNull(PinnedTls.normalizePin("abc"))
         assertNull(PinnedTls.normalizePin("z".repeat(64)))
     }
+
+    @Test
+    fun acceptsCertificateAtInclusiveValidityBoundaries() {
+        assertEquals(
+            true,
+            PinnedTls.isCertificateCurrentlyValid(
+                notBeforeMs = 1_000L,
+                notAfterMs = 2_000L,
+                nowMs = 1_000L
+            )
+        )
+        assertEquals(
+            true,
+            PinnedTls.isCertificateCurrentlyValid(
+                notBeforeMs = 1_000L,
+                notAfterMs = 2_000L,
+                nowMs = 2_000L
+            )
+        )
+    }
+
+    @Test
+    fun rejectsCertificateOutsideValidityWindow() {
+        assertEquals(
+            false,
+            PinnedTls.isCertificateCurrentlyValid(
+                notBeforeMs = 1_000L,
+                notAfterMs = 2_000L,
+                nowMs = 999L
+            )
+        )
+        assertEquals(
+            false,
+            PinnedTls.isCertificateCurrentlyValid(
+                notBeforeMs = 1_000L,
+                notAfterMs = 2_000L,
+                nowMs = 2_001L
+            )
+        )
+    }
+
+    @Test
+    fun rejectsInvertedCertificateValidityWindow() {
+        assertEquals(
+            false,
+            PinnedTls.isCertificateCurrentlyValid(
+                notBeforeMs = 2_000L,
+                notAfterMs = 1_000L,
+                nowMs = 1_500L
+            )
+        )
+    }
+
 }
