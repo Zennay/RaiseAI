@@ -84,53 +84,53 @@ resolve_session() {
     printf '%s\n' "$requested"
     return
   fi
-  [ -f "$LATEST_SESSION_FILE" ] || {
-    echo "No previous physical validation session found." >&2
+  if ! python3 tools/physical-session-pointer.py resolve "$LATEST_SESSION_FILE" "$EVIDENCE_ROOT"; then
+    echo "No valid previous physical validation session found." >&2
     echo "Run: bash ./physical-validation.command prepare [gateway-profile]" >&2
     return 1
-  }
-  tr -d '\r\n' < "$LATEST_SESSION_FILE"
+  fi
 }
 
 json_get() {
   local file="$1"
   local key="$2"
-  python3 - "$file" "$key" <<'PY'
-import json
-import sys
-path, key = sys.argv[1], sys.argv[2]
-data = json.load(open(path, encoding="utf-8"))
-value = data.get(key)
-if value is None:
-    raise SystemExit(2)
-if isinstance(value, bool):
-    print("true" if value else "false")
-else:
-    print(value)
-PY
+  python3 tools/update-physical-session.py "$file" --get "$key"
 }
 
-json_set() {
+mark_session_gate_passed() {
   local file="$1"
-  local key="$2"
-  local value="$3"
-  python3 - "$file" "$key" "$value" <<'PY'
-import json
-import sys
-path, key, value = sys.argv[1:4]
-with open(path, encoding="utf-8") as handle:
-    data = json.load(handle)
-if value == "true":
-    parsed = True
-elif value == "false":
-    parsed = False
-else:
-    parsed = value
-data[key] = parsed
-with open(path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-PY
+  local gate="$2"
+  local verified_at_utc="$3"
+  python3 tools/update-physical-session.py "$file" --mark-passed "$gate" "$verified_at_utc"
+}
+
+require_new_result_path() {
+  local result="$1"
+  if [ -e "$result" ] || [ -L "$result" ]; then
+    echo "Refusing to reuse physical validation result path: $result" >&2
+    echo "Start a fresh prepared session instead of mixing new evidence into an accepted stage." >&2
+    return 1
+  fi
+}
+
+publish_json_result() {
+  local result="$1"
+  shift
+  local temp_result status
+  temp_result="$(mktemp "${result}.tmp.XXXXXX")"
+  if "$@" >"$temp_result"; then
+    if ! python3 tools/publish-physical-result.py "$temp_result" "$result"; then
+      rm -f "$temp_result"
+      return 1
+    fi
+    cat "$result"
+    rm -f "$temp_result"
+    return 0
+  fi
+  status=$?
+  cat "$temp_result"
+  rm -f "$temp_result"
+  return "$status"
 }
 
 prepare_session() {
@@ -331,7 +331,7 @@ payload = {
 )
 PY
 
-  printf '%s\n' "$session" > "$LATEST_SESSION_FILE"
+  python3 tools/physical-session-pointer.py publish "$LATEST_SESSION_FILE" "$session" "$EVIDENCE_ROOT" >/dev/null
   echo
   echo "PREPARE PASS"
   echo "On the Watch: open Native Raise AI and complete one short normal AI question."
@@ -352,9 +352,11 @@ verify_e2e() {
   watch_serial="$(json_get "$session/session.json" watch_serial)"
   [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
-
   local diag evidence result
+  result="$session/e2e-result.json"
+  require_new_result_path "$result"
+
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
   diag="$(find "$session" -maxdepth 1 -type d -name 'watch-diagnostics-*' -print | sort | tail -n 1)"
   [ -n "$diag" ] || { echo "No diagnostics directory produced"; exit 1; }
   evidence="$diag/watch-e2e-evidence.json"
@@ -364,11 +366,17 @@ verify_e2e() {
     exit 1
   }
 
-  result="$session/e2e-result.json"
-  python3 tools/validate-watch-e2e-evidence.py     "$evidence"     --expect-route quick_ai     --max-latency-ms 15000     --max-age-seconds 300     --require-answer     --expect-app-version "$version"     --expect-source-revision "$revision" | tee "$result"
+  publish_json_result "$result" \
+    python3 tools/validate-watch-e2e-evidence.py \
+      "$evidence" \
+      --expect-route quick_ai \
+      --max-latency-ms 15000 \
+      --max-age-seconds 300 \
+      --require-answer \
+      --expect-app-version "$version" \
+      --expect-source-revision "$revision"
 
-  json_set "$session/session.json" e2e_passed true
-  json_set "$session/session.json" e2e_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  mark_session_gate_passed "$session/session.json" e2e "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo
   echo "E2E PASS — exact Watch build ${version} @ ${revision}"
   echo "Next: collect at least 30 mouth raises and 100 representative non-trigger trials."
@@ -394,20 +402,21 @@ verify_v1() {
   watch_serial="$(json_get "$session/session.json" watch_serial)"
   [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
-
   local trials result
+  result="$session/v1-result.json"
+  require_new_result_path "$result"
+
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
   trials="$(find "$session" -maxdepth 1 -type f -name 'watch-sensor-trials-*.csv' -print | sort | tail -n 1)"
   [ -n "$trials" ] || { echo "No trial evidence was exported"; exit 1; }
 
-  result="$session/v1-result.json"
-  python3 tools/analyze-watch-sensor-trials.py "$trials" \
-    --expect-app-version "$version" \
-    --expect-source-revision "$revision" \
-    --require-v1-gate | tee "$result"
+  publish_json_result "$result" \
+    python3 tools/analyze-watch-sensor-trials.py "$trials" \
+      --expect-app-version "$version" \
+      --expect-source-revision "$revision" \
+      --require-v1-gate
 
-  json_set "$session/session.json" v1_gate_passed true
-  json_set "$session/session.json" v1_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  mark_session_gate_passed "$session/session.json" v1 "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo
   echo "V1 RELIABILITY PASS"
   echo "Evidence directory: $session"
