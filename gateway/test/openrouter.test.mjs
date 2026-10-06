@@ -151,6 +151,10 @@ test("invalid OpenRouter model config fails closed before provider calls", async
     { fastModel: "" },
     { fastModel: "bad model" },
     { deepModel: "\t" },
+    { fallbackModels: 42 },
+    { fallbackModels: true },
+    { fallbackModels: {} },
+    { fallbackModels: null },
     { fallbackModels: ["google/gemini-3.8-flash", 42] },
     { fallbackModels: ["bad fallback"] }
   ];
