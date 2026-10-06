@@ -76,6 +76,9 @@ function groupTargets(payload) {
       target.project_id !== workerKey ||
       !Number.isSafeInteger(target.worker_slot) ||
       target.worker_slot < 1 ||
+      !Number.isSafeInteger(target.worker_count) ||
+      target.worker_count < 1 ||
+      target.worker_slot > target.worker_count ||
       workerKey !== target.base_project_id + "::w" + target.worker_slot
     ) {
       throw new Error("zcloud_targets_invalid");
@@ -99,9 +102,17 @@ function groupTargets(payload) {
       name: displayName || base,
       nameKey,
       active: false,
-      aliases: new Set()
+      aliases: new Set(),
+      workerCount: target.worker_count,
+      workerSlots: new Set()
     };
 
+    if (
+      current.workerCount !== target.worker_count ||
+      current.workerSlots.has(target.worker_slot)
+    ) {
+      throw new Error("zcloud_targets_invalid");
+    }
     if (nameKey && current.nameKey && current.nameKey !== nameKey) {
       throw new Error("zcloud_targets_invalid");
     }
@@ -111,14 +122,28 @@ function groupTargets(payload) {
     }
 
     current.active ||= target.active;
+    current.workerSlots.add(target.worker_slot);
     for (const alias of aliasesFor(target)) current.aliases.add(alias);
     groups.set(base, current);
   }
 
-  return [...groups.values()].map(({ nameKey: _nameKey, ...group }) => ({
-    ...group,
-    aliases: [...group.aliases].sort((a, b) => b.length - a.length)
-  }));
+  for (const group of groups.values()) {
+    if (group.workerSlots.size !== group.workerCount) {
+      throw new Error("zcloud_targets_invalid");
+    }
+    for (let slot = 1; slot <= group.workerCount; slot += 1) {
+      if (!group.workerSlots.has(slot)) {
+        throw new Error("zcloud_targets_invalid");
+      }
+    }
+  }
+
+  return [...groups.values()].map(
+    ({ nameKey: _nameKey, workerCount: _workerCount, workerSlots: _workerSlots, ...group }) => ({
+      ...group,
+      aliases: [...group.aliases].sort((a, b) => b.length - a.length)
+    })
+  );
 }
 
 function findProject(text, projects) {
