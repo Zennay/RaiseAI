@@ -182,7 +182,7 @@ python3 tools/create-physical-observation-template.py \\
   ~/.raiseai/evidence/<session>/session.json
 ```
 
-The generator copies the exact Watch/app/source/APK identity and refuses to overwrite an existing observation file. Its three review booleans are deliberately `false` and its behavior fields are blank, so the template cannot pass validation until the real physical checks are completed.
+The generator copies the exact Watch/app/source/APK identity, validates the physical-session start timestamp, normalizes `recorded_at_utc` to canonical UTC, refuses timestamps before the session start, and refuses to overwrite an existing observation file. Its three review booleans are deliberately `false` and its behavior fields are blank, so the template cannot pass validation until the real physical checks are completed.
 
 The resulting file has this shape:
 
