@@ -141,6 +141,24 @@ class SensorTrialProgressTest {
 
 
     @Test
+    fun emptyExistingTrialFileRecoversCanonicalHeaderWithoutOverwritingNonEmptyFile() {
+        val file = kotlin.io.path.createTempFile("raise-trials-", ".csv").toFile()
+        try {
+            assertTrue(file.exists())
+            assertTrue(file.length() == 0L)
+
+            SensorTrialRecorder.ensureHeader(file)
+            assertTrue(file.readText() == SensorTrialRecorder.HEADER + "\n")
+
+            file.writeText("corrupt-but-non-empty\n")
+            SensorTrialRecorder.ensureHeader(file)
+            assertTrue(file.readText() == "corrupt-but-non-empty\n")
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
     fun surplusCsvFieldIsRejected() {
         val revision = "e".repeat(40)
         val progress = SensorTrialRecorder.summarizeRows(
