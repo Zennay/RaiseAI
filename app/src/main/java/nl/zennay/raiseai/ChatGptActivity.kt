@@ -273,6 +273,7 @@ class ChatGptActivity : Activity() {
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 lastNavigationUrl = url
+                ChatSessionCache.markNavigationStarted(session)
                 WearBridge.markLoading()
                 showStatus(
                     if (isTrustedChatGptOrigin(url)) "ChatGPT laden…" else "Veilig inloggen…"
