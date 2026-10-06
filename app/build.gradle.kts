@@ -12,10 +12,29 @@ fun normalizeSourceRevisionOverride(raw: String?): String? {
     }
 }
 
+fun selectSourceRevision(
+    override: String?,
+    checkedOutRevision: String?,
+    cleanWorkingTree: Boolean
+): String {
+    if (!cleanWorkingTree || override == "unknown") return "unknown"
+
+    val head = checkedOutRevision
+        ?.trim()
+        ?.lowercase()
+        ?.takeIf { it.matches(sourceRevisionPattern) }
+        ?: return "unknown"
+
+    return when {
+        override == null -> head
+        override == head -> override
+        else -> "unknown"
+    }
+}
+
 fun resolveSourceRevision(projectDir: java.io.File): String {
     return try {
         val override = normalizeSourceRevisionOverride(System.getenv("RAISE_BUILD_REVISION"))
-        if (override == "unknown") return "unknown"
 
         val (statusCode, statusOutput) = runGit(
             projectDir,
@@ -23,21 +42,14 @@ fun resolveSourceRevision(projectDir: java.io.File): String {
             "--porcelain",
             "--untracked-files=normal"
         )
-        if (statusCode != 0 || statusOutput.isNotBlank()) {
-            return "unknown"
+        val cleanWorkingTree = statusCode == 0 && statusOutput.isBlank()
+        if (!cleanWorkingTree) {
+            return selectSourceRevision(override, null, false)
         }
 
         val (headCode, headOutput) = runGit(projectDir, "rev-parse", "HEAD")
-        val checkedOutRevision = headOutput.trim().lowercase()
-        if (headCode != 0 || !checkedOutRevision.matches(sourceRevisionPattern)) {
-            return "unknown"
-        }
-
-        if (override != null && override != checkedOutRevision) {
-            "unknown"
-        } else {
-            override ?: checkedOutRevision
-        }
+        val checkedOutRevision = headOutput.takeIf { headCode == 0 }
+        selectSourceRevision(override, checkedOutRevision, true)
     } catch (_: Exception) {
         "unknown"
     }
@@ -122,6 +134,23 @@ val verifySourceRevisionOverridePolicy = tasks.register("verifySourceRevisionOve
         }
         check(normalizeSourceRevisionOverride("not-a-revision") == "unknown") {
             "A malformed source-revision override must fail closed."
+        }
+
+        val head = "c".repeat(40)
+        check(selectSourceRevision(null, head, true) == head) {
+            "A clean checkout without an override must use exact HEAD."
+        }
+        check(selectSourceRevision(head, head, true) == head) {
+            "A valid explicit override matching HEAD must be accepted."
+        }
+        check(selectSourceRevision("d".repeat(40), head, true) == "unknown") {
+            "A syntactically valid override that does not match HEAD must fail closed."
+        }
+        check(selectSourceRevision(head, head, false) == "unknown") {
+            "A dirty checkout must not emit an exact source revision."
+        }
+        check(selectSourceRevision(null, "not-a-revision", true) == "unknown") {
+            "An invalid checked-out revision must fail closed."
         }
     }
 }
