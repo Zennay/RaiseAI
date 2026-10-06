@@ -33,6 +33,96 @@ function runInvalidConfig(overrides) {
   }
 }
 
+
+function writeExecutable(file, content) {
+  fs.writeFileSync(file, content, { mode: 0o755 });
+}
+
+function runInstallerWithStubbedRuntime(host) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-installer-san-"));
+  const home = path.join(root, "home");
+  const bin = path.join(root, "bin");
+  const opensslLog = path.join(root, "openssl.log");
+  fs.mkdirSync(home);
+  fs.mkdirSync(bin);
+
+  writeExecutable(
+    path.join(bin, "openssl"),
+    \`#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+  rand)
+    printf '%s\\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    ;;
+  req)
+    printf '%s\\n' "$*" >> "$OPENSSL_LOG"
+    key=''
+    cert=''
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -keyout) key="$2"; shift 2 ;;
+        -out) cert="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    printf 'fake-key\\n' > "$key"
+    printf 'fake-cert\\n' > "$cert"
+    ;;
+  x509)
+    printf 'fake-public-key\\n'
+    ;;
+  pkey)
+    cat
+    ;;
+  dgst)
+    cat >/dev/null
+    printf '%s\\n' 'SHA2-256(stdin)= bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+\`
+  );
+  writeExecutable(path.join(bin, "systemctl"), "#!/usr/bin/env bash\\nexit 0\\n");
+  writeExecutable(path.join(bin, "node"), "#!/usr/bin/env bash\\nexit 0\\n");
+
+  try {
+    const result = spawnSync("bash", [installer], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: bin + path.delimiter + process.env.PATH,
+        OPENSSL_LOG: opensslLog,
+        RAISE_DEPLOY_REVISION: "a".repeat(40),
+        RAISE_PUBLIC_HOST: host,
+        RAISE_PUBLIC_PORT: "8787"
+      }
+    });
+    return {
+      status: result.status,
+      stderr: result.stderr,
+      opensslLog: fs.existsSync(opensslLog)
+        ? fs.readFileSync(opensslLog, "utf8")
+        : ""
+    };
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("installer uses a certificate SAN matching the public host identity", () => {
+  for (const [host, expectedSan] of [
+    ["raise.example", "subjectAltName=DNS:raise.example"],
+    ["192.0.2.10", "subjectAltName=IP:192.0.2.10"]
+  ]) {
+    const result = runInstallerWithStubbedRuntime(host);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.opensslLog, new RegExp(expectedSan.replaceAll(".", "\\\\.")));
+  }
+});
+
 test("installer rejects malformed public hosts before side effects", () => {
   for (const host of [
     " raise.example",
