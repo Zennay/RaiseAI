@@ -161,6 +161,45 @@ test("OpenRouter response model provenance is normalized or falls back when omit
   assert.equal(omittedResult.model, "z-ai/glm-5.3-flash");
 });
 
+test("OpenRouter response model must belong to the requested model set", async () => {
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fallbackModels: ["google/gemini-3.8-flash"],
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async () =>
+      httpResponse(200, {
+        model: "unexpected/provider-model",
+        choices: [{ message: { content: "untrusted" } }]
+      })
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openrouter_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+});
+
+test("OpenRouter accepts a configured fallback model as response provenance", async () => {
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fallbackModels: ["google/gemini-3.8-flash"],
+    fetchImpl: async () =>
+      httpResponse(200, {
+        model: "google/gemini-3.8-flash",
+        choices: [{ message: { content: "fallback ok" } }]
+      })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(result.model, "google/gemini-3.8-flash");
+  assert.equal(result.answer, "fallback ok");
+});
+
 test("malformed OpenRouter response model fails closed", async () => {
   for (const model of ["", "bad model", 42, {}]) {
     let calls = 0;
