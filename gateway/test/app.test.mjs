@@ -243,6 +243,40 @@ test("enabled AI execution without an answer fails closed", async () => {
   }
 });
 
+test("enabled AI execution requires canonical provider and model provenance", async () => {
+  const malformed = [
+    { enabled: true, answer: "ok", model: "test-model" },
+    { enabled: true, answer: "ok", provider: "test-provider" },
+    { enabled: true, answer: "ok", provider: "", model: "test-model" },
+    { enabled: true, answer: "ok", provider: " test-provider", model: "test-model" },
+    { enabled: true, answer: "ok", provider: "test-provider ", model: "test-model" },
+    { enabled: true, answer: "ok", provider: "test-provider", model: "" },
+    { enabled: true, answer: "ok", provider: "test-provider", model: " test-model" },
+    { enabled: true, answer: "ok", provider: "test-provider", model: "test-model " }
+  ];
+
+  for (const executionResult of malformed) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Wat is twee plus twee?" })
+      });
+
+      assert.equal(res.status, 502);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+      assert.equal("answer" in body, false);
+      assert.equal("execution" in body, false);
+    }, {
+      execute: async () => executionResult
+    });
+  }
+});
+
 test("non-AI routed execution may remain answerless", async () => {
   await withServer(async base => {
     const res = await fetch(base + "/v1/assistant", {
