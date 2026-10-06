@@ -48,6 +48,11 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
             raise TrialError("trial CSV has no header")
+        duplicate_columns = sorted(
+            name for name, count in __import__("collections").Counter(reader.fieldnames).items() if count > 1
+        )
+        if duplicate_columns:
+            raise TrialError(f"duplicate columns: {', '.join(duplicate_columns)}")
         columns = set(reader.fieldnames)
         missing = REQUIRED_COLUMNS - columns
         unexpected = columns - REQUIRED_COLUMNS
@@ -59,6 +64,8 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         seen_sessions: set[int] = set()
         for line, row in enumerate(reader, start=2):
+            if None in row:
+                raise TrialError(f"line {line}: unexpected extra CSV fields")
             label = (row.get("label") or "").strip()
             if label not in ALLOWED_LABELS:
                 raise TrialError(f"line {line}: unknown label {label!r}")
