@@ -11,12 +11,23 @@ export function validateServerConfig({ host, port, tlsCert, tlsKey }) {
     throw new Error("RAISE_HOST must be a non-empty host");
   }
 
+  if (host !== host.trim()) {
+    throw new Error("RAISE_HOST must not contain surrounding whitespace");
+  }
+
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("RAISE_PORT must be an integer from 1 through 65535");
   }
 
   if (typeof tlsCert !== "string" || typeof tlsKey !== "string") {
     throw new Error("RAISE_TLS_CERT and RAISE_TLS_KEY must be strings");
+  }
+
+  if (
+    (tlsCert && tlsCert !== tlsCert.trim()) ||
+    (tlsKey && tlsKey !== tlsKey.trim())
+  ) {
+    throw new Error("RAISE_TLS_CERT and RAISE_TLS_KEY must not contain surrounding whitespace");
   }
 
   if (Boolean(tlsCert) !== Boolean(tlsKey)) {

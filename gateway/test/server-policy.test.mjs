@@ -61,3 +61,33 @@ test("listener rejects empty host and invalid ports before binding", () => {
     );
   }
 });
+
+
+test("listener rejects surrounding whitespace in host and TLS path config", () => {
+  for (const host of [" 127.0.0.1", "127.0.0.1 ", "\tlocalhost"]) {
+    assert.throws(
+      () => validateServerConfig(valid({ host })),
+      /RAISE_HOST must not contain surrounding whitespace/
+    );
+  }
+
+  for (const tlsCert of [" /tmp/cert.pem", "/tmp/cert.pem ", "   "]) {
+    assert.throws(
+      () => validateServerConfig(valid({
+        tlsCert,
+        tlsKey: "/tmp/key.pem"
+      })),
+      /RAISE_TLS_CERT and RAISE_TLS_KEY must not contain surrounding whitespace/
+    );
+  }
+
+  for (const tlsKey of [" /tmp/key.pem", "/tmp/key.pem ", "\t"]) {
+    assert.throws(
+      () => validateServerConfig(valid({
+        tlsCert: "/tmp/cert.pem",
+        tlsKey
+      })),
+      /RAISE_TLS_CERT and RAISE_TLS_KEY must not contain surrounding whitespace/
+    );
+  }
+});
