@@ -9,6 +9,7 @@ import json
 import re
 import sys
 import zipfile
+from collections import Counter
 from pathlib import Path
 
 
@@ -53,9 +54,21 @@ def verify_apk(
     try:
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
-            dex_files = sorted(name for name in names if name.endswith(".dex"))
+            duplicate_names = sorted(
+                name for name, count in Counter(names).items() if count > 1
+            )
+            if duplicate_names:
+                raise ApkIdentityError(
+                    "APK contains duplicate ZIP entries: " + ", ".join(duplicate_names)
+                )
+
+            dex_files = sorted(
+                name
+                for name in names
+                if re.fullmatch(r"classes(?:[2-9]|[1-9][0-9]+)?\.dex", name)
+            )
             if not dex_files:
-                raise ApkIdentityError("APK contains no DEX files")
+                raise ApkIdentityError("APK contains no root classes*.dex files")
 
             needle = revision.encode("ascii")
             revision_hits = [
