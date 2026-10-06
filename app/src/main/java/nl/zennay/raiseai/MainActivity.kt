@@ -337,10 +337,7 @@ class MainActivity : Activity(), SensorEventListener {
         CalibrationStore.savePose(this, x, y, z)
         toast("Mouth pose saved")
 
-        if (CalibrationStore.isMonitoringEnabled(this)) {
-            stopService(Intent(this, GestureMonitorService::class.java))
-            startForegroundService(Intent(this, GestureMonitorService::class.java))
-        }
+        restartMonitoringIfEnabled()
         refreshUi()
     }
 
