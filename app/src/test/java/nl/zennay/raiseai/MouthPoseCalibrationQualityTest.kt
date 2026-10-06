@@ -19,8 +19,9 @@ class MouthPoseCalibrationQualityTest {
 
         assertTrue(result.accepted)
         assertEquals(null, result.failure)
-        val pose = assertNotNull(result.pose)
-        val length = sqrt(pose!!.x * pose.x + pose.y * pose.y + pose.z * pose.z)
+        assertNotNull(result.pose)
+        val pose = requireNotNull(result.pose)
+        val length = sqrt(pose.x * pose.x + pose.y * pose.y + pose.z * pose.z)
         assertEquals(1.0f, length, 0.0001f)
     }
 
