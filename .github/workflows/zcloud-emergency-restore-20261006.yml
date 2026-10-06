@@ -133,7 +133,7 @@ jobs:
           fi
           listener="$(ss -lnt | awk '$4 ~ /:8765$/ {print $4; exit}')"
           echo "ZCLOUD_LISTENER_AFTER_PUBLIC_REPAIR=${listener:-missing}"
-          [[ "${listener:-}" == 0.0.0.0:8765 || "${listener:-}" == "*:8765 || "${listener:-}" == "[::]:8765 ]]
+          [[ "${listener:-}" == "0.0.0.0:8765" || "${listener:-}" == "*:8765" || "${listener:-}" == "[::]:8765" ]]
 
       - name: Restore zCloud Actions listener
         shell: bash
