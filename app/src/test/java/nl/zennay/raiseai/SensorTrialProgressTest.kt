@@ -85,18 +85,20 @@ class SensorTrialProgressTest {
     }
 
     @Test
-    fun nonFiniteSimilarityAndInvalidSessionAreRejected() {
+    fun invalidSessionAndOutOfRangeSimilarityAreRejected() {
         val revision = "b".repeat(40)
         val rows = sequenceOf(
             SensorTrialRecorder.HEADER,
             "normal_move,0,4000,40,false,0.50,1.5.3,$revision,raise-detector-v1",
-            "view_time,1002,4000,40,false,NaN,1.5.3,$revision,raise-detector-v1"
+            "view_time,1002,4000,40,false,NaN,1.5.3,$revision,raise-detector-v1",
+            "view_time,1003,4000,40,false,1.01,1.5.3,$revision,raise-detector-v1",
+            "normal_move,1004,4000,40,false,-1.01,1.5.3,$revision,raise-detector-v1"
         )
 
         val progress = SensorTrialRecorder.summarizeRows(rows)
 
         assertTrue(progress.nonTriggerTrials == 0)
-        assertTrue(progress.rejectedTrials == 2)
+        assertTrue(progress.rejectedTrials == 4)
     }
 
     @Test
