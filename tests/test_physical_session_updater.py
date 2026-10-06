@@ -38,6 +38,16 @@ class PhysicalSessionUpdaterTests(unittest.TestCase):
         os.chmod(path, 0o640)
         return path
 
+    def test_reads_only_allowed_typed_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            path = self.write_session(root)
+            self.assertEqual(updater.read_session_field(path, "app_version"), "1.5.2")
+            self.assertEqual(updater.read_session_field(path, "watch_serial"), "watch-1")
+            self.assertEqual(updater.read_session_field(path, "e2e_passed"), "false")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "field is not readable"):
+                updater.read_session_field(path, "apk_sha256")
+
     def test_updates_allowed_field_atomically_and_preserves_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
@@ -59,22 +69,45 @@ class PhysicalSessionUpdaterTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), original)
             self.assertEqual(list(root.glob(".session.json.*.tmp")), [])
 
-    def test_rejects_symlink_session_metadata(self):
+    def test_rejects_symlink_session_metadata_for_read_and_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             target = self.write_session(root)
             link = root / "session-link.json"
             link.symlink_to(target)
             with self.assertRaisesRegex(updater.SessionUpdateError, "refusing symlink"):
+                updater.read_session_field(link, "app_version")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "refusing symlink"):
                 updater.update_session(link, "e2e_passed", "true")
 
-    def test_rejects_duplicate_json_keys(self):
+    def test_rejects_duplicate_json_keys_for_read_and_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             path = root / "session.json"
-            path.write_text('{"schema_version":1,"e2e_passed":false,"e2e_passed":true}\n', encoding="utf-8")
+            path.write_text(
+                '{"schema_version":1,"app_version":"1.5.2","e2e_passed":false,"e2e_passed":true}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(updater.SessionUpdateError, "duplicate JSON object key"):
+                updater.read_session_field(path, "app_version")
             with self.assertRaisesRegex(updater.SessionUpdateError, "duplicate JSON object key"):
                 updater.update_session(path, "e2e_passed", "true")
+
+    def test_rejects_invalid_read_types_and_multiline_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            payload = session_payload()
+            payload["e2e_passed"] = 1
+            path = root / "session.json"
+            path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "e2e_passed must be boolean"):
+                updater.read_session_field(path, "e2e_passed")
+
+            payload = session_payload()
+            payload["watch_serial"] = "watch-1\nother"
+            path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "single-line"):
+                updater.read_session_field(path, "watch_serial")
 
     def test_rejects_unknown_or_invalid_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
