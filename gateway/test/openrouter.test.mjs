@@ -85,6 +85,57 @@ test("OpenRouter fallback list can be configured as CSV", async () => {
   ]);
 });
 
+test("OpenRouter model config trims benign padding and deduplicates fallbacks", async () => {
+  const calls = [];
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fastModel: "  z-ai/glm-5.3-flash  ",
+    fallbackModels: [
+      " google/gemini-3.8-flash ",
+      "",
+      "google/gemini-3.8-flash"
+    ],
+    fetchImpl: fakeResponse("ok", calls)
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+
+  assert.equal(result.enabled, true);
+  assert.deepEqual(calls[0].request.models, [
+    "z-ai/glm-5.3-flash",
+    "google/gemini-3.8-flash"
+  ]);
+});
+
+test("invalid OpenRouter model config fails closed before provider calls", async () => {
+  const cases = [
+    { fastModel: "" },
+    { fastModel: "bad model" },
+    { deepModel: "\t" },
+    { fallbackModels: ["google/gemini-3.8-flash", 42] },
+    { fallbackModels: ["bad fallback"] }
+  ];
+
+  for (const options of cases) {
+    let called = false;
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      ...options,
+      fetchImpl: async () => {
+        called = true;
+        throw new Error("should not run");
+      }
+    });
+
+    const route = Object.hasOwn(options, "deepModel") ? "deep_ai" : "quick_ai";
+    const result = await execute({ route }, "hoi");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "openrouter_model_config_invalid");
+    assert.equal(called, false);
+  }
+});
+
 test("transient OpenRouter 5xx is retried once and then succeeds", async () => {
   let calls = 0;
   const execute = createOpenRouterExecutor({
