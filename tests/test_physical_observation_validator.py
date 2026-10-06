@@ -172,6 +172,26 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             self.assertEqual(second, 1)
             self.assertIn("refusing to overwrite", second_output.getvalue())
 
+    def test_cli_output_refuses_broken_symlink_without_creating_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            result = root / "quality-result.json"
+            target = root / "unexpected-target.json"
+            session.write_text(json.dumps(session_payload()), encoding="utf-8")
+            observations.write_text(json.dumps(observation_payload()), encoding="utf-8")
+            result.symlink_to(target)
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = validator.main([str(session), str(observations), "--output", str(result)])
+
+            self.assertEqual(code, 1)
+            self.assertTrue(result.is_symlink())
+            self.assertFalse(target.exists())
+            self.assertIn("refusing to overwrite", output.getvalue())
+
     def test_cli_failure_does_not_echo_sensitive_observation_values(self):
         secret = "private spoken content must never be echoed"
         with tempfile.TemporaryDirectory() as tmp:
