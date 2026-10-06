@@ -62,7 +62,8 @@ function outputText(response) {
     Array.isArray(firstChoice) ||
     firstChoice.message === null ||
     typeof firstChoice.message !== "object" ||
-    Array.isArray(firstChoice.message)
+    Array.isArray(firstChoice.message) ||
+    firstChoice.message.role !== "assistant"
   ) {
     return null;
   }
