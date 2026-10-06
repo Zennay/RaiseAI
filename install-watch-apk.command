@@ -95,9 +95,7 @@ mdns_endpoint() {
 }
 
 if ! TARGET="$(select_watch)"; then
-
   exit 1
-
 fi
 LAST_ENDPOINT=""
 
