@@ -115,6 +115,25 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
                 recorded_at_utc="2026-10-06T04:59:59Z",
             )
 
+    def test_preserves_subsecond_ordering_in_canonical_utc(self):
+        payload = generator.build_template(
+            session_payload(started_at_utc="2026-10-06T05:00:00.900000Z"),
+            recorded_at_utc="2026-10-06T07:00:00.950000+02:00",
+        )
+        self.assertEqual(payload["recorded_at_utc"], "2026-10-06T05:00:00.950000Z")
+        result = validator.validate_observations(
+            session_payload(started_at_utc="2026-10-06T05:00:00.900000Z"),
+            {
+                **payload,
+                "screen_off_tested": True,
+                "screen_off_behavior": "Display-off behavior observed.",
+                "background_tested": True,
+                "background_behavior": "Background behavior observed.",
+                "ux_failures_reviewed": True,
+            },
+        )
+        self.assertTrue(result["valid"])
+
 
 if __name__ == "__main__":
     unittest.main()
