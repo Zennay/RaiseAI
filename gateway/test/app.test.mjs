@@ -145,3 +145,96 @@ test("missing and whitespace-only text retain text_required contract", async () 
     }
   });
 });
+
+
+test("valid execution result preserves typed public fields", async () => {
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body: JSON.stringify({ text: "Wat is twee plus twee?" })
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "answered");
+    assert.deepEqual(body.execution, {
+      enabled: true,
+      reason: null,
+      provider: "test-provider",
+      model: "test-model"
+    });
+    assert.equal(body.answer, "Vier.");
+  }, {
+    execute: async () => ({
+      enabled: true,
+      provider: "test-provider",
+      model: "test-model",
+      answer: "Vier.",
+      ignoredInternalField: "not exposed"
+    })
+  });
+});
+
+test("malformed execution results fail closed as upstream errors", async () => {
+  const malformedResults = [
+    "enabled",
+    [],
+    {},
+    { enabled: "true", answer: "unsafe" },
+    { enabled: true, answer: { text: "unsafe" } },
+    { enabled: true, provider: 42, answer: "unsafe" },
+    { enabled: true, answer: "   " }
+  ];
+
+  for (const malformed of malformedResults) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Test malformed connector" })
+      });
+
+      assert.equal(res.status, 502);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+      assert.equal("answer" in body, false);
+      assert.equal("execution" in body, false);
+    }, {
+      execute: async () => malformed
+    });
+  }
+});
+
+test("disabled connector result may return a user-facing string without claiming enabled", async () => {
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body: JSON.stringify({ text: "Ga door met zCloud" })
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "answered");
+    assert.equal(body.execution.enabled, false);
+    assert.equal(body.execution.reason, "connector_unavailable");
+    assert.equal(body.answer, "Connector tijdelijk niet beschikbaar.");
+  }, {
+    execute: async () => ({
+      enabled: false,
+      reason: "connector_unavailable",
+      provider: "test-provider",
+      answer: "Connector tijdelijk niet beschikbaar."
+    })
+  });
+});
