@@ -5,6 +5,7 @@ const EXPLANATION = /^\s*(?:(?:kun|kan)\s+je(?:\s+me)?\s+(?:uitleggen|vertellen)
 const HOME = /\b(google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermostaat|verwarming|speaker|tv|televisie|woonkamer|slaapkamer|keuken)\b/i;
 const HOME_ACTION = /\b(aan|uit|zet|dim|verhoog|verlaag|speel|pauzeer|stop)\b/i;
 const HOME_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
+const HOME_STATE_STATEMENT = /^\s*(?:(?:de|het|mijn|onze|die|deze)\s+)?(?:google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermostaat|verwarming|speaker|tv|televisie)\b.*\b(?:is|zijn|staat|staan)\b/i;
 const CURRENT = /\b(vandaag|nu|actueel|laatste|nieuwste|recent|weer|temperatuur|nieuws|verkeer|koers|prijs|stand|uitslag)\b/i;
 const DEEP = /\b(analyseer|vergelijk|architectuur|debug|onderzoek|strategie|trade-?off|optimaliseer|ontwerp|implementeer|waarom|stappenplan|code|programmeer)\b/i;
 
@@ -31,6 +32,7 @@ export function classifyIntent(rawText) {
     HOME.test(text) &&
     HOME_ACTION.test(text) &&
     !HOME_QUESTION.test(text) &&
+    !HOME_STATE_STATEMENT.test(text) &&
     !EXPLANATION.test(text)
   ) {
     return {
