@@ -112,6 +112,19 @@ test("home questions never dispatch commands from action-like words", () => {
   assert.equal(classifyIntent("zet de thermostaat uit").route, "smart_home");
 });
 
+test("polite home status queries never actuate devices", () => {
+  for (const text of [
+    "Kun je zeggen of de lamp uit is?",
+    "Kan je zeggen of de verwarming aan is?",
+    "Kun je controleren of de tv uit staat?",
+    "Kan je checken of de speaker aan staat?"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "smart_home", text);
+  }
+
+  assert.equal(classifyIntent("Kun je de lamp uit doen?").route, "smart_home");
+});
+
 test("home state statements never actuate devices", () => {
   for (const text of [
     "De verwarming staat aan",
