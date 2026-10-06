@@ -59,7 +59,7 @@ function outputText(response) {
     typeof response !== "object" ||
     Array.isArray(response) ||
     !Array.isArray(response.choices) ||
-    response.choices.length === 0
+    response.choices.length !== 1
   ) {
     return null;
   }
