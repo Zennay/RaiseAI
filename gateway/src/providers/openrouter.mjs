@@ -76,8 +76,19 @@ function outputText(response) {
   }
 
   if (Array.isArray(content)) {
+    const validTextParts =
+      content.length > 0 &&
+      content.every(
+        (part) =>
+          part !== null &&
+          typeof part === "object" &&
+          !Array.isArray(part) &&
+          part.type === "text" &&
+          typeof part.text === "string"
+      );
+    if (!validTextParts) return null;
+
     const text = content
-      .filter((part) => part?.type === "text" && typeof part.text === "string")
       .map((part) => part.text)
       .join("")
       .trim();
@@ -85,6 +96,15 @@ function outputText(response) {
   }
 
   return null;
+}
+
+function hasCompleteFinishReason(response) {
+  const finishReason = response?.choices?.[0]?.finish_reason;
+  return (
+    finishReason === undefined ||
+    finishReason === null ||
+    finishReason === "stop"
+  );
 }
 
 function isRetryableStatus(status) {
@@ -225,6 +245,12 @@ export function createOpenRouterExecutor({
         const answer = outputText(body);
         if (!answer) {
           const error = new Error("openrouter_empty_response");
+          error.statusCode = 502;
+          throw error;
+        }
+
+        if (!hasCompleteFinishReason(body)) {
+          const error = new Error("openrouter_incomplete_response");
           error.statusCode = 502;
           throw error;
         }
