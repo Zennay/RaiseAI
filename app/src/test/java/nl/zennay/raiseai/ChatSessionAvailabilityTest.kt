@@ -16,6 +16,20 @@ class ChatSessionAvailabilityTest {
         assertFalse(state.needsInitialLoad)
     }
 
+
+    @Test
+    fun newNavigationMakesPreviouslyAvailablePageRequireRetryUntilSuccess() {
+        val state = ChatSessionAvailability()
+        state.markPageAvailable()
+        assertFalse(state.needsInitialLoad)
+
+        state.markNavigationStarted()
+
+        assertTrue(state.needsInitialLoad)
+        state.markPageAvailable()
+        assertFalse(state.needsInitialLoad)
+    }
+
     @Test
     fun failedLoadRequiresRetryAfterPreviouslyAvailablePage() {
         val state = ChatSessionAvailability()
