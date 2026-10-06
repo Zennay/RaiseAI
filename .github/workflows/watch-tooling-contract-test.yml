@@ -11,6 +11,7 @@ on:
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "provision-watch-gateway.command"
+      - "watch-preflight.command"
       - "tests/test_adb_device_binding.py"
       - ".github/workflows/watch-tooling-contract-test.yml"
   pull_request:
@@ -59,6 +60,7 @@ jobs:
           bash -n pull-diagnostics.command
           bash -n pull-watch-data.command
           bash -n provision-watch-gateway.command
+          bash -n watch-preflight.command
 
       - name: Device-binding regressions
         run: |
