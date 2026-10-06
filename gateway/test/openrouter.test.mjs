@@ -321,14 +321,16 @@ test("malformed OpenRouter response model fails closed", async () => {
   }
 });
 
-test("transient OpenRouter 5xx is retried once and then succeeds", async () => {
+test("transient OpenRouter 5xx is retried once within one shared caller budget", async () => {
   let calls = 0;
+  const signals = [];
   const execute = createOpenRouterExecutor({
     apiKey: "test-key",
     retryDelayMs: 0,
     sleepImpl: async () => {},
-    fetchImpl: async () => {
+    fetchImpl: async (_url, options) => {
       calls += 1;
+      signals.push(options.signal);
       if (calls === 1) return httpResponse(500, { error: "temporary" });
       return httpResponse(200, {
         model: "z-ai/glm-5.3-flash",
@@ -340,6 +342,9 @@ test("transient OpenRouter 5xx is retried once and then succeeds", async () => {
   const result = await execute({ route: "quick_ai" }, "hoi");
   assert.equal(calls, 2);
   assert.equal(result.answer, "gereed");
+  assert.equal(signals.length, 2);
+  assert.ok(signals[0] instanceof AbortSignal);
+  assert.equal(signals[0], signals[1]);
 });
 
 test("transient fetch failure is retried once", async () => {
