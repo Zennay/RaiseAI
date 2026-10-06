@@ -1247,3 +1247,21 @@ test("zCloud requires declared Content-Length to match bytes read", async () => 
     assert.equal(calls, expectedEnabled ? 2 : 1, String(declaredBytes));
   }
 });
+
+
+test("zCloud rejects malformed declared Content-Length values", async () => {
+  const bodyText = JSON.stringify(targets({ active: true }));
+
+  for (const declaredLength of ["", " ", "abc", "-1", "1.5", "10, 10"]) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async () =>
+        responseWithText(200, bodyText, {
+          headers: { "content-length": declaredLength }
+        })
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+    assert.equal(result.enabled, false, JSON.stringify(declaredLength));
+    assert.equal(result.reason, "zcloud_targets_invalid", JSON.stringify(declaredLength));
+  }
+});
