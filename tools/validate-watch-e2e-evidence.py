@@ -41,6 +41,19 @@ class EvidenceError(ValueError):
     pass
 
 
+def _reject_duplicate_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise EvidenceError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _strict_json_loads(text: str) -> Any:
+    return json.loads(text, object_pairs_hook=_reject_duplicate_object_pairs)
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise EvidenceError(message)
@@ -200,7 +213,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        payload = json.loads(args.evidence.read_text(encoding="utf-8"))
+        payload = _strict_json_loads(args.evidence.read_text(encoding="utf-8"))
         result = validate_evidence(
             payload,
             expect_route=args.expect_route,
