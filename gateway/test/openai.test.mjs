@@ -104,6 +104,7 @@ test("OpenAI response model provenance is normalized or falls back when omitted"
     fetchImpl: async () => ({
       ok: true,
       status: 200,
+      headers: responseHeaders(),
       async json() {
         return {
           model: "  gpt-5.4-nano-2026-09-01  ",
@@ -136,6 +137,7 @@ test("malformed OpenAI response model fails closed", async () => {
       fetchImpl: async () => ({
         ok: true,
         status: 200,
+        headers: responseHeaders(),
         async json() {
           return {
             model,
@@ -339,6 +341,7 @@ test("OpenAI output text is accepted only from assistant message items", async (
       fetchImpl: async () => ({
         ok: true,
         status: 200,
+        headers: responseHeaders(),
         async json() {
           return body;
         }
@@ -433,6 +436,8 @@ test("OpenAI accepts case-insensitive JSON media types with parameters", async (
       async json() {
         return {
           output: [{
+            type: "message",
+            role: "assistant",
             content: [{ type: "output_text", text: "geldig antwoord" }]
           }]
         };
