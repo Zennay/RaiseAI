@@ -85,7 +85,7 @@ object SensorTrialRecorder {
         val seenSessionIds = mutableSetOf<Long>()
 
         allLines.drop(1).forEach { line ->
-            val fields = line.split(',', limit = 9)
+            val fields = line.split(',', limit = 10)
             if (fields.size != 9) {
                 rejectedTrials++
                 return@forEach
