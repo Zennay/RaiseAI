@@ -347,6 +347,32 @@ test("transient OpenRouter 5xx is retried once within one shared caller budget",
   assert.equal(signals[0], signals[1]);
 });
 
+test("three-attempt OpenRouter retry policy never resets the caller deadline", async () => {
+  let calls = 0;
+  const signals = [];
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    maxAttempts: 3,
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async (_url, options) => {
+      calls += 1;
+      signals.push(options.signal);
+      if (calls < 3) return httpResponse(503, { error: "temporary" });
+      return httpResponse(200, {
+        model: "z-ai/glm-5.3-flash",
+        choices: [{ message: { content: "gereed na retries" } }]
+      });
+    }
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(calls, 3);
+  assert.equal(result.answer, "gereed na retries");
+  assert.equal(signals.length, 3);
+  assert.ok(signals.every(signal => signal === signals[0]));
+});
+
 test("transient fetch failure is retried once", async () => {
   let calls = 0;
   const execute = createOpenRouterExecutor({
