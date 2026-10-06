@@ -49,6 +49,22 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.EvidenceError, "unexpected evidence fields"):
             validator.validate_evidence(success_payload(answer_text="must never be serialized"))
 
+    def test_rejects_boolean_schema_version(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "schema_version must equal 2"):
+            validator.validate_evidence(success_payload(schema_version=True))
+
+    def test_canonicalizes_recorded_timestamp_to_utc(self):
+        result = validator.validate_evidence(
+            success_payload(recorded_at_utc="2026-10-04T01:40:00+02:00")
+        )
+        self.assertEqual(result["recorded_at_utc"], "2026-10-03T23:40:00Z")
+
+    def test_preserves_recorded_timestamp_subseconds(self):
+        result = validator.validate_evidence(
+            success_payload(recorded_at_utc="2026-10-03T23:40:00.950000Z")
+        )
+        self.assertEqual(result["recorded_at_utc"], "2026-10-03T23:40:00.950000Z")
+
     def test_rejects_unknown_route(self):
         with self.assertRaisesRegex(validator.EvidenceError, "unknown route"):
             validator.validate_evidence(success_payload(route="unknown"))
