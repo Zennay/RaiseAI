@@ -142,7 +142,7 @@ class SensorTrialProgressTest {
 
     @Test
     fun emptyExistingTrialFileRecoversCanonicalHeaderWithoutOverwritingNonEmptyFile() {
-        val file = kotlin.io.path.createTempFile("raise-trials-", ".csv").toFile()
+        val file = java.io.File.createTempFile("raise-trials-", ".csv")
         try {
             assertTrue(file.exists())
             assertTrue(file.length() == 0L)
