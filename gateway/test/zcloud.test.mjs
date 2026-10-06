@@ -50,6 +50,42 @@ function targets({ active = true } = {}) {
   };
 }
 
+test("zCloud connector base URL must be a clean HTTP(S) origin", async () => {
+  for (const invalid of [
+    "",
+    " http://127.0.0.1:8765",
+    "http://127.0.0.1:8765 ",
+    "ftp://127.0.0.1:8765",
+    "http://user:pass@127.0.0.1:8765",
+    "http://127.0.0.1:8765/api",
+    "http://127.0.0.1:8765?mode=test",
+    "http://127.0.0.1:8765#fragment"
+  ]) {
+    assert.throws(
+      () => createZCloudExecutor({ baseUrl: invalid }),
+      /zcloud_base_url_invalid/,
+      invalid
+    );
+  }
+
+  const calls = [];
+  const execute = createZCloudExecutor({
+    baseUrl: "http://127.0.0.1:8765/",
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, targets({ active: true }));
+      }
+      return response(200, commandAck(31));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+  assert.equal(result.enabled, true);
+  assert.equal(calls[0].url, "http://127.0.0.1:8765/api/runner-targets");
+  assert.equal(calls[1].url, "http://127.0.0.1:8765/api/runner-control");
+});
+
 test("generic continuation recognizer is strict", () => {
   assert.equal(isGenericContinuation("Ga door met FTMO", ["ftmo"]), true);
   assert.equal(isGenericContinuation("Werk verder met project FTMO", ["ftmo"]), true);

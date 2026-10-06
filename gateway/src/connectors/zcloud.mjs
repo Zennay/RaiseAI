@@ -10,6 +10,32 @@ function normalize(value) {
     .replace(/\s+/g, " ");
 }
 
+function normalizeBaseUrl(value) {
+  if (typeof value !== "string" || !value || value.trim() !== value) {
+    throw new Error("zcloud_base_url_invalid");
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("zcloud_base_url_invalid");
+  }
+
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username ||
+    parsed.password ||
+    (parsed.pathname !== "/" && parsed.pathname !== "") ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error("zcloud_base_url_invalid");
+  }
+
+  return parsed.origin;
+}
+
 function aliasesFor(project) {
   const aliases = new Set();
   const base = normalize(project.base_project_id);
@@ -146,7 +172,7 @@ export function createZCloudExecutor({
   baseUrl = DEFAULT_BASE_URL,
   fetchImpl = globalThis.fetch
 } = {}) {
-  const root = baseUrl.replace(/\/$/, "");
+  const root = normalizeBaseUrl(baseUrl);
 
   return async function execute(decision, text) {
     if (decision.route !== "zcloud_task") return null;
