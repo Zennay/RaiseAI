@@ -5,6 +5,7 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
 const UNSAFE_DISPLAY_CHARS = /[\p{Cc}\p{Cf}]/u;
 const MAX_TARGETS = 256;
 const MAX_TARGET_NAME_LENGTH = 256;
+const MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 
 function normalize(value) {
   return String(value ?? "")
@@ -303,6 +304,73 @@ function hasJsonResponseType(response) {
   return /^charset\s*=\s*(?:"utf-8"|utf-8)$/iu.test(parts[1]);
 }
 
+async function cancelResponseBody(response) {
+  try {
+    await response?.body?.cancel?.();
+  } catch {
+    // Best effort only; the caller is already rejecting this response.
+  }
+}
+
+async function readBoundedJsonResponse(response) {
+  const contentLength = response?.headers?.get?.("content-length");
+  if (typeof contentLength === "string" && contentLength.trim()) {
+    const normalized = contentLength.trim();
+    if (!/^\d+$/u.test(normalized)) {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+
+    const declaredBytes = Number(normalized);
+    if (
+      !Number.isSafeInteger(declaredBytes) ||
+      declaredBytes > MAX_RESPONSE_BODY_BYTES
+    ) {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+  }
+
+  const reader = response?.body?.getReader?.();
+  if (!reader) {
+    return { ok: false, json: null };
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, json: null };
+      }
+
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, json: null };
+      }
+      chunks.push(value);
+    }
+
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { ok: true, json: JSON.parse(text) };
+  } catch {
+    await reader.cancel().catch(() => {});
+    return { ok: false, json: null };
+  }
+}
+
 async function jsonFetch(fetchImpl, url, options = {}) {
   const response = await fetchImpl(url, {
     ...options,
@@ -310,10 +378,17 @@ async function jsonFetch(fetchImpl, url, options = {}) {
   });
 
   const jsonMediaType = hasJsonResponseType(response);
-  const body = jsonMediaType
-    ? await response.json().catch(() => null)
-    : null;
-  return { response, body, jsonMediaType };
+  if (!response.ok || !jsonMediaType) {
+    await cancelResponseBody(response);
+    return { response, body: null, jsonMediaType };
+  }
+
+  const parsed = await readBoundedJsonResponse(response);
+  return {
+    response,
+    body: parsed.ok ? parsed.json : null,
+    jsonMediaType
+  };
 }
 
 export function createZCloudExecutor({
