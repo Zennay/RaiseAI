@@ -2,6 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { createHandler } from "./app.mjs";
+import { validateServerConfig } from "./server-policy.mjs";
 import { createZCloudExecutor } from "./connectors/zcloud.mjs";
 import { createOpenRouterExecutor } from "./providers/openrouter.mjs";
 
@@ -12,9 +13,7 @@ const tlsCert = process.env.RAISE_TLS_CERT ?? "";
 const tlsKey = process.env.RAISE_TLS_KEY ?? "";
 const revision = process.env.RAISE_DEPLOY_REVISION ?? "unknown";
 
-if (Boolean(tlsCert) !== Boolean(tlsKey)) {
-  throw new Error("RAISE_TLS_CERT and RAISE_TLS_KEY must be set together");
-}
+validateServerConfig({ host, port, tlsCert, tlsKey });
 
 const executeZCloud = createZCloudExecutor({
   baseUrl: process.env.RAISE_ZCLOUD_URL ?? "http://127.0.0.1:8765"
