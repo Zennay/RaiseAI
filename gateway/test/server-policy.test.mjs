@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateServerConfig } from "../src/server-policy.mjs";
+import { parseServerPort, validateServerConfig } from "../src/server-policy.mjs";
 
 function valid(overrides = {}) {
   return {
@@ -62,6 +62,32 @@ test("listener rejects empty host and invalid ports before binding", () => {
   }
 });
 
+test("RAISE_PORT parser accepts only canonical decimal environment values", () => {
+  assert.equal(parseServerPort(undefined), 8787);
+  assert.equal(parseServerPort("1"), 1);
+  assert.equal(parseServerPort("8787"), 8787);
+  assert.equal(parseServerPort("65535"), 65535);
+
+  for (const value of [
+    "",
+    "0",
+    "00080",
+    " 8787",
+    "8787 ",
+    "+8787",
+    "-1",
+    "1e3",
+    "0x1f90",
+    "8787.0",
+    "65536"
+  ]) {
+    assert.throws(
+      () => parseServerPort(value),
+      /canonical decimal integer from 1 through 65535/,
+      value
+    );
+  }
+});
 
 test("listener rejects surrounding whitespace in host and TLS path config", () => {
   for (const host of [" 127.0.0.1", "127.0.0.1 ", "\tlocalhost"]) {

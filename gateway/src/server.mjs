@@ -2,12 +2,12 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { createHandler } from "./app.mjs";
-import { validateServerConfig } from "./server-policy.mjs";
+import { parseServerPort, validateServerConfig } from "./server-policy.mjs";
 import { createZCloudExecutor } from "./connectors/zcloud.mjs";
 import { createOpenRouterExecutor } from "./providers/openrouter.mjs";
 
 const host = process.env.RAISE_HOST ?? "127.0.0.1";
-const port = Number(process.env.RAISE_PORT ?? "8787");
+const port = parseServerPort(process.env.RAISE_PORT);
 const token = process.env.RAISE_GATEWAY_TOKEN ?? "";
 const tlsCert = process.env.RAISE_TLS_CERT ?? "";
 const tlsKey = process.env.RAISE_TLS_KEY ?? "";
