@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+import urllib.request
 from unittest import mock
 import warnings
 import zipfile
@@ -35,6 +36,68 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
             if unsafe:
                 package.writestr("../escape.txt", b"nope")
         return archive
+
+    def test_cross_origin_release_redirect_strips_authorization(self):
+        request = urllib.request.Request(
+            MODULE.ASSET_API_URL,
+            headers={
+                "Authorization": "Bearer secret-test-token",
+                "Accept": "application/octet-stream",
+            },
+        )
+
+        redirected = MODULE._SafeReleaseRedirect().redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "https://release-assets.githubusercontent.com/example/handoff.zip",
+        )
+
+        self.assertIsNotNone(redirected)
+        self.assertIsNone(redirected.get_header("Authorization"))
+        self.assertEqual(
+            redirected.get_header("Accept"),
+            "application/octet-stream",
+        )
+
+    def test_same_origin_release_redirect_keeps_authorization(self):
+        request = urllib.request.Request(
+            MODULE.ASSET_API_URL,
+            headers={"Authorization": "Bearer secret-test-token"},
+        )
+
+        redirected = MODULE._SafeReleaseRedirect().redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "https://api.github.com/repos/Zennay/RaiseAI/releases/assets/611084738?download=1",
+        )
+
+        self.assertIsNotNone(redirected)
+        self.assertEqual(
+            redirected.get_header("Authorization"),
+            "Bearer secret-test-token",
+        )
+
+    def test_release_redirect_rejects_https_downgrade(self):
+        request = urllib.request.Request(
+            MODULE.ASSET_API_URL,
+            headers={"Authorization": "Bearer secret-test-token"},
+        )
+
+        with self.assertRaisesRegex(MODULE.HandoffError, "non-HTTPS"):
+            MODULE._SafeReleaseRedirect().redirect_request(
+                request,
+                None,
+                302,
+                "Found",
+                {},
+                "http://release-assets.githubusercontent.com/example/handoff.zip",
+            )
 
     def test_extracts_only_after_matching_archive_digest(self):
         with tempfile.TemporaryDirectory() as tmp:

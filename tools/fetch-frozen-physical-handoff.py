@@ -15,6 +15,7 @@ import stat
 import tempfile
 import unicodedata
 import urllib.request
+from urllib.parse import urlsplit
 import zipfile
 from collections import Counter
 from pathlib import Path, PurePosixPath
@@ -161,6 +162,39 @@ def extract_verified_archive(
         raise
 
 
+class _SafeReleaseRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+
+        try:
+            source = urlsplit(req.full_url)
+            target = urlsplit(redirected.full_url)
+            source_port = source.port
+            target_port = target.port
+        except ValueError as exc:
+            raise HandoffError("Release asset redirect contains an invalid URL") from exc
+
+        if target.scheme.lower() != "https" or not target.hostname:
+            raise HandoffError("Refusing non-HTTPS Release asset redirect")
+
+        source_origin = (
+            source.scheme.lower(),
+            (source.hostname or "").lower(),
+            source_port,
+        )
+        target_origin = (
+            target.scheme.lower(),
+            target.hostname.lower(),
+            target_port,
+        )
+        if source_origin != target_origin:
+            redirected.remove_header("Authorization")
+
+        return redirected
+
+
 def download_release_asset(destination: Path) -> None:
     headers = {
         "Accept": "application/octet-stream",
@@ -172,8 +206,9 @@ def download_release_asset(destination: Path) -> None:
         headers["Authorization"] = f"Bearer {token}"
 
     request = urllib.request.Request(ASSET_API_URL, headers=headers)
+    opener = urllib.request.build_opener(_SafeReleaseRedirect())
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with opener.open(request, timeout=60) as response:
             with destination.open("wb") as handle:
                 shutil.copyfileobj(response, handle)
     except Exception as exc:
