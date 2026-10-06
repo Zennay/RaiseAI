@@ -1,0 +1,61 @@
+name: Physical evidence contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "tools/validate-watch-e2e-evidence.py"
+      - "tools/analyze-watch-sensor-traces.py"
+      - "tools/analyze-watch-sensor-trials.py"
+      - "tests/test_watch_e2e_evidence_validator.py"
+      - "tests/test_watch_sensor_trace_analyzer.py"
+      - "tests/test_watch_sensor_trial_analyzer.py"
+      - ".github/workflows/physical-evidence-contract-test.yml"
+  pull_request:
+    paths:
+      - "tools/validate-watch-e2e-evidence.py"
+      - "tools/analyze-watch-sensor-traces.py"
+      - "tools/analyze-watch-sensor-trials.py"
+      - "tests/test_watch_e2e_evidence_validator.py"
+      - "tests/test_watch_sensor_trace_analyzer.py"
+      - "tests/test_watch_sensor_trial_analyzer.py"
+      - ".github/workflows/physical-evidence-contract-test.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-physical-evidence-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Pin exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision="$(git rev-parse HEAD)"
+          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          test "$revision" = "$expected"
+          echo "Pinned physical-evidence revision: $revision"
+
+      - name: Compile evidence tooling
+        run: |
+          python3 -m py_compile \
+            tools/validate-watch-e2e-evidence.py \
+            tools/analyze-watch-sensor-traces.py \
+            tools/analyze-watch-sensor-trials.py
+
+      - name: Physical evidence contract regressions
+        run: |
+          python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
+          python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
+          python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
