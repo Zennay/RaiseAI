@@ -1,3 +1,8 @@
+export function hasJsonMediaType(value) {
+  if (typeof value !== "string") return false;
+  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
 export function evaluateZCloudProbe({
   status,
   json,
