@@ -9,39 +9,58 @@ function fakeResponse(answer, calls, model = "z-ai/glm-5.3-flash") {
       headers: options.headers,
       request: JSON.parse(options.body)
     });
-    return {
-      ok: true,
-      status: 200,
-      headers: {
-        get(name) {
-          return name.toLowerCase() === "content-type"
-            ? "application/json; charset=utf-8"
-            : null;
-        }
+    return httpResponse(
+      200,
+      {
+        model,
+        choices: [{ message: { role: "assistant", content: answer } }]
       },
-      async json() {
-        return {
-          model,
-          choices: [{ message: { role: "assistant", content: answer } }]
-        };
-      }
-    };
+      "application/json; charset=utf-8"
+    );
   };
 }
 
-function httpResponse(status, body = {}, contentType = "application/json") {
-  return {
-    ok: status >= 200 && status < 300,
+function rawHttpResponse(
+  status,
+  body,
+  contentType = "application/json",
+  extraHeaders = {}
+) {
+  const headers = new Headers(extraHeaders);
+  if (contentType !== null) headers.set("content-type", contentType);
+  return new Response(body, { status, headers });
+}
+
+function httpResponse(
+  status,
+  body = {},
+  contentType = "application/json",
+  extraHeaders = {}
+) {
+  return rawHttpResponse(
     status,
-    headers: {
-      get(name) {
-        return name.toLowerCase() === "content-type" ? contentType : null;
-      }
-    },
-    async json() {
-      return body;
-    }
+    JSON.stringify(body),
+    contentType,
+    extraHeaders
+  );
+}
+
+function openRouterBodyTextAtBytes(targetBytes) {
+  const body = {
+    model: "z-ai/glm-5.3-flash",
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "ok" }
+    }],
+    padding: ""
   };
+  const encoder = new TextEncoder();
+  const baselineBytes = encoder.encode(JSON.stringify(body)).byteLength;
+  assert.ok(targetBytes >= baselineBytes);
+  body.padding = "x".repeat(targetBytes - baselineBytes);
+  const text = JSON.stringify(body);
+  assert.equal(encoder.encode(text).byteLength, targetBytes);
+  return text;
 }
 
 test("quick AI uses GLM 5.3 Flash with Gemini fallback by default", async () => {
@@ -423,6 +442,83 @@ test("OpenRouter answer text is bounded before it reaches the Watch", async () =
       }
     );
   }
+});
+
+test("OpenRouter response body is bounded before JSON parsing", async () => {
+  const accepted = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      rawHttpResponse(200, openRouterBodyTextAtBytes(64 * 1024))
+  });
+
+  const acceptedResult = await accepted({ route: "quick_ai" }, "hoi");
+  assert.equal(acceptedResult.answer, "ok");
+
+  const oversized = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      rawHttpResponse(200, openRouterBodyTextAtBytes(64 * 1024 + 1))
+  });
+
+  await assert.rejects(
+    oversized({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openrouter_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+});
+
+test("OpenRouter rejects oversized declared response bodies before reading them", async () => {
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      httpResponse(
+        200,
+        {
+          model: "z-ai/glm-5.3-flash",
+          choices: [{ message: { role: "assistant", content: "must not pass" } }]
+        },
+        "application/json",
+        { "content-length": String(64 * 1024 + 1) }
+      )
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openrouter_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+});
+
+test("OpenRouter rejects invalid UTF-8 even when replacement decoding would form JSON", async () => {
+  const encoder = new TextEncoder();
+  const prefix = encoder.encode(
+    '{"model":"z-ai/glm-5.3-flash","choices":[{"message":{"role":"assistant","content":"'
+  );
+  const suffix = encoder.encode('"}}]}');
+  const bytes = new Uint8Array(prefix.byteLength + 1 + suffix.byteLength);
+  bytes.set(prefix, 0);
+  bytes[prefix.byteLength] = 0xff;
+  bytes.set(suffix, prefix.byteLength + 1);
+
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => rawHttpResponse(200, bytes)
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openrouter_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
 });
 
 test("explicitly incomplete OpenRouter completions fail closed", async () => {
