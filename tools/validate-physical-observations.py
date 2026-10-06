@@ -139,6 +139,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path, help="physical-validation session.json")
     parser.add_argument("observations", type=Path, help="operator-observations.json")
+    parser.add_argument("--output", type=Path, help="optional secret-safe quality-result.json path")
     return parser.parse_args(argv)
 
 
@@ -148,6 +149,9 @@ def main(argv: list[str] | None = None) -> int:
         session = json.loads(args.session.read_text(encoding="utf-8"))
         observations = json.loads(args.observations.read_text(encoding="utf-8"))
         result = validate_observations(session, observations)
+        if args.output is not None:
+            _require(not args.output.exists(), f"refusing to overwrite existing quality result: {args.output}")
+            args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError, ObservationError) as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
         return 1
