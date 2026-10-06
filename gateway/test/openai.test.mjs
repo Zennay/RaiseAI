@@ -44,6 +44,49 @@ test("deep AI uses mini", async () => {
   assert.equal(calls[0].request.max_output_tokens, 320);
 });
 
+test("OpenAI model config trims benign padding before provider calls", async () => {
+  const calls = [];
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fastModel: "  gpt-5.4-nano  ",
+    fetchImpl: fakeResponse("ok", calls)
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+
+  assert.equal(result.enabled, true);
+  assert.equal(result.model, "gpt-5.4-nano");
+  assert.equal(calls[0].request.model, "gpt-5.4-nano");
+});
+
+test("invalid OpenAI model config fails closed before provider calls", async () => {
+  const cases = [
+    { fastModel: "" },
+    { fastModel: "bad model" },
+    { deepModel: "\t" },
+    { deepModel: 42 }
+  ];
+
+  for (const options of cases) {
+    let called = false;
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      ...options,
+      fetchImpl: async () => {
+        called = true;
+        throw new Error("should not run");
+      }
+    });
+
+    const route = Object.hasOwn(options, "deepModel") ? "deep_ai" : "quick_ai";
+    const result = await execute({ route }, "hoi");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "openai_model_config_invalid");
+    assert.equal(called, false);
+  }
+});
+
 test("web search is opt-in", async () => {
   let called = false;
   const execute = createOpenAIExecutor({
