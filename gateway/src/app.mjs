@@ -40,6 +40,7 @@ function isCanonicalExecutionToken(value) {
   return (
     typeof value === "string" &&
     value.length > 0 &&
+    value.length <= MAX_EXECUTION_TOKEN_CHARS &&
     !/[\s\u0000-\u001f\u007f]/u.test(value)
   );
 }
