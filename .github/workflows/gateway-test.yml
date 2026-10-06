@@ -11,6 +11,9 @@ on:
       - ".github/workflows/gateway-test.yml"
       - ".github/workflows/gateway-deploy.yml"
 
+permissions:
+  contents: read
+
 jobs:
   gateway:
     runs-on: ubuntu-latest
@@ -18,7 +21,16 @@ jobs:
       run:
         working-directory: gateway
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact tested revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact tested revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
