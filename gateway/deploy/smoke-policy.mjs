@@ -5,8 +5,8 @@ export function evaluateZCloudProbe({
 }) {
   if (status !== 200) {
     return {
-      ok: !requireZCloud,
-      degraded: true,
+      ok: false,
+      degraded: false,
       reason: `zcloud_http_${status ?? "unknown"}`
     };
   }
