@@ -69,7 +69,7 @@ export function createOpenRouterExecutor({
 
     if (!supported) return null;
 
-    if (!apiKey) {
+    if (!hasUsableApiKey(apiKey)) {
       return {
         enabled: false,
         reason: "openrouter_not_configured"
