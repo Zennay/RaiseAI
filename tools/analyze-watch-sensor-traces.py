@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -56,9 +57,12 @@ def _parse_int(row: dict[str, str], key: str, line: int) -> int:
 
 def _parse_float(row: dict[str, str], key: str, line: int) -> float:
     try:
-        return float(row[key])
+        value = float(row[key])
     except (KeyError, TypeError, ValueError) as exc:
         raise TraceError(f"line {line}: {key} must be numeric") from exc
+    if not math.isfinite(value):
+        raise TraceError(f"line {line}: {key} must be a finite number")
+    return value
 
 
 def read_samples(path: Path) -> list[Sample]:
