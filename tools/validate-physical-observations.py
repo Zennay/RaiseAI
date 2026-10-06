@@ -56,7 +56,7 @@ def _parse_timestamp(value: Any, field: str) -> dt.datetime:
 
 
 def _format_utc(value: dt.datetime) -> str:
-    return value.astimezone(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return value.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _require_sha(value: Any, field: str, length: int) -> str:
