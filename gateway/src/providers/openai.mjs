@@ -4,6 +4,12 @@ function hasUsableApiKey(value) {
   return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
 }
 
+function upstreamFailure(message, cause) {
+  const error = new Error(message, { cause });
+  error.statusCode = 502;
+  return error;
+}
+
 function outputText(response) {
   const output = Array.isArray(response?.output) ? response.output : [];
   const chunks = [];
@@ -62,15 +68,20 @@ export function createOpenAIExecutor({
       request.tools = [{ type: "web_search" }];
     }
 
-    const response = await fetchImpl(API_URL, {
-      method: "POST",
-      headers: {
-        authorization: "Bearer " + apiKey,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(9_000)
-    });
+    let response;
+    try {
+      response = await fetchImpl(API_URL, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer " + apiKey,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(9_000)
+      });
+    } catch (cause) {
+      throw upstreamFailure("openai_request_failed", cause);
+    }
 
     const body = await response.json().catch(() => ({}));
 
