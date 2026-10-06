@@ -19,6 +19,13 @@ class GestureMonitorRegistrationContractTest {
         assertTrue(source.contains("CalibrationStore.setMonitoringEnabled(this, false)"))
         assertTrue(source.contains("Accelerometer registration failed; stopping monitor"))
         assertTrue(source.contains("stopSelf()"))
+        assertTrue(source.contains("if (!applyPowerState(force = true)) return"))
+        assertTrue(
+            source.contains(
+                "return if (applyPowerState()) START_STICKY else START_NOT_STICKY"
+            )
+        )
+        assertTrue(source.contains("private fun applyPowerState(force: Boolean = false): Boolean"))
         assertTrue(source.contains("private fun registerAccelerometer(): Boolean"))
         assertTrue(source.contains("sensorRegistered = sensorManager.registerListener("))
         assertTrue(source.contains("return sensorRegistered"))
