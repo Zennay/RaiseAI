@@ -64,15 +64,62 @@ command -v python3 >/dev/null 2>&1 || {
   echo "Frozen handoff fetcher not found: $FETCHER"
   exit 1
 }
-[ -f "$PROFILE" ] || {
+[ -e "$PROFILE" ] || {
   echo "Gateway profile not found: $PROFILE"
   exit 1
 }
 
-PROFILE="$(python3 - "$PROFILE" <<'PY'
+RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/raiseai-frozen-acceptance.XXXXXX")"
+cleanup() {
+  rm -rf "$RUN_ROOT"
+}
+trap cleanup EXIT INT TERM
+
+PROFILE_SNAPSHOT="$RUN_ROOT/watch-gateway.properties"
+PROFILE="$(python3 - "$PROFILE" "$PROFILE_SNAPSHOT" <<'PY'
+import os
+import stat
 import sys
-from pathlib import Path
-print(Path(sys.argv[1]).expanduser().resolve())
+
+source = os.path.abspath(os.path.expanduser(sys.argv[1]))
+destination = sys.argv[2]
+
+if not hasattr(os, "O_NOFOLLOW"):
+    raise SystemExit("Gateway profile snapshot requires O_NOFOLLOW support")
+
+try:
+    source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+except OSError as exc:
+    raise SystemExit(
+        f"Gateway profile must be a regular non-symlink file: {source}: {exc}"
+    ) from exc
+
+try:
+    source_stat = os.fstat(source_fd)
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise SystemExit(
+            f"Gateway profile must be a regular non-symlink file: {source}"
+        )
+    with os.fdopen(source_fd, "rb", closefd=False) as handle:
+        payload = handle.read()
+finally:
+    os.close(source_fd)
+
+destination_fd = os.open(
+    destination,
+    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+    0o600,
+)
+try:
+    with os.fdopen(destination_fd, "wb", closefd=False) as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+finally:
+    os.close(destination_fd)
+
+os.chmod(destination, 0o600)
+print(destination)
 PY
 )"
 
@@ -131,12 +178,6 @@ if ! printf '%s' "$CHARACTERISTICS" | grep -qi watch &&
   echo "Selected ADB target does not identify as Wear OS: $TARGET"
   exit 1
 fi
-
-RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/raiseai-frozen-acceptance.XXXXXX")"
-cleanup() {
-  rm -rf "$RUN_ROOT"
-}
-trap cleanup EXIT INT TERM
 
 HANDOFF_DIR="$RUN_ROOT/handoff"
 VERIFY_SOURCE="$RUN_ROOT/verify-source"
