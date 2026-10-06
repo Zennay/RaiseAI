@@ -30,8 +30,22 @@ else
 fi
 [ -n "$TARGET" ] || { echo "No connected Wear OS watch found."; "$ADB" devices -l; exit 1; }
 
+"$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$TARGET" || {
+  echo "Selected ADB target is not connected: $TARGET"
+  exit 1
+}
+TARGET_FEATURES="$($ADB -s "$TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+TARGET_MODEL="$($ADB -s "$TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+TARGET_DEVICE="$($ADB -s "$TARGET" shell getprop ro.product.device 2>/dev/null | tr -d '\r' || true)"
+if ! printf '%s\n' "$TARGET_FEATURES" | grep -q 'android.hardware.type.watch' &&
+   [ "$TARGET_MODEL" != "SM_L315F" ] &&
+   ! printf '%s' "$TARGET_DEVICE" | grep -qi '^fresh'; then
+  echo "Refusing preflight on non-Wear ADB target: $TARGET"
+  exit 1
+fi
+
 echo "Watch: $TARGET"
-echo "Model: $($ADB -s "$TARGET" shell getprop ro.product.model | tr -d '\r')"
+echo "Model: $TARGET_MODEL"
 echo
 
 if "$ADB" -s "$TARGET" shell pm path com.google.android.wearable.assistant 2>/dev/null | grep -q '^package:'; then
