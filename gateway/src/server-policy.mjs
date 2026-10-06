@@ -6,6 +6,21 @@ function isLoopbackHost(host) {
   return net.isIP(normalized) === 4 && normalized.startsWith("127.");
 }
 
+export function parseServerPort(value, fallback = 8787) {
+  if (value === undefined) return fallback;
+
+  if (typeof value !== "string" || !/^[1-9]\d{0,4}$/.test(value)) {
+    throw new Error("RAISE_PORT must be a canonical decimal integer from 1 through 65535");
+  }
+
+  const port = Number(value);
+  if (port > 65535) {
+    throw new Error("RAISE_PORT must be a canonical decimal integer from 1 through 65535");
+  }
+
+  return port;
+}
+
 export function validateServerConfig({ host, port, tlsCert, tlsKey }) {
   if (typeof host !== "string" || !host.trim()) {
     throw new Error("RAISE_HOST must be a non-empty host");
