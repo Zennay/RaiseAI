@@ -27,6 +27,27 @@ jobs:
           import json, os, time, urllib.request
 
           base="http://198.244.191.182:8765"
+          repo=os.environ["GITHUB_REPOSITORY"]; sha=os.environ["GITHUB_SHA"]; token=os.environ["GH_TOKEN"]
+
+          pending=json.dumps({
+              "state":"pending",
+              "context":"zcloud/public-final",
+              "description":"external zCloud verification running",
+              "target_url":f"{os.environ['GITHUB_SERVER_URL']}/{repo}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }).encode()
+          preq=urllib.request.Request(
+              f"https://api.github.com/repos/{repo}/statuses/{sha}",
+              data=pending,method="POST",
+              headers={
+                  "Authorization":f"Bearer {token}",
+                  "Accept":"application/vnd.github+json",
+                  "X-GitHub-Api-Version":"2022-11-28",
+                  "Content-Type":"application/json",
+                  "User-Agent":"raiseai-zcloud-public-final-verify",
+              })
+          with urllib.request.urlopen(preq,timeout=20) as r:
+              assert r.status==201
+
           evidence={}
           ok=False
           for attempt in range(1,7):
@@ -56,7 +77,6 @@ jobs:
 
           print("ZCLOUD_PUBLIC_FINAL_VERIFY="+json.dumps(evidence,sort_keys=True),flush=True)
           state="success" if ok else "failure"
-          repo=os.environ["GITHUB_REPOSITORY"]; sha=os.environ["GITHUB_SHA"]; token=os.environ["GH_TOKEN"]
           payload=json.dumps({
               "state":state,
               "context":"zcloud/public-final",
