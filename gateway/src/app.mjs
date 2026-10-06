@@ -26,6 +26,12 @@ function bearer(req) {
   return value.startsWith("Bearer ") ? value.slice(7) : "";
 }
 
+function hasJsonContentType(req) {
+  const value = req.headers["content-type"];
+  if (typeof value !== "string") return false;
+  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
 function normalizeExecutionResult(result) {
   if (result === null || result === undefined) {
     return {
@@ -101,8 +107,14 @@ export function createHandler({
   now = () => Date.now(),
   revision = "unknown"
 }) {
-  if (!token || token.length < 32) {
-    throw new Error("RAISE_GATEWAY_TOKEN must be at least 32 characters");
+  if (
+    typeof token !== "string" ||
+    token.length < 32 ||
+    /[\s\u0000-\u001f\u007f]/u.test(token)
+  ) {
+    throw new Error(
+      "RAISE_GATEWAY_TOKEN must be at least 32 characters with no whitespace or control characters"
+    );
   }
 
   const buckets = new Map();
@@ -128,6 +140,10 @@ export function createHandler({
 
     if (!safeTokenEqual(bearer(req), token)) {
       return json(res, 401, { error: "unauthorized", requestId });
+    }
+
+    if (!hasJsonContentType(req)) {
+      return json(res, 415, { error: "unsupported_media_type", requestId });
     }
 
     const ip = req.socket.remoteAddress ?? "unknown";
