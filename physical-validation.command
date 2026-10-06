@@ -104,6 +104,26 @@ json_set() {
   python3 tools/update-physical-session.py "$file" --set "$key" "$value"
 }
 
+publish_json_result() {
+  local result="$1"
+  shift
+  local temp_result status
+  temp_result="$(mktemp "${result}.tmp.XXXXXX")"
+  if "$@" >"$temp_result"; then
+    if ! python3 tools/publish-physical-result.py "$temp_result" "$result"; then
+      rm -f "$temp_result"
+      return 1
+    fi
+    cat "$result"
+    rm -f "$temp_result"
+    return 0
+  fi
+  status=$?
+  cat "$temp_result"
+  rm -f "$temp_result"
+  return "$status"
+}
+
 prepare_session() {
   local profile="${1:-${RAISE_GATEWAY_PROFILE:-$DEFAULT_PROFILE}}"
   require_command git
@@ -336,7 +356,15 @@ verify_e2e() {
   }
 
   result="$session/e2e-result.json"
-  python3 tools/validate-watch-e2e-evidence.py     "$evidence"     --expect-route quick_ai     --max-latency-ms 15000     --max-age-seconds 300     --require-answer     --expect-app-version "$version"     --expect-source-revision "$revision" | tee "$result"
+  publish_json_result "$result" \
+    python3 tools/validate-watch-e2e-evidence.py \
+      "$evidence" \
+      --expect-route quick_ai \
+      --max-latency-ms 15000 \
+      --max-age-seconds 300 \
+      --require-answer \
+      --expect-app-version "$version" \
+      --expect-source-revision "$revision"
 
   json_set "$session/session.json" e2e_passed true
   json_set "$session/session.json" e2e_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -372,10 +400,11 @@ verify_v1() {
   [ -n "$trials" ] || { echo "No trial evidence was exported"; exit 1; }
 
   result="$session/v1-result.json"
-  python3 tools/analyze-watch-sensor-trials.py "$trials" \
-    --expect-app-version "$version" \
-    --expect-source-revision "$revision" \
-    --require-v1-gate | tee "$result"
+  publish_json_result "$result" \
+    python3 tools/analyze-watch-sensor-trials.py "$trials" \
+      --expect-app-version "$version" \
+      --expect-source-revision "$revision" \
+      --require-v1-gate
 
   json_set "$session/session.json" v1_gate_passed true
   json_set "$session/session.json" v1_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
