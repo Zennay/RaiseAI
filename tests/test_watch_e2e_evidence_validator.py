@@ -45,6 +45,12 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         self.assertTrue(result["valid"])
         self.assertEqual(result["route"], "quick_ai")
 
+    def test_rejects_duplicate_json_fields_before_validation(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "duplicate JSON field: route"):
+            validator._strict_json_loads(
+                '{"schema_version":2,"route":"quick_ai","route":"deep_ai"}'
+            )
+
     def test_rejects_unexpected_field_to_keep_evidence_secret_safe(self):
         with self.assertRaisesRegex(validator.EvidenceError, "unexpected evidence fields"):
             validator.validate_evidence(success_payload(answer_text="must never be serialized"))
