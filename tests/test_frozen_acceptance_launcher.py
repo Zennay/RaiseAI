@@ -240,6 +240,51 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertTrue(lines[1].startswith("run:watch-1:"))
 
+    def test_rejects_malformed_gateway_profiles_before_adb_or_fetch(self):
+        cases = {
+            "http-url": (
+                "url=http://raise.example.invalid\n"
+                "token=" + ("x" * 40) + "\n"
+                "spki_sha256=" + ("a" * 64) + "\n",
+                "expected HTTPS origin",
+            ),
+            "short-token": (
+                "url=https://raise.example.invalid\n"
+                "token=short\n"
+                "spki_sha256=" + ("a" * 64) + "\n",
+                "token is missing or malformed",
+            ),
+            "bad-pin": (
+                "url=https://raise.example.invalid\n"
+                "token=" + ("x" * 40) + "\n"
+                "spki_sha256=not-a-pin\n",
+                "SPKI pin must be 64 hex characters",
+            ),
+            "duplicate-token": (
+                "url=https://raise.example.invalid\n"
+                "token=" + ("x" * 40) + "\n"
+                "token=" + ("y" * 40) + "\n"
+                "spki_sha256=" + ("a" * 64) + "\n",
+                "duplicate token property",
+            ),
+        }
+
+        for name, (payload, expected_error) in cases.items():
+            with self.subTest(name=name):
+                profile = self.root / f"{name}.properties"
+                profile.write_text(payload, encoding="utf-8")
+                adb_started = self.root / f"{name}-adb-started"
+                result = self.run_launcher(
+                    {"FAKE_ADB_START_MARKER": str(adb_started)},
+                    args=[str(profile)],
+                )
+
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn(expected_error, result.stdout)
+                self.assertFalse(adb_started.exists(), result.stdout)
+                self.assertFalse(self.fetch_marker.exists(), result.stdout)
+                self.assertFalse(self.log.exists(), result.stdout)
+
     def test_rejects_symlink_gateway_profile_before_fetch(self):
         linked_profile = self.root / "linked-watch-gateway.properties"
         linked_profile.symlink_to(self.profile)
