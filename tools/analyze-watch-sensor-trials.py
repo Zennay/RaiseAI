@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
         if reader.fieldnames is None:
             raise TrialError("trial CSV has no header")
         duplicate_columns = sorted(
-            name for name, count in __import__("collections").Counter(reader.fieldnames).items() if count > 1
+            name for name, count in Counter(reader.fieldnames).items() if count > 1
         )
         if duplicate_columns:
             raise TrialError(f"duplicate columns: {', '.join(duplicate_columns)}")
