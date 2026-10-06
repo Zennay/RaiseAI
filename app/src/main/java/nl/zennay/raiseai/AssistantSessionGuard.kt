@@ -60,21 +60,28 @@ class AssistantSessionGuard(private val context: Context) {
             val now = System.currentTimeMillis()
             val events = usage.queryEvents(now - FOREGROUND_LOOKBACK_MS, now)
             val event = UsageEvents.Event()
-            var latestPackage: String? = null
-            var latestTimestamp = Long.MIN_VALUE
+            val transitions = mutableListOf<ForegroundTransition>()
 
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 val resumed =
                     event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
                     event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND
+                val backgrounded =
+                    event.eventType == UsageEvents.Event.ACTIVITY_PAUSED ||
+                    event.eventType == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                    event.eventType == UsageEvents.Event.ACTIVITY_STOPPED
 
-                if (resumed && event.timeStamp >= latestTimestamp) {
-                    latestTimestamp = event.timeStamp
-                    latestPackage = event.packageName
+                if (resumed || backgrounded) {
+                    transitions += ForegroundTransition(
+                        packageName = event.packageName.orEmpty(),
+                        timestampMs = event.timeStamp,
+                        resumed = resumed
+                    )
                 }
             }
-            latestPackage
+
+            ForegroundActivityState.currentPackage(transitions.asSequence())
         }.getOrElse {
             Log.w(TAG, "Could not read foreground app; using fallback session lock", it)
             null
