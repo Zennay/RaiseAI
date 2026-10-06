@@ -1,4 +1,5 @@
 const API_URL = "https://api.openai.com/v1/responses";
+const REQUEST_BUDGET_MS = 7_000;
 
 function hasUsableApiKey(value) {
   return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
@@ -117,7 +118,7 @@ export function createOpenAIExecutor({
           "content-type": "application/json"
         },
         body: JSON.stringify(request),
-        signal: AbortSignal.timeout(9_000)
+        signal: AbortSignal.timeout(REQUEST_BUDGET_MS)
       });
     } catch (cause) {
       throw upstreamFailure("openai_request_failed", cause);
