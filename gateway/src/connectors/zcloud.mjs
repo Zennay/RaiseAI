@@ -230,14 +230,23 @@ export function isGenericContinuation(text, aliases) {
   return aliases.some(alias => genericForms(alias).has(normalizedText));
 }
 
+function hasJsonResponseType(response) {
+  const value = response?.headers?.get?.("content-type");
+  if (typeof value !== "string") return false;
+  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
 async function jsonFetch(fetchImpl, url, options = {}) {
   const response = await fetchImpl(url, {
     ...options,
     signal: options.signal ?? AbortSignal.timeout(2_500)
   });
 
-  const body = await response.json().catch(() => null);
-  return { response, body };
+  const jsonMediaType = hasJsonResponseType(response);
+  const body = jsonMediaType
+    ? await response.json().catch(() => null)
+    : null;
+  return { response, body, jsonMediaType };
 }
 
 export function createZCloudExecutor({
@@ -251,7 +260,7 @@ export function createZCloudExecutor({
 
     let targets;
     try {
-      const { response, body } = await jsonFetch(
+      const { response, body, jsonMediaType } = await jsonFetch(
         fetchImpl,
         root + "/api/runner-targets"
       );
@@ -263,6 +272,10 @@ export function createZCloudExecutor({
           reason: "zcloud_targets_unavailable",
           answer: "zCloud is nu niet klaar om opdrachten te ontvangen."
         };
+      }
+
+      if (!jsonMediaType) {
+        throw new Error("zcloud_targets_invalid");
       }
 
       targets = groupTargets(body);
@@ -317,7 +330,7 @@ export function createZCloudExecutor({
     const action = project.active ? "push" : "start";
 
     try {
-      const { response, body } = await jsonFetch(
+      const { response, body, jsonMediaType } = await jsonFetch(
         fetchImpl,
         root + "/api/runner-control",
         {
@@ -340,6 +353,7 @@ export function createZCloudExecutor({
       }
 
       if (
+        !jsonMediaType ||
         body === null ||
         typeof body !== "object" ||
         Array.isArray(body) ||
