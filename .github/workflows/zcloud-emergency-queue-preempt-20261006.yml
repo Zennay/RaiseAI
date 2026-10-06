@@ -56,6 +56,23 @@ jobs:
               "zcloud-emergency-queue-preempt-20261006",
           )
           cancelled=[]; preserved=[]
+
+          # Exact superseded recovery: its self-hosted recover job was already
+          # cancelled by the corrected workflow revision, but its always-on hosted
+          # verifier kept the concurrency group occupied. Cancel only that known run.
+          superseded_recovery_run=37424219004
+          try:
+              req(f"/repos/{repo}/actions/runs/{superseded_recovery_run}/cancel",method="POST")
+              cancelled.append({
+                  "id":superseded_recovery_run,
+                  "status":"superseded",
+                  "name":"Emergency restore zCloud control plane and workers",
+                  "path":".github/workflows/zcloud-emergency-restore-20261006.yml",
+                  "reason":"superseded verifier held concurrency lock",
+              })
+          except urllib.error.HTTPError as exc:
+              if exc.code not in (409,422):
+                  raise
           for status in ("in_progress","queued"):
               runs=(req(f"/repos/{repo}/actions/runs?status={status}&per_page=100").get("workflow_runs") or [])
               for run in runs:
