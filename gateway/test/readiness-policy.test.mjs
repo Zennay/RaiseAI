@@ -18,13 +18,13 @@ test("readiness passes only for healthy exact revision", () => {
 test("readiness rejects stale live revision", () => {
   const result = evaluateReadinessResponse({
     status: 200,
-    json: { ok: true, revision: "stale" },
+    json: { ok: true, revision: "b".repeat(40) },
     expectedRevision: revision
   });
 
   assert.equal(result.ok, false);
   assert.equal(result.reason, "health_revision_mismatch");
-  assert.equal(result.revision, "stale");
+  assert.equal(result.revision, "b".repeat(40));
 });
 
 test("readiness rejects unhealthy and malformed health responses", () => {
