@@ -78,5 +78,45 @@ class WatchApkIdentityTests(unittest.TestCase):
                 )
 
 
+    def test_rejects_duplicate_zip_entry_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("classes.dex", b"first-" + REVISION.encode("ascii"))
+                archive.writestr("classes.dex", b"second-" + REVISION.encode("ascii"))
+                archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "duplicate ZIP entries"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    def test_rejects_revision_only_in_nested_fake_dex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("classes.dex", b"real-dex-without-revision")
+                archive.writestr("assets/provenance.dex", REVISION.encode("ascii"))
+                archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "not embedded"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    def test_accepts_revision_in_classes10_dex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("classes.dex", b"primary")
+                archive.writestr("classes10.dex", REVISION.encode("ascii"))
+                archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+            report = verifier.verify_apk(
+                path,
+                expected_source_revision=REVISION,
+            )
+            self.assertEqual(report["revision_dex_files"], ["classes10.dex"])
+
+
 if __name__ == "__main__":
     unittest.main()
