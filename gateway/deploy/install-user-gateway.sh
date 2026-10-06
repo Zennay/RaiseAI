@@ -72,8 +72,14 @@ upsert_env() {
   mv "$tmp" "$ENV_FILE"
 }
 
+valid_gateway_token() {
+  local token="$1"
+  [ "${#token}" -ge 32 ] &&
+    [[ ! "$token" =~ [[:space:][:cntrl:]] ]]
+}
+
 TOKEN="$(awk -F= '/^RAISE_GATEWAY_TOKEN=/{sub(/^[^=]*=/,"");print;exit}' "$ENV_FILE" 2>/dev/null || true)"
-if [ "${#TOKEN}" -lt 32 ]; then
+if ! valid_gateway_token "$TOKEN"; then
   TOKEN="$(openssl rand -hex 32)"
 fi
 
