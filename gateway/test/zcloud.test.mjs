@@ -5,10 +5,15 @@ import {
   isGenericContinuation
 } from "../src/connectors/zcloud.mjs";
 
-function response(status, body) {
+function response(status, body, contentType = "application/json; charset=utf-8") {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: {
+      get(name) {
+        return String(name).toLowerCase() === "content-type" ? contentType : null;
+      }
+    },
     async json() {
       return body;
     }
@@ -594,6 +599,37 @@ test("ambiguous project aliases never dispatch a command", async () => {
   assert.equal(result.reason, "zcloud_project_ambiguous");
   assert.match(result.answer, /niets gestart/);
   assert.equal(calls.length, 1);
+});
+
+test("successful zCloud target snapshots require JSON response media type", async () => {
+  const execute = createZCloudExecutor({
+    fetchImpl: async url => {
+      assert.match(url, /\/api\/runner-targets$/);
+      return response(200, targets({ active: true }), "text/plain");
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_targets_invalid");
+});
+
+test("successful zCloud command acknowledgements require JSON response media type", async () => {
+  const execute = createZCloudExecutor({
+    fetchImpl: async url => {
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, targets({ active: true }));
+      }
+      return response(200, commandAck(81), "text/html");
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_invalid_ack");
+  assert.match(result.answer, /niet als gestart/);
 });
 
 test("successful HTTP status requires canonical zCloud command acknowledgement", async () => {
