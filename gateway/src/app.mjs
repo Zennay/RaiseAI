@@ -33,7 +33,9 @@ function bearer(req) {
 function hasJsonContentType(req) {
   const value = req.headers["content-type"];
   if (typeof value !== "string") return false;
-  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+  return /^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/iu.test(
+    value.trim()
+  );
 }
 
 function isCanonicalExecutionToken(value) {
