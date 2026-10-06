@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+FUTURE_CLOCK_SKEW = dt.timedelta(minutes=5)
+
 REQUIRED_SESSION_KEYS = {
     "schema_version",
     "watch_serial",
@@ -44,7 +46,12 @@ def _format_utc(value: dt.datetime) -> str:
     return value.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[str, Any]:
+def build_template(
+    session: Any,
+    *,
+    recorded_at_utc: str | None = None,
+    now_utc: dt.datetime | None = None,
+) -> dict[str, Any]:
     _require(isinstance(session, dict), "session root must be a JSON object")
     missing = sorted(REQUIRED_SESSION_KEYS - set(session))
     _require(not missing, f"session is missing required fields: {', '.join(missing)}")
@@ -74,13 +81,22 @@ def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[
     )
 
     started_at = _parse_timestamp(session["started_at_utc"], "session started_at_utc")
+    if now_utc is None:
+        now = dt.datetime.now(dt.timezone.utc)
+    else:
+        _require(now_utc.tzinfo is not None, "now_utc must include a timezone")
+        now = now_utc.astimezone(dt.timezone.utc)
     if recorded_at_utc is None:
-        recorded_at = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        recorded_at = now.replace(microsecond=0)
     else:
         recorded_at = _parse_timestamp(recorded_at_utc, "recorded_at_utc")
     _require(
         recorded_at >= started_at,
         "recorded_at_utc must not be before the physical session started",
+    )
+    _require(
+        recorded_at <= now + FUTURE_CLOCK_SKEW,
+        "recorded_at_utc must not be more than 5 minutes in the future",
     )
 
     return {
