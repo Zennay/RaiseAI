@@ -1,8 +1,16 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const REQUEST_BUDGET_MS = 7_000;
 
+function hasWhitespaceOrControl(value) {
+  return /[\s\u0000-\u001f\u007f]/u.test(value);
+}
+
 function hasUsableApiKey(value) {
-  return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    !hasWhitespaceOrControl(value)
+  );
 }
 
 function upstreamFailure(message, cause) {
@@ -21,7 +29,7 @@ function parseFallbackModels(value) {
 function normalizeModelName(value) {
   if (typeof value !== "string") return null;
   const model = value.trim();
-  if (!model || /\s/u.test(model)) return null;
+  if (!model || hasWhitespaceOrControl(model)) return null;
   return model;
 }
 
@@ -32,7 +40,7 @@ function normalizeFallbackModels(models) {
     if (typeof value !== "string") return null;
     const model = value.trim();
     if (!model) continue;
-    if (/\s/u.test(model)) return null;
+    if (hasWhitespaceOrControl(model)) return null;
     normalized.push(model);
   }
 
