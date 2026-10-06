@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 REQUIRED_SESSION_KEYS = {
+    "schema_version",
     "watch_serial",
     "app_version",
     "source_revision",
@@ -47,6 +48,11 @@ def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[
     _require(isinstance(session, dict), "session root must be a JSON object")
     missing = sorted(REQUIRED_SESSION_KEYS - set(session))
     _require(not missing, f"session is missing required fields: {', '.join(missing)}")
+
+    _require(
+        type(session["schema_version"]) is int and session["schema_version"] == 1,
+        "session schema_version must equal 1",
+    )
 
     watch_serial = session["watch_serial"]
     app_version = session["app_version"]
