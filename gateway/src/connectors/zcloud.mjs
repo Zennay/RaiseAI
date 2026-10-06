@@ -36,10 +36,23 @@ function normalizeBaseUrl(value) {
   return parsed.origin;
 }
 
+function projectDisplayName(project) {
+  const raw = typeof project.name === "string" ? project.name.trim() : "";
+  if (!raw) return "";
+
+  const allocated = raw.match(/^Portfolio Worker [1-9]\d*\/[1-9]\d* · (.+)$/i);
+  if (allocated) return allocated[1].trim();
+
+  const local = raw.match(/^(.+) · worker [1-9]\d*\/[1-9]\d*$/i);
+  if (local) return local[1].trim();
+
+  return raw;
+}
+
 function aliasesFor(project) {
   const aliases = new Set();
   const base = normalize(project.base_project_id);
-  const name = normalize(String(project.name ?? "").split("·")[0]);
+  const name = normalize(projectDisplayName(project));
 
   if (base) aliases.add(base);
   if (name) aliases.add(name);
@@ -91,7 +104,7 @@ function groupTargets(payload) {
     }
 
     const base = target.base_project_id;
-    const displayName = String(target.name ?? "").split("·")[0].trim();
+    const displayName = projectDisplayName(target);
     const nameKey = displayName ? normalize(displayName) : null;
     if (target.name !== undefined && target.name !== null && !nameKey) {
       throw new Error("zcloud_targets_invalid");
