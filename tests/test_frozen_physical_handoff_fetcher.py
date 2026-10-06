@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -141,6 +142,49 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
             passed_output = extract.call_args.args[1]
             self.assertEqual(os.fspath(passed_output), os.fspath(output.absolute()))
             self.assertNotEqual(os.fspath(passed_output), os.fspath(target.absolute()))
+
+    def test_rejects_duplicate_archive_member_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(archive, "a") as package:
+                    package.writestr("BUILD-IDENTITY.txt", b"shadowed\n")
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+
+            with self.assertRaisesRegex(MODULE.HandoffError, "duplicate archive members"):
+                MODULE.extract_verified_archive(
+                    archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertFalse(output.exists())
+
+    def test_failed_atomic_publish_leaves_no_partial_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+
+            with mock.patch.object(Path, "rename", side_effect=OSError("simulated publish failure")):
+                with self.assertRaisesRegex(
+                    MODULE.HandoffError,
+                    "Could not publish verified handoff atomically",
+                ):
+                    MODULE.extract_verified_archive(
+                        archive,
+                        output,
+                        expected_sha256=expected,
+                    )
+
+            self.assertFalse(output.exists())
+            self.assertFalse(
+                any(path.name.startswith(".verified.") for path in root.iterdir())
+            )
 
     def test_refuses_to_overwrite_existing_output(self):
         with tempfile.TemporaryDirectory() as tmp:
