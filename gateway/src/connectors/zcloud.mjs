@@ -68,7 +68,11 @@ function groupTargets(payload) {
     if (target === null || typeof target !== "object" || Array.isArray(target)) {
       throw new Error("zcloud_targets_invalid");
     }
-    if (typeof target.base_project_id !== "string" || !target.base_project_id.trim()) {
+    if (
+      typeof target.base_project_id !== "string" ||
+      !target.base_project_id ||
+      target.base_project_id.trim() !== target.base_project_id
+    ) {
       throw new Error("zcloud_targets_invalid");
     }
     if (typeof target.active !== "boolean") {
@@ -78,20 +82,35 @@ function groupTargets(payload) {
       throw new Error("zcloud_targets_invalid");
     }
 
-    const base = target.base_project_id.trim();
+    const base = target.base_project_id;
+    const displayName = String(target.name ?? "").split("·")[0].trim();
+    const nameKey = displayName ? normalize(displayName) : null;
+    if (target.name !== undefined && target.name !== null && !nameKey) {
+      throw new Error("zcloud_targets_invalid");
+    }
+
     const current = groups.get(base) ?? {
       base_project_id: base,
-      name: String(target.name ?? base).split("·")[0].trim() || base,
+      name: displayName || base,
+      nameKey,
       active: false,
       aliases: new Set()
     };
+
+    if (nameKey && current.nameKey && current.nameKey !== nameKey) {
+      throw new Error("zcloud_targets_invalid");
+    }
+    if (nameKey && !current.nameKey) {
+      current.name = displayName;
+      current.nameKey = nameKey;
+    }
 
     current.active ||= target.active;
     for (const alias of aliasesFor(target)) current.aliases.add(alias);
     groups.set(base, current);
   }
 
-  return [...groups.values()].map(group => ({
+  return [...groups.values()].map(({ nameKey: _nameKey, ...group }) => ({
     ...group,
     aliases: [...group.aliases].sort((a, b) => b.length - a.length)
   }));
