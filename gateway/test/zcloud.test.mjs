@@ -842,3 +842,34 @@ test("zCloud rejection details stay secret-safe", async () => {
     if (error.trim()) assert.equal(result.answer.includes(error.trim()), false);
   }
 });
+
+
+test("zCloud target display names reject invisible controls and pathological length", async () => {
+  for (const name of [
+    "FTMO\u202Espoofed",
+    "FTMO\u200Binvisible",
+    "F".repeat(161)
+  ]) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async () =>
+        response(200, {
+          projects: {
+            "ftmo::w1": {
+              project_id: "ftmo::w1",
+              base_project_id: "ftmo",
+              worker_slot: 1,
+              worker_count: 1,
+              name,
+              desired_state: "running",
+              active: true
+            }
+          }
+        })
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false, JSON.stringify(name));
+    assert.equal(result.reason, "zcloud_targets_invalid", JSON.stringify(name));
+  }
+});
