@@ -27,6 +27,7 @@ on:
       - "tests/test_adb_device_binding.py"
       - "tests/test_physical_session_updater.py"
       - "tests/test_physical_session_pointer.py"
+      - "tests/test_physical_validation_session_state.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -56,6 +57,7 @@ on:
       - "tests/test_adb_device_binding.py"
       - "tests/test_physical_session_updater.py"
       - "tests/test_physical_session_pointer.py"
+      - "tests/test_physical_validation_session_state.py"
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
@@ -154,6 +156,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_adb_device_binding.py'
           python3 -m unittest discover -s tests -p 'test_physical_session_updater.py'
           python3 -m unittest discover -s tests -p 'test_physical_session_pointer.py'
+          python3 -m unittest discover -s tests -p 'test_physical_validation_session_state.py'
           python3 -m unittest discover -s tests -p 'test_watch_e2e_evidence_validator.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
