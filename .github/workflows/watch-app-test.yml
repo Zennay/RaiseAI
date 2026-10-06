@@ -136,6 +136,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_v1_evidence_pair.py'
+          python3 -m unittest discover -s tests -p 'test_pull_watch_data_pairing.py'
           python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py'
 
       - name: Frozen physical handoff release carrier
