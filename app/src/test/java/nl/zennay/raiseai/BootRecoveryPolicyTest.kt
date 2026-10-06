@@ -42,27 +42,22 @@ class BootRecoveryPolicyTest {
     }
 
     @Test
-    fun unsupportedOrMissingBroadcastActionsFailClosed() {
-        assertFalse(
-            BootRecoveryPolicy.shouldStart(
-                action = null,
-                monitoringEnabled = true,
-                calibrated = true
-            )
+    fun unsupportedOrMissingBroadcastActionsFailClosedBeforeRecovery() {
+        val actions = listOf(
+            null,
+            "android.intent.action.PACKAGE_REPLACED",
+            "com.example.FORGED_BOOT"
         )
-        assertFalse(
-            BootRecoveryPolicy.shouldStart(
-                action = "android.intent.action.PACKAGE_REPLACED",
-                monitoringEnabled = true,
-                calibrated = true
+
+        actions.forEach { action ->
+            assertFalse(BootRecoveryPolicy.isRecoveryAction(action))
+            assertFalse(
+                BootRecoveryPolicy.shouldStart(
+                    action = action,
+                    monitoringEnabled = true,
+                    calibrated = true
+                )
             )
-        )
-        assertFalse(
-            BootRecoveryPolicy.shouldStart(
-                action = "com.example.FORGED_BOOT",
-                monitoringEnabled = true,
-                calibrated = true
-            )
-        )
+        }
     }
 }
