@@ -70,6 +70,12 @@ object SensorTrialRecorder {
     }
 
     internal fun summarizeRows(lines: Sequence<String>): SensorTrialProgress {
+        val allLines = lines.toList()
+        if (allLines.isEmpty()) return SensorTrialProgress()
+        if (allLines.first() != HEADER) {
+            return SensorTrialProgress(rejectedTrials = 1)
+        }
+
         var mouthTrials = 0
         var mouthDetections = 0
         var nonTriggerTrials = 0
@@ -78,7 +84,7 @@ object SensorTrialRecorder {
         val identities = mutableSetOf<String>()
         val seenSessionIds = mutableSetOf<Long>()
 
-        lines.drop(1).forEach { line ->
+        allLines.drop(1).forEach { line ->
             val fields = line.split(',', limit = 9)
             if (fields.size != 9) {
                 rejectedTrials++
