@@ -314,6 +314,7 @@ async function cancelResponseBody(response) {
 
 async function readBoundedJsonResponse(response) {
   const contentLength = response?.headers?.get?.("content-length");
+  let declaredBytes = null;
   if (typeof contentLength === "string" && contentLength.trim()) {
     const normalized = contentLength.trim();
     if (!/^\d+$/u.test(normalized)) {
@@ -321,7 +322,7 @@ async function readBoundedJsonResponse(response) {
       return { ok: false, json: null };
     }
 
-    const declaredBytes = Number(normalized);
+    declaredBytes = Number(normalized);
     if (
       !Number.isSafeInteger(declaredBytes) ||
       declaredBytes > MAX_RESPONSE_BODY_BYTES
@@ -354,6 +355,10 @@ async function readBoundedJsonResponse(response) {
         return { ok: false, json: null };
       }
       chunks.push(value);
+    }
+
+    if (declaredBytes !== null && totalBytes !== declaredBytes) {
+      return { ok: false, json: null };
     }
 
     const bytes = new Uint8Array(totalBytes);
