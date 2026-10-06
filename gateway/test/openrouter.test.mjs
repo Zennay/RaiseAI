@@ -234,6 +234,65 @@ test("OpenRouter output must come from an assistant message", async () => {
   }
 });
 
+test("mixed or malformed OpenRouter content parts fail closed", async () => {
+  const malformedContent = [
+    [],
+    [{ type: "text", text: "partial" }, { type: "tool_call", id: "call-1" }],
+    [{ type: "text", text: "partial" }, null],
+    [{ type: "text", text: "partial" }, ["nested"]],
+    [{ type: "text", text: "partial" }, { type: "text", text: 42 }],
+    [{ type: "unknown", text: "partial" }]
+  ];
+
+  for (const content of malformedContent) {
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      retryDelayMs: 0,
+      sleepImpl: async () => {},
+      fetchImpl: async () =>
+        httpResponse(200, {
+          model: "z-ai/glm-5.3-flash",
+          choices: [{
+            finish_reason: "stop",
+            message: { role: "assistant", content }
+          }]
+        })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_empty_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
+
+test("text-only OpenRouter content arrays remain supported", async () => {
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      httpResponse(200, {
+        model: "z-ai/glm-5.3-flash",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "text", text: "volledig " },
+              { type: "text", text: "antwoord" }
+            ]
+          }
+        }]
+      })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(result.answer, "volledig antwoord");
+});
+
 test("explicitly incomplete OpenRouter completions fail closed", async () => {
   for (const finishReason of ["length", "content_filter", "tool_calls", "", 42, {}]) {
     const execute = createOpenRouterExecutor({
