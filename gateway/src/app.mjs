@@ -96,7 +96,16 @@ export function createHandler({
 
     try {
       const body = await readJson(req);
-      const text = String(body.text ?? "").trim();
+
+      if (body === null || typeof body !== "object" || Array.isArray(body)) {
+        return json(res, 400, { error: "invalid_request", requestId });
+      }
+
+      if (body.text !== undefined && typeof body.text !== "string") {
+        return json(res, 400, { error: "invalid_text", requestId });
+      }
+
+      const text = (body.text ?? "").trim();
 
       if (!text) {
         return json(res, 400, { error: "text_required", requestId });
