@@ -248,7 +248,11 @@ export function createZCloudExecutor({
         body.ok !== true ||
         !Number.isSafeInteger(body.command_id) ||
         body.command_id < 1 ||
-        body.status !== "pending"
+        body.status !== "pending" ||
+        body.active !== true ||
+        body.desired_state !== "running" ||
+        typeof body.deduplicated !== "boolean" ||
+        body.forced !== false
       ) {
         return {
           enabled: false,
