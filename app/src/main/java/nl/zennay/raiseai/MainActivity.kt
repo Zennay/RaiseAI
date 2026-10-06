@@ -127,8 +127,14 @@ class MainActivity : Activity(), SensorEventListener {
         column.addView(button(if (CalibrationStore.isSleepDndPauseEnabled(this)) "Sleep/DND pause: ON" else "Sleep/DND pause: OFF") {
             val next = !CalibrationStore.isSleepDndPauseEnabled(this)
             CalibrationStore.setSleepDndPauseEnabled(this, next)
-            restartMonitoringIfEnabled()
-            toast(if (next) "Sleep/DND pause enabled" else "Sleep/DND pause disabled")
+            val monitoringRestarted = restartMonitoringIfEnabled(showFailureToast = false)
+            toast(
+                when {
+                    !monitoringRestarted -> "Sleep/DND updated · monitoring could not restart"
+                    next -> "Sleep/DND pause enabled"
+                    else -> "Sleep/DND pause disabled"
+                }
+            )
             recreate()
         }, matchWrap(bottom = 8))
 
@@ -144,8 +150,14 @@ class MainActivity : Activity(), SensorEventListener {
             if (selectedAssistant == AssistantMode.GEMINI) "✓ Gemini (default)" else "Use Gemini"
         ) {
             AssistantModeStore.set(this, AssistantMode.GEMINI)
-            restartMonitoringIfEnabled()
-            toast("Gemini is now the main AI")
+            val monitoringRestarted = restartMonitoringIfEnabled(showFailureToast = false)
+            toast(
+                if (monitoringRestarted) {
+                    "Gemini is now the main AI"
+                } else {
+                    "Gemini selected · monitoring could not restart"
+                }
+            )
             recreate()
         }, matchWrap(bottom = 6))
 
@@ -153,8 +165,14 @@ class MainActivity : Activity(), SensorEventListener {
             if (selectedAssistant == AssistantMode.NATIVE) "✓ Native Raise AI" else "Use Native Raise AI"
         ) {
             AssistantModeStore.set(this, AssistantMode.NATIVE)
-            restartMonitoringIfEnabled()
-            toast("Native Raise AI is now the main AI")
+            val monitoringRestarted = restartMonitoringIfEnabled(showFailureToast = false)
+            toast(
+                if (monitoringRestarted) {
+                    "Native Raise AI is now the main AI"
+                } else {
+                    "Native Raise AI selected · monitoring could not restart"
+                }
+            )
             recreate()
         }, matchWrap(bottom = 6))
 
