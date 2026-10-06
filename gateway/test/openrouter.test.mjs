@@ -12,6 +12,13 @@ function fakeResponse(answer, calls, model = "z-ai/glm-5.3-flash") {
     return {
       ok: true,
       status: 200,
+      headers: {
+        get(name) {
+          return name.toLowerCase() === "content-type"
+            ? "application/json; charset=utf-8"
+            : null;
+        }
+      },
       async json() {
         return {
           model,
@@ -22,10 +29,15 @@ function fakeResponse(answer, calls, model = "z-ai/glm-5.3-flash") {
   };
 }
 
-function httpResponse(status, body = {}) {
+function httpResponse(status, body = {}, contentType = "application/json") {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: {
+      get(name) {
+        return name.toLowerCase() === "content-type" ? contentType : null;
+      }
+    },
     async json() {
       return body;
     }
@@ -190,6 +202,56 @@ test("malformed OpenRouter choices envelopes fail closed", async () => {
       }
     );
   }
+});
+
+test("successful OpenRouter responses require the JSON media type", async () => {
+  for (const contentType of [null, "", "text/plain", "text/html"]) {
+    let calls = 0;
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      retryDelayMs: 0,
+      sleepImpl: async () => {},
+      fetchImpl: async () => {
+        calls += 1;
+        return httpResponse(
+          200,
+          {
+            model: "z-ai/glm-5.3-flash",
+            choices: [{ message: { content: "must not pass" } }]
+          },
+          contentType
+        );
+      }
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test("OpenRouter accepts application/json case-insensitively with parameters", async () => {
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      httpResponse(
+        200,
+        {
+          model: "z-ai/glm-5.3-flash",
+          choices: [{ message: { content: "ok" } }]
+        },
+        "Application/JSON; charset=UTF-8"
+      )
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(result.answer, "ok");
 });
 
 test("OpenRouter response model must belong to the requested model set", async () => {
