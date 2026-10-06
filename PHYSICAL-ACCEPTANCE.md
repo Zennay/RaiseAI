@@ -157,6 +157,8 @@ When the command pauses:
 
 The E2E validator must pass on route `quick_ai`, require a real answer, and match the exact app version + source revision from this session.
 
+A successful `e2e-result.json` is write-once for that prepared session. The validator writes to a temporary file first and publishes the completed JSON only if validation succeeds; an existing result file or symlink is never overwritten. If a previously successful stage must genuinely be repeated, start a fresh `prepare` session rather than deleting or replacing accepted evidence.
+
 ## 6. Collect the V1 reliability set
 
 Using the same prepared session and installed build, collect:
@@ -172,6 +174,8 @@ Working pass targets:
 - false-trigger rate ≤ **5%**.
 
 Record failures as failures. Do not discard missed raises or false triggers merely to satisfy the threshold.
+
+Like E2E evidence, a successful `v1-result.json` is published atomically and exclusively. A failed analyzer run does not create the canonical result file; an already-present result blocks replacement and requires a fresh prepared session for a deliberate repeat.
 
 ## 7. Record explicit physical quality observations
 
@@ -220,6 +224,8 @@ A passing validator means the observation record is complete and provenance-boun
 The canonical flow writes evidence under:
 
 `~/.raiseai/evidence/<session>/`
+
+The default `verify-e2e`, `verify-v1` and `status` commands resolve the latest session through `~/.raiseai/latest-physical-validation-session`. That pointer is atomically published only after `session.json` exists, must be a regular file containing one absolute path under the configured evidence root, and fails closed on symlinks, truncation or path escape.
 
 A passing session must contain provenance-bound summary evidence including:
 
