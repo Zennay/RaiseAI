@@ -67,7 +67,7 @@ class RaiseGestureDetector {
         }
 
         if (mouthPose != null && !isUsableMouthPose(mouthPose)) {
-            poseStartedMs = 0L
+            resetQualificationState()
             return DetectionDebug(
                 triggered = false,
                 similarity = lastSimilarity.takeIf { hasSimilarity && it.isFinite() } ?: 0f,
@@ -118,7 +118,7 @@ class RaiseGestureDetector {
         }
 
         if (mouthPose == null) {
-            poseStartedMs = 0L
+            resetQualificationState()
             return DetectionDebug(false, 0f, dynamic, armed)
         }
 
@@ -198,6 +198,15 @@ class RaiseGestureDetector {
         lastSimilarity = similarity
         hasSimilarity = true
         return DetectionDebug(false, similarity, dynamic, armed)
+    }
+
+    private fun resetQualificationState() {
+        poseStartedMs = 0L
+        movingUntilMs = 0L
+        movementBurstStartedMs = 0L
+        movementHits = 0
+        approachPrimedUntilMs = 0L
+        approachStartSimilarity = 1f
     }
 
     private fun isUsableMouthPose(pose: MouthPose): Boolean {
