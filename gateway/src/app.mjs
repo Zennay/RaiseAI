@@ -26,6 +26,52 @@ function bearer(req) {
   return value.startsWith("Bearer ") ? value.slice(7) : "";
 }
 
+function normalizeExecutionResult(result) {
+  if (result === null || result === undefined) {
+    return {
+      enabled: false,
+      reason: "connector_not_configured",
+      provider: null,
+      model: null,
+      answer: null
+    };
+  }
+
+  if (typeof result !== "object" || Array.isArray(result)) {
+    const err = new Error("invalid_execution_result");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  if (typeof result.enabled !== "boolean") {
+    const err = new Error("invalid_execution_result");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  for (const field of ["reason", "provider", "model", "answer"]) {
+    if (result[field] !== undefined && result[field] !== null && typeof result[field] !== "string") {
+      const err = new Error("invalid_execution_result");
+      err.statusCode = 502;
+      throw err;
+    }
+  }
+
+  if (typeof result.answer === "string" && !result.answer.trim()) {
+    const err = new Error("invalid_execution_result");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  return {
+    enabled: result.enabled,
+    reason: result.reason ?? null,
+    provider: result.provider ?? null,
+    model: result.model ?? null,
+    answer: result.answer ?? null
+  };
+}
+
 async function readJson(req) {
   let size = 0;
   const chunks = [];
@@ -120,22 +166,19 @@ export function createHandler({
         ? await execute(decision, text)
         : null;
 
-      const execution = connectorResult ?? {
-        enabled: false,
-        reason: "connector_not_configured"
-      };
+      const execution = normalizeExecutionResult(connectorResult);
 
       return json(res, 200, {
         requestId,
         status: execution.answer ? "answered" : "routed",
         ...decision,
         execution: {
-          enabled: Boolean(execution.enabled),
-          reason: execution.reason ?? null,
-          provider: execution.provider ?? null,
-          model: execution.model ?? null
+          enabled: execution.enabled,
+          reason: execution.reason,
+          provider: execution.provider,
+          model: execution.model
         },
-        answer: execution.answer ?? null
+        answer: execution.answer
       });
     } catch (error) {
       const publicError =
