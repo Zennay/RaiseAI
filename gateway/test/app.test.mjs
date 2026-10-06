@@ -328,6 +328,31 @@ test("executor errors cannot turn failure payloads into non-error HTTP statuses"
   }
 });
 
+test("non-Error executor throws become secret-safe internal errors", async () => {
+  for (const thrown of [null, undefined, "private_failure", 42, false]) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Trigger non-Error executor failure" })
+      });
+
+      assert.equal(res.status, 500);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+      assert.equal("answer" in body, false);
+      assert.equal("execution" in body, false);
+    }, {
+      execute: async () => {
+        throw thrown;
+      }
+    });
+  }
+});
+
 test("valid upstream 4xx and 5xx error statuses remain failures", async () => {
   for (const statusCode of [400, 429, 502, 503, 599]) {
     await withServer(async base => {
