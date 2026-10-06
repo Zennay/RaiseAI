@@ -55,6 +55,10 @@ def _parse_timestamp(value: Any, field: str) -> dt.datetime:
     return parsed.astimezone(dt.timezone.utc)
 
 
+def _format_utc(value: dt.datetime) -> str:
+    return value.astimezone(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def _require_sha(value: Any, field: str, length: int) -> str:
     _require(isinstance(value, str), f"{field} must be a string")
     normalized = value.strip().lower()
@@ -123,7 +127,7 @@ def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
     return {
         "valid": True,
         "quality_evidence_complete": True,
-        "recorded_at_utc": observations["recorded_at_utc"],
+        "recorded_at_utc": _format_utc(recorded_at),
         "watch_identity_match": True,
         "app_version": app_version,
         "source_revision": source_revision,
