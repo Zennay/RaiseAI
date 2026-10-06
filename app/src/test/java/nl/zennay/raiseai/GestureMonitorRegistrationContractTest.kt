@@ -17,7 +17,9 @@ class GestureMonitorRegistrationContractTest {
                     "        }"
             )
         )
-        assertTrue(source.contains("CalibrationStore.setMonitoringEnabled(this, false)"))
+        val disableMonitoring = "CalibrationStore.setMonitoringEnabled(this, false)"
+        assertTrue(source.indexOf(disableMonitoring) != source.lastIndexOf(disableMonitoring))
+        assertTrue(source.contains("No accelerometer found; stopping service"))
         assertTrue(source.contains("Accelerometer registration failed; stopping monitor"))
         assertTrue(source.contains("stopSelf()"))
         assertTrue(source.contains("if (!applyPowerState(force = true)) return"))
