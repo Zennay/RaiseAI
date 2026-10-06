@@ -13,6 +13,7 @@ on:
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
       - "tests/test_watch_v1_evidence_pair.py"
+      - "tests/test_pull_watch_data_pairing.py"
       - "pull-watch-data.command"
       - ".github/workflows/physical-evidence-contract-test.yml"
   pull_request:
@@ -25,6 +26,7 @@ on:
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
       - "tests/test_watch_v1_evidence_pair.py"
+      - "tests/test_pull_watch_data_pairing.py"
       - "pull-watch-data.command"
       - ".github/workflows/physical-evidence-contract-test.yml"
 
@@ -67,4 +69,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trace_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_sensor_trial_analyzer.py'
           python3 -m unittest discover -s tests -p 'test_watch_v1_evidence_pair.py'
+          python3 -m unittest discover -s tests -p 'test_pull_watch_data_pairing.py'
           bash -n pull-watch-data.command
