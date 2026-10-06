@@ -117,7 +117,11 @@ test("home state statements never actuate devices", () => {
     "De verwarming staat aan",
     "De lampen in de woonkamer staan uit",
     "Mijn tv is uit",
-    "De speaker is aan"
+    "De speaker is aan",
+    "In de woonkamer staan de lampen uit",
+    "In de keuken is het licht aan",
+    "De lampen blijven uit",
+    "De tv blijft aan"
   ]) {
     assert.notEqual(classifyIntent(text).route, "smart_home", text);
   }
