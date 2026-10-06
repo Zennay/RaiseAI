@@ -39,7 +39,7 @@ test("broader project explanation prompts never dispatch work", () => {
   for (const text of [
     "Vertel me meer over het testen van HaxLab",
     "Vertel iets over waarom zCloud deze build test",
-    "Geef me uitleg over het pushen van Supa",
+    "Geef me uitleg over wanneer ik Supa push",
     "Beschrijf hoe ik Raise AI test",
     "Licht toe waarom uLab een update nodig heeft"
   ]) {
