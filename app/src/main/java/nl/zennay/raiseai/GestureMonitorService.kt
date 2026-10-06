@@ -146,15 +146,19 @@ class GestureMonitorService : Service(), SensorEventListener {
         if (sleepPaused) {
             unregisterAccelerometer()
             updateNotification("Paused for Sleep / Do Not Disturb")
-        } else {
-            registerAccelerometer()
+        } else if (registerAccelerometer()) {
             updateNotification("Raise your watch to your mouth for Raise AI")
+        } else {
+            CalibrationStore.setMonitoringEnabled(this, false)
+            updateNotification("Monitoring stopped · accelerometer registration failed")
+            Log.e(TAG, "Accelerometer registration failed; stopping monitor")
+            stopSelf()
         }
     }
 
-    private fun registerAccelerometer() {
-        if (sensorRegistered) return
-        val sensor = accelerometer ?: return
+    private fun registerAccelerometer(): Boolean {
+        if (sensorRegistered) return true
+        val sensor = accelerometer ?: return false
 
         // ~10 Hz is enough for the current 180 ms hold detector. A small FIFO latency allows
         // hardware batching on devices that support it, reducing application-processor wakeups.
@@ -165,7 +169,12 @@ class GestureMonitorService : Service(), SensorEventListener {
             SENSOR_SAMPLING_US,
             batchLatencyUs
         )
-        Log.i(TAG, "Accelerometer registered; batching=${batchLatencyUs > 0}")
+        if (sensorRegistered) {
+            Log.i(TAG, "Accelerometer registered; batching=${batchLatencyUs > 0}")
+        } else {
+            Log.e(TAG, "SensorManager rejected accelerometer registration")
+        }
+        return sensorRegistered
     }
 
     private fun unregisterAccelerometer() {
