@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Read and atomically update physical-validation session metadata."""
+"""Read physical-validation state and commit gate outcomes atomically."""
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import stat
@@ -18,12 +19,8 @@ READABLE_FIELDS = {
     "watch_serial": str,
     "e2e_passed": bool,
 }
-MUTABLE_FIELDS = {
-    "e2e_passed": bool,
-    "e2e_verified_at_utc": str,
-    "v1_gate_passed": bool,
-    "v1_verified_at_utc": str,
-}
+GATES = {"e2e", "v1"}
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 class SessionUpdateError(ValueError):
@@ -62,6 +59,25 @@ def _load_session(path: Path) -> tuple[dict[str, Any], int]:
     return payload, stat.S_IMODE(file_stat.st_mode)
 
 
+def _parse_utc_timestamp(name: str, value: Any) -> dt.datetime:
+    if not isinstance(value, str):
+        raise SessionUpdateError(f"{name} must be a canonical UTC timestamp")
+    try:
+        parsed = dt.datetime.strptime(value, TIMESTAMP_FORMAT)
+    except ValueError as exc:
+        raise SessionUpdateError(
+            f"{name} must use canonical UTC form YYYY-MM-DDTHH:MM:SSZ"
+        ) from exc
+    return parsed.replace(tzinfo=dt.timezone.utc)
+
+
+def _require_bool(payload: dict[str, Any], field: str) -> bool:
+    value = payload.get(field)
+    if type(value) is not bool:
+        raise SessionUpdateError(f"{field} must be boolean")
+    return value
+
+
 def read_session_field(path: Path, field: str) -> str:
     expected_type = READABLE_FIELDS.get(field)
     if expected_type is None:
@@ -81,28 +97,8 @@ def read_session_field(path: Path, field: str) -> str:
     return value
 
 
-def _parse_value(field: str, raw_value: str) -> Any:
-    expected_type = MUTABLE_FIELDS.get(field)
-    if expected_type is None:
-        raise SessionUpdateError(f"field is not mutable: {field}")
-    if expected_type is bool:
-        if raw_value == "true":
-            return True
-        if raw_value == "false":
-            return False
-        raise SessionUpdateError(f"{field} must be true or false")
-    if not raw_value.strip():
-        raise SessionUpdateError(f"{field} must be a non-empty string")
-    if "\n" in raw_value or "\r" in raw_value:
-        raise SessionUpdateError(f"{field} must be a single-line string")
-    return raw_value
-
-
-def update_session(path: Path, field: str, raw_value: str) -> None:
-    payload, mode = _load_session(path)
-    payload[field] = _parse_value(field, raw_value)
+def _write_session(path: Path, payload: dict[str, Any], mode: int) -> None:
     serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -142,12 +138,51 @@ def update_session(path: Path, field: str, raw_value: str) -> None:
                 pass
 
 
+def mark_gate_passed(path: Path, gate: str, verified_at_utc: str) -> None:
+    if gate not in GATES:
+        raise SessionUpdateError(f"unknown physical validation gate: {gate}")
+
+    payload, mode = _load_session(path)
+    started_at = _parse_utc_timestamp("started_at_utc", payload.get("started_at_utc"))
+    verified_at = _parse_utc_timestamp("verified_at_utc", verified_at_utc)
+    if verified_at < started_at:
+        raise SessionUpdateError("verified_at_utc cannot precede started_at_utc")
+
+    e2e_passed = _require_bool(payload, "e2e_passed")
+    v1_passed = _require_bool(payload, "v1_gate_passed")
+
+    if gate == "e2e":
+        if e2e_passed or "e2e_verified_at_utc" in payload:
+            raise SessionUpdateError("E2E gate is already committed for this session")
+        payload["e2e_passed"] = True
+        payload["e2e_verified_at_utc"] = verified_at_utc
+    else:
+        if not e2e_passed:
+            raise SessionUpdateError("cannot commit V1 before the E2E gate")
+        e2e_verified = _parse_utc_timestamp(
+            "e2e_verified_at_utc", payload.get("e2e_verified_at_utc")
+        )
+        if verified_at < e2e_verified:
+            raise SessionUpdateError("V1 verification cannot precede E2E verification")
+        if v1_passed or "v1_verified_at_utc" in payload:
+            raise SessionUpdateError("V1 gate is already committed for this session")
+        payload["v1_gate_passed"] = True
+        payload["v1_verified_at_utc"] = verified_at_utc
+
+    _write_session(path, payload, mode)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--get", dest="get_field", choices=sorted(READABLE_FIELDS))
-    action.add_argument("--set", dest="set_values", nargs=2, metavar=("FIELD", "VALUE"))
+    action.add_argument(
+        "--mark-passed",
+        dest="mark_passed",
+        nargs=2,
+        metavar=("GATE", "VERIFIED_AT_UTC"),
+    )
     return parser.parse_args(argv)
 
 
@@ -157,8 +192,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.get_field is not None:
             print(read_session_field(args.session, args.get_field))
         else:
-            field, value = args.set_values
-            update_session(args.session, field, value)
+            gate, verified_at = args.mark_passed
+            mark_gate_passed(args.session, gate, verified_at)
     except SessionUpdateError as exc:
         print(str(exc), file=sys.stderr)
         return 1
