@@ -141,6 +141,21 @@ class SensorTrialProgressTest {
 
 
     @Test
+    fun surplusCsvFieldIsRejected() {
+        val revision = "e".repeat(40)
+        val progress = SensorTrialRecorder.summarizeRows(
+            sequenceOf(
+                SensorTrialRecorder.HEADER,
+                "mouth_raise,3000,4000,40,true,0.98,1.5.3,$revision,raise-detector-v1,unexpected"
+            )
+        )
+
+        assertTrue(progress.mouthTrials == 0)
+        assertTrue(progress.rejectedTrials == 1)
+        assertFalse(progress.v1GatePassed)
+    }
+
+    @Test
     fun unexpectedCsvHeaderFailsClosed() {
         val revision = "d".repeat(40)
         val progress = SensorTrialRecorder.summarizeRows(
