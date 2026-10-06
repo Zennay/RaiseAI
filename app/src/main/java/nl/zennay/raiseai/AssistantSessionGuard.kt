@@ -73,10 +73,16 @@ class AssistantSessionGuard(private val context: Context) {
                     event.eventType == UsageEvents.Event.ACTIVITY_STOPPED
 
                 if (resumed || backgrounded) {
+                    val activityScoped =
+                        event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
+                        event.eventType == UsageEvents.Event.ACTIVITY_PAUSED ||
+                        event.eventType == UsageEvents.Event.ACTIVITY_STOPPED
                     transitions += ForegroundTransition(
                         packageName = event.packageName.orEmpty(),
                         timestampMs = event.timeStamp,
-                        resumed = resumed
+                        resumed = resumed,
+                        activityName = if (activityScoped) event.className.orEmpty() else "",
+                        packageWide = !activityScoped
                     )
                 }
             }
