@@ -9,8 +9,12 @@ test("routes project execution to zCloud without an LLM classifier", () => {
 test("routes current zCloud portfolio project continuations", () => {
   for (const text of [
     "Werk verder aan LightUp",
+    "Werk verder aan Light Up",
     "Ga door met zSSH",
-    "Werk verder aan zGuard"
+    "Ga door met z SSH",
+    "Werk verder aan zGuard",
+    "Werk verder aan z Guard",
+    "Ga door met z Cloud"
   ]) {
     assert.equal(classifyIntent(text).route, "zcloud_task", text);
   }
