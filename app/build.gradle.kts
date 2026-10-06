@@ -129,10 +129,8 @@ tasks.register("verifyEvidenceBuildIdentity") {
     description = "Fails unless the evidence-capable build is clean and pinned to the exact checked-out source revision."
 
     doLast {
-        val expected = System.getenv("RAISE_BUILD_REVISION")
-            ?.trim()
-            ?.lowercase()
-            ?.takeIf { it.matches(Regex("^[0-9a-f]{40}$")) }
+        val expected = normalizeSourceRevisionOverride(System.getenv("RAISE_BUILD_REVISION"))
+            ?.takeUnless { it == "unknown" }
 
         check(expected != null) {
             "RAISE_BUILD_REVISION must contain the exact 40-character Git revision for evidence-capable builds."
