@@ -334,7 +334,7 @@ test("transient OpenRouter 5xx is retried once within one shared caller budget",
       if (calls === 1) return httpResponse(500, { error: "temporary" });
       return httpResponse(200, {
         model: "z-ai/glm-5.3-flash",
-        choices: [{ message: { content: "gereed" } }]
+        choices: [{ message: { role: "assistant", content: "gereed" } }]
       });
     }
   });
@@ -361,7 +361,7 @@ test("three-attempt OpenRouter retry policy never resets the caller deadline", a
       if (calls < 3) return httpResponse(503, { error: "temporary" });
       return httpResponse(200, {
         model: "z-ai/glm-5.3-flash",
-        choices: [{ message: { content: "gereed na retries" } }]
+        choices: [{ message: { role: "assistant", content: "gereed na retries" } }]
       });
     }
   });
