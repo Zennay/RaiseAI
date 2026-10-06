@@ -1,4 +1,7 @@
 import net from "node:net";
+import path from "node:path";
+
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
 
 function isLoopbackHost(host) {
   const normalized = host.toLowerCase();
@@ -63,6 +66,20 @@ export function validateServerConfig({ host, port, tlsCert, tlsKey }) {
 
   if (Boolean(tlsCert) !== Boolean(tlsKey)) {
     throw new Error("RAISE_TLS_CERT and RAISE_TLS_KEY must be set together");
+  }
+
+  if (
+    tlsCert &&
+    (
+      !path.isAbsolute(tlsCert) ||
+      !path.isAbsolute(tlsKey) ||
+      CONTROL_CHARS.test(tlsCert) ||
+      CONTROL_CHARS.test(tlsKey)
+    )
+  ) {
+    throw new Error(
+      "RAISE_TLS_CERT and RAISE_TLS_KEY must be absolute paths without control characters"
+    );
   }
 
   if (!tlsCert && !isLoopbackHost(host)) {
