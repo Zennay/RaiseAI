@@ -531,3 +531,131 @@ test("OpenAI transport failure is classified as upstream 502", async () => {
     }
   );
 });
+
+
+function streamedOpenAIResponse(bodyBytes, {
+  contentType = "application/json",
+  contentLength = null,
+  status = 200
+} = {}) {
+  const headers = { "content-type": contentType };
+  if (contentLength !== null) headers["content-length"] = String(contentLength);
+  return new Response(bodyBytes, { status, headers });
+}
+
+function validOpenAIBody(answer = "ok") {
+  return {
+    model: "gpt-5.4-nano",
+    output: [{
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: answer }]
+    }]
+  };
+}
+
+test("OpenAI streams successful JSON through a 64 KiB response budget", async () => {
+  const payload = Buffer.from(JSON.stringify(validOpenAIBody("bounded")), "utf8");
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => streamedOpenAIResponse(payload)
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(result.answer, "bounded");
+});
+
+test("OpenAI rejects oversized declared response bodies before parsing", async () => {
+  const payload = Buffer.from(JSON.stringify(validOpenAIBody()), "utf8");
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => streamedOpenAIResponse(payload, {
+      contentLength: (64 * 1024) + 1
+    })
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openai_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+});
+
+test("OpenAI rejects streamed bodies that exceed the byte budget without Content-Length", async () => {
+  const oversized = {
+    ...validOpenAIBody(),
+    padding: "x".repeat(70 * 1024)
+  };
+  const payload = Buffer.from(JSON.stringify(oversized), "utf8");
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => streamedOpenAIResponse(payload)
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openai_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+});
+
+test("OpenAI rejects incoherent Content-Length and invalid UTF-8", async () => {
+  const validPayload = Buffer.from(JSON.stringify(validOpenAIBody()), "utf8");
+  const mismatched = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => streamedOpenAIResponse(validPayload, {
+      contentLength: validPayload.length + 1
+    })
+  });
+
+  await assert.rejects(
+    mismatched({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openai_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+
+  const invalidUtf8 = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => streamedOpenAIResponse(
+      new Uint8Array([0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xc3, 0x28, 0x22, 0x7d])
+    )
+  });
+
+  await assert.rejects(
+    invalidUtf8({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openai_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+});
+
+test("OpenAI ignores provider error bodies and preserves HTTP failure classification", async () => {
+  const oversizedError = Buffer.alloc(70 * 1024, 0x78);
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => streamedOpenAIResponse(oversizedError, {
+      contentType: "application/json",
+      status: 503
+    })
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openai_http_503");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+});

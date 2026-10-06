@@ -1,4 +1,5 @@
 const API_URL = "https://api.openai.com/v1/responses";
+const MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 
 function hasUsableApiKey(value) {
   return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
@@ -31,6 +32,103 @@ function hasJsonResponseType(response) {
   const value = response?.headers?.get?.("content-type");
   if (typeof value !== "string") return false;
   return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
+async function cancelResponseBody(response) {
+  try {
+    await response?.body?.cancel?.();
+  } catch {
+    // Best-effort resource release; the provider failure remains authoritative.
+  }
+}
+
+async function readBoundedJsonResponse(response) {
+  const contentLength = response?.headers?.get?.("content-length");
+  let declaredLength = null;
+
+  if (typeof contentLength === "string" && contentLength.trim()) {
+    const normalized = contentLength.trim();
+    if (!/^\d+$/u.test(normalized)) {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+
+    declaredLength = Number(normalized);
+    if (
+      !Number.isSafeInteger(declaredLength) ||
+      declaredLength > MAX_RESPONSE_BODY_BYTES
+    ) {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+  }
+
+  const reader = response?.body?.getReader?.();
+
+  // Injected unit-test transports historically expose json() without a Fetch
+  // ReadableStream. Production globalThis.fetch responses use the streaming
+  // branch below, which enforces the byte budget before JSON parsing.
+  if (!reader) {
+    if (typeof response?.json !== "function") {
+      return { ok: false, json: null };
+    }
+
+    try {
+      const json = await response.json();
+      const encoded = Buffer.from(JSON.stringify(json), "utf8");
+      if (
+        encoded.length > MAX_RESPONSE_BODY_BYTES ||
+        (declaredLength !== null && declaredLength !== encoded.length)
+      ) {
+        return { ok: false, json: null };
+      }
+      return { ok: true, json };
+    } catch {
+      return { ok: false, json: null };
+    }
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, json: null };
+      }
+
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, json: null };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => {});
+    return { ok: false, json: null };
+  }
+
+  if (declaredLength !== null && declaredLength !== totalBytes) {
+    return { ok: false, json: null };
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { ok: true, json: JSON.parse(text) };
+  } catch {
+    return { ok: false, json: null };
+  }
 }
 
 function outputText(response) {
@@ -133,23 +231,28 @@ export function createOpenAIExecutor({
       throw upstreamFailure("openai_request_failed", cause);
     }
 
-    const jsonMediaType = hasJsonResponseType(response);
-    const body = jsonMediaType
-      ? await response.json().catch(() => ({}))
-      : {};
-
     if (!response.ok) {
+      await cancelResponseBody(response);
       const error = new Error("openai_http_" + response.status);
       error.statusCode = 502;
       throw error;
     }
 
-    if (!jsonMediaType) {
+    if (!hasJsonResponseType(response)) {
+      await cancelResponseBody(response);
       const error = new Error("openai_invalid_response");
       error.statusCode = 502;
       throw error;
     }
 
+    const parsedBody = await readBoundedJsonResponse(response);
+    if (!parsedBody.ok) {
+      const error = new Error("openai_invalid_response");
+      error.statusCode = 502;
+      throw error;
+    }
+
+    const body = parsedBody.json;
     const answer = outputText(body);
     if (!answer) {
       const error = new Error("openai_empty_response");
