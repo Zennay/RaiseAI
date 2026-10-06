@@ -95,6 +95,10 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.EvidenceError, "exceeds maximum"):
             validator.validate_evidence(success_payload(latency_ms=15_001), max_latency_ms=15_000)
 
+    def test_rejects_success_input_longer_than_gateway_limit(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "must be at most 4000"):
+            validator.validate_evidence(success_payload(input_length_chars=4001))
+
     def test_rejects_route_mismatch(self):
         with self.assertRaisesRegex(validator.EvidenceError, "does not match expected"):
             validator.validate_evidence(success_payload(route="deep_ai"), expect_route="quick_ai")
