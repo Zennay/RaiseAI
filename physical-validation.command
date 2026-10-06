@@ -114,23 +114,7 @@ json_set() {
   local file="$1"
   local key="$2"
   local value="$3"
-  python3 - "$file" "$key" "$value" <<'PY'
-import json
-import sys
-path, key, value = sys.argv[1:4]
-with open(path, encoding="utf-8") as handle:
-    data = json.load(handle)
-if value == "true":
-    parsed = True
-elif value == "false":
-    parsed = False
-else:
-    parsed = value
-data[key] = parsed
-with open(path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-PY
+  python3 tools/update-physical-session.py "$file" "$key" "$value"
 }
 
 prepare_session() {
