@@ -21,6 +21,7 @@ export function evaluateZCloudProbe({
 
   const provider = json?.execution?.provider ?? null;
   const reason = json?.execution?.reason ?? null;
+  const enabled = json?.execution?.enabled;
 
   if (provider !== "zcloud") {
     return {
@@ -31,6 +32,13 @@ export function evaluateZCloudProbe({
   }
 
   if (reason === "zcloud_custom_task_not_supported") {
+    if (enabled !== false) {
+      return {
+        ok: false,
+        degraded: false,
+        reason: "unexpected_execution_enabled"
+      };
+    }
     return {
       ok: true,
       degraded: false,
@@ -39,6 +47,13 @@ export function evaluateZCloudProbe({
   }
 
   if (reason === "zcloud_unavailable") {
+    if (enabled !== false) {
+      return {
+        ok: false,
+        degraded: false,
+        reason: "unexpected_execution_enabled"
+      };
+    }
     return {
       ok: !requireZCloud,
       degraded: true,
