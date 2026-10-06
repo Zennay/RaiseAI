@@ -87,6 +87,53 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
         self.assertEqual(payload["source_revision"], REVISION)
         self.assertEqual(payload["apk_sha256"], APK)
 
+    def test_normalizes_recorded_timestamp_to_utc(self):
+        payload = generator.build_template(
+            session_payload(),
+            recorded_at_utc="2026-10-06T07:45:00+02:00",
+        )
+        self.assertEqual(payload["recorded_at_utc"], "2026-10-06T05:45:00Z")
+
+    def test_rejects_invalid_session_start_timestamp(self):
+        with self.assertRaisesRegex(generator.TemplateError, "session started_at_utc must be ISO-8601"):
+            generator.build_template(
+                session_payload(started_at_utc="not-a-timestamp"),
+                recorded_at_utc="2026-10-06T05:45:00Z",
+            )
+
+    def test_rejects_session_start_without_timezone(self):
+        with self.assertRaisesRegex(generator.TemplateError, "session started_at_utc must include a timezone"):
+            generator.build_template(
+                session_payload(started_at_utc="2026-10-06T05:00:00"),
+                recorded_at_utc="2026-10-06T05:45:00Z",
+            )
+
+    def test_rejects_recorded_timestamp_before_session_start(self):
+        with self.assertRaisesRegex(generator.TemplateError, "must not be before the physical session started"):
+            generator.build_template(
+                session_payload(),
+                recorded_at_utc="2026-10-06T04:59:59Z",
+            )
+
+    def test_preserves_subsecond_ordering_in_canonical_utc(self):
+        payload = generator.build_template(
+            session_payload(started_at_utc="2026-10-06T05:00:00.900000Z"),
+            recorded_at_utc="2026-10-06T07:00:00.950000+02:00",
+        )
+        self.assertEqual(payload["recorded_at_utc"], "2026-10-06T05:00:00.950000Z")
+        result = validator.validate_observations(
+            session_payload(started_at_utc="2026-10-06T05:00:00.900000Z"),
+            {
+                **payload,
+                "screen_off_tested": True,
+                "screen_off_behavior": "Display-off behavior observed.",
+                "background_tested": True,
+                "background_behavior": "Background behavior observed.",
+                "ux_failures_reviewed": True,
+            },
+        )
+        self.assertTrue(result["valid"])
+
 
 if __name__ == "__main__":
     unittest.main()
