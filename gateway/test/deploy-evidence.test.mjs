@@ -191,3 +191,17 @@ test("failed or skipped stages still yield machine-readable evidence", () => {
   assert.equal(evidence.attestation.live_revision, null);
   assert.equal(evidence.attestation.exact_revision_match, null);
 });
+
+
+test("malformed workflow identifiers are not normalized into valid evidence", () => {
+  const evidence = buildDeployEvidence({
+    env: {
+      GITHUB_RUN_ID: "123junk",
+      GITHUB_RUN_ATTEMPT: "0",
+      GITHUB_SHA: revision
+    }
+  });
+
+  assert.equal(evidence.workflow.run_id, null);
+  assert.equal(evidence.workflow.run_attempt, null);
+});
