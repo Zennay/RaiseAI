@@ -1217,3 +1217,51 @@ test("zCloud command acknowledgement body is bounded before trust", async () => 
   assert.equal(result.enabled, false);
   assert.equal(result.reason, "zcloud_invalid_ack");
 });
+
+
+test("zCloud requires declared Content-Length to match bytes read", async () => {
+  const bodyText = JSON.stringify(targets({ active: true }));
+  const actualBytes = new TextEncoder().encode(bodyText).byteLength;
+
+  for (const [declaredBytes, expectedEnabled, expectedReason] of [
+    [actualBytes, true, "zcloud_command_queued"],
+    [actualBytes - 1, false, "zcloud_targets_invalid"],
+    [actualBytes + 1, false, "zcloud_targets_invalid"]
+  ]) {
+    let calls = 0;
+    const execute = createZCloudExecutor({
+      fetchImpl: async url => {
+        calls += 1;
+        if (url.endsWith("/api/runner-targets")) {
+          return responseWithText(200, bodyText, {
+            headers: { "content-length": String(declaredBytes) }
+          });
+        }
+        return response(200, commandAck(93));
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+    assert.equal(result.enabled, expectedEnabled, String(declaredBytes));
+    assert.equal(result.reason, expectedReason, String(declaredBytes));
+    assert.equal(calls, expectedEnabled ? 2 : 1, String(declaredBytes));
+  }
+});
+
+
+test("zCloud rejects malformed declared Content-Length values", async () => {
+  const bodyText = JSON.stringify(targets({ active: true }));
+
+  for (const declaredLength of ["", " ", "abc", "-1", "1.5", "10, 10"]) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async () =>
+        responseWithText(200, bodyText, {
+          headers: { "content-length": declaredLength }
+        })
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+    assert.equal(result.enabled, false, JSON.stringify(declaredLength));
+    assert.equal(result.reason, "zcloud_targets_invalid", JSON.stringify(declaredLength));
+  }
+});
