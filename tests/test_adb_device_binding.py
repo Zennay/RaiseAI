@@ -336,6 +336,15 @@ exit 2
         self.assertFalse(self.serial_file.exists())
         self.assertFalse(self.installed_apk_sha_file.exists())
 
+    def test_installer_rejects_disconnected_bound_serial_without_caching_it(self):
+        stale_target = "192.0.2.55:5555"
+        result = self.run_installer(stale_target)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"Selected ADB target is not connected: {stale_target}", result.stdout)
+        self.assertFalse((self.home / ".raiseai" / "watch-endpoint").exists())
+        self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
+
     def test_installer_rejects_non_watch_android_serial(self):
         result = self.run_installer("phone-a")
         self.assertNotEqual(result.returncode, 0)
