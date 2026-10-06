@@ -368,8 +368,19 @@ test("OpenRouter accepts an explicit stop finish reason", async () => {
   assert.equal(result.answer, "complete answer");
 });
 
-test("successful OpenRouter responses require the JSON media type", async () => {
-  for (const contentType of [null, "", "text/plain", "text/html"]) {
+test("successful OpenRouter responses require an unambiguous UTF-8 JSON media type", async () => {
+  for (const contentType of [
+    null,
+    "",
+    "text/plain",
+    "text/html",
+    "application/json; charset=iso-8859-1",
+    "application/json; charset=",
+    "application/json; charset=utf-8; charset=utf-8",
+    "application/json; profile=watch",
+    "application/json; charset=utf-8; profile=watch",
+    "application/json; charset=\"utf-8\"; profile=watch"
+  ]) {
     let calls = 0;
     const execute = createOpenRouterExecutor({
       apiKey: "test-key",
@@ -400,22 +411,29 @@ test("successful OpenRouter responses require the JSON media type", async () => 
   }
 });
 
-test("OpenRouter accepts application/json case-insensitively with parameters", async () => {
-  const execute = createOpenRouterExecutor({
-    apiKey: "test-key",
-    fetchImpl: async () =>
-      httpResponse(
-        200,
-        {
-          model: "z-ai/glm-5.3-flash",
-          choices: [{ message: { role: "assistant", content: "ok" } }]
-        },
-        "Application/JSON; charset=UTF-8"
-      )
-  });
+test("OpenRouter accepts bare JSON or one UTF-8 charset parameter", async () => {
+  for (const contentType of [
+    "application/json",
+    "Application/JSON; charset=UTF-8",
+    "application/json; charset=\"utf-8\"",
+    "application/json; CHARSET = \"UTF-8\""
+  ]) {
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () =>
+        httpResponse(
+          200,
+          {
+            model: "z-ai/glm-5.3-flash",
+            choices: [{ message: { role: "assistant", content: "ok" } }]
+          },
+          contentType
+        )
+    });
 
-  const result = await execute({ route: "quick_ai" }, "hoi");
-  assert.equal(result.answer, "ok");
+    const result = await execute({ route: "quick_ai" }, "hoi");
+    assert.equal(result.answer, "ok");
+  }
 });
 
 test("OpenRouter response model must belong to the requested model set", async () => {
