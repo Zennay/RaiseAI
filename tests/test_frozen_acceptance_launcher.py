@@ -1,4 +1,5 @@
 import os
+import signal
 import shutil
 import subprocess
 import tempfile
@@ -267,7 +268,11 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertFalse(self.fetch_marker.exists())
         self.assertFalse(self.log.exists())
 
-    def test_term_exits_before_post_signal_fetch_side_effects(self):
+    def _assert_signal_exits_before_post_signal_side_effects(
+        self,
+        signal_number: int,
+        expected_returncode: int,
+    ):
         adb_started = self.root / "adb-started"
         env = os.environ.copy()
         env["PATH"] = f"{self.bin}:{env['PATH']}"
@@ -295,12 +300,24 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 self.fail("launcher did not reach the fake adb start-server boundary")
             time.sleep(0.01)
 
-        process.terminate()
+        process.send_signal(signal_number)
         stdout, _ = process.communicate(timeout=3)
 
-        self.assertEqual(process.returncode, 143, stdout)
+        self.assertEqual(process.returncode, expected_returncode, stdout)
         self.assertFalse(self.fetch_marker.exists(), stdout)
         self.assertFalse(self.log.exists(), stdout)
+
+    def test_term_exits_before_post_signal_fetch_side_effects(self):
+        self._assert_signal_exits_before_post_signal_side_effects(
+            signal.SIGTERM,
+            143,
+        )
+
+    def test_int_exits_before_post_signal_fetch_side_effects(self):
+        self._assert_signal_exits_before_post_signal_side_effects(
+            signal.SIGINT,
+            130,
+        )
 
     def test_preflight_only_verifies_handoff_without_starting_session(self):
         result = self.run_launcher(
