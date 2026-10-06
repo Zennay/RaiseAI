@@ -122,6 +122,43 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
 
             self.assertFalse(output.exists())
 
+    def test_rejects_casefold_collision_with_required_member(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            with zipfile.ZipFile(archive, "a") as package:
+                package.writestr("build-identity.txt", b"shadowed\n")
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+
+            with self.assertRaisesRegex(MODULE.HandoffError, "portable path collision"):
+                MODULE.extract_verified_archive(
+                    archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertFalse(output.exists())
+
+    def test_rejects_unicode_normalization_path_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            with zipfile.ZipFile(archive, "a") as package:
+                package.writestr("notes/\u00e9.txt", b"first")
+                package.writestr("notes/e\u0301.txt", b"second")
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+
+            with self.assertRaisesRegex(MODULE.HandoffError, "portable path collision"):
+                MODULE.extract_verified_archive(
+                    archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertFalse(output.exists())
+
     def test_rejects_missing_required_member(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
