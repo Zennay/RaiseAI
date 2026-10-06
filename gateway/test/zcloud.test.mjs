@@ -60,7 +60,8 @@ function targets({ active = true } = {}) {
         worker_count: 2,
         name: "FTMO · worker 1/2",
         desired_state: "running",
-        active
+        active,
+        assignment_ready: active
       },
       "ftmo::w2": {
         project_id: "ftmo::w2",
@@ -69,7 +70,8 @@ function targets({ active = true } = {}) {
         worker_count: 2,
         name: "FTMO · worker 2/2",
         desired_state: "running",
-        active
+        active,
+        assignment_ready: active
       },
       "haxlab::w1": {
         project_id: "haxlab::w1",
