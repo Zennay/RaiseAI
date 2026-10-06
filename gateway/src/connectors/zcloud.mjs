@@ -25,12 +25,34 @@ function aliasesFor(project) {
 }
 
 function groupTargets(payload) {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    payload.projects === null ||
+    typeof payload.projects !== "object" ||
+    Array.isArray(payload.projects)
+  ) {
+    throw new Error("zcloud_targets_invalid");
+  }
+
   const groups = new Map();
 
-  for (const target of Object.values(payload?.projects ?? {})) {
-    const base = String(target.base_project_id ?? "").trim();
-    if (!base) continue;
+  for (const target of Object.values(payload.projects)) {
+    if (target === null || typeof target !== "object" || Array.isArray(target)) {
+      throw new Error("zcloud_targets_invalid");
+    }
+    if (typeof target.base_project_id !== "string" || !target.base_project_id.trim()) {
+      throw new Error("zcloud_targets_invalid");
+    }
+    if (typeof target.active !== "boolean") {
+      throw new Error("zcloud_targets_invalid");
+    }
+    if (target.name !== undefined && target.name !== null && typeof target.name !== "string") {
+      throw new Error("zcloud_targets_invalid");
+    }
 
+    const base = target.base_project_id.trim();
     const current = groups.get(base) ?? {
       base_project_id: base,
       name: String(target.name ?? base).split("·")[0].trim() || base,
@@ -38,7 +60,7 @@ function groupTargets(payload) {
       aliases: new Set()
     };
 
-    current.active ||= Boolean(target.active);
+    current.active ||= target.active;
     for (const alias of aliasesFor(target)) current.aliases.add(alias);
     groups.set(base, current);
   }
@@ -63,7 +85,17 @@ function findProject(text, projects) {
   }
 
   candidates.sort((a, b) => b.alias.length - a.alias.length);
-  return candidates[0] ?? null;
+  if (candidates.length === 0) return null;
+
+  const longestAliasLength = candidates[0].alias.length;
+  const strongest = candidates.filter(candidate => candidate.alias.length === longestAliasLength);
+  const projectIds = new Set(strongest.map(candidate => candidate.project.base_project_id));
+
+  if (projectIds.size > 1) {
+    return { ambiguous: true };
+  }
+
+  return strongest[0];
 }
 
 function genericForms(alias) {
@@ -106,7 +138,7 @@ async function jsonFetch(fetchImpl, url, options = {}) {
     signal: options.signal ?? AbortSignal.timeout(2_500)
   });
 
-  const body = await response.json().catch(() => ({}));
+  const body = await response.json().catch(() => null);
   return { response, body };
 }
 
@@ -136,7 +168,15 @@ export function createZCloudExecutor({
       }
 
       targets = groupTargets(body);
-    } catch {
+    } catch (error) {
+      if (error?.message === "zcloud_targets_invalid") {
+        return {
+          enabled: false,
+          provider: "zcloud",
+          reason: "zcloud_targets_invalid",
+          answer: "zCloud stuurde ongeldige projectstatus terug."
+        };
+      }
       return {
         enabled: false,
         provider: "zcloud",
@@ -152,6 +192,15 @@ export function createZCloudExecutor({
         provider: "zcloud",
         reason: "zcloud_project_not_found",
         answer: "Ik herken het zCloud-project in deze opdracht niet."
+      };
+    }
+
+    if (selected.ambiguous) {
+      return {
+        enabled: false,
+        provider: "zcloud",
+        reason: "zcloud_project_ambiguous",
+        answer: "Meerdere zCloud-projecten passen bij deze opdracht; ik heb niets gestart."
       };
     }
 
@@ -184,14 +233,32 @@ export function createZCloudExecutor({
       );
 
       if (!response.ok) {
+        const errorMessage =
+          typeof body?.error === "string" && body.error.trim()
+            ? body.error.trim()
+            : "zCloud heeft de opdracht niet geaccepteerd.";
         return {
           enabled: false,
           provider: "zcloud",
           reason: "zcloud_command_rejected",
-          answer:
-            typeof body.error === "string"
-              ? body.error
-              : "zCloud heeft de opdracht niet geaccepteerd."
+          answer: errorMessage
+        };
+      }
+
+      if (
+        body === null ||
+        typeof body !== "object" ||
+        Array.isArray(body) ||
+        body.ok !== true ||
+        !Number.isSafeInteger(body.command_id) ||
+        body.command_id < 1 ||
+        body.status !== "pending"
+      ) {
+        return {
+          enabled: false,
+          provider: "zcloud",
+          reason: "zcloud_invalid_ack",
+          answer: "zCloud gaf geen geldige bevestiging; ik meld deze opdracht niet als gestart."
         };
       }
 
@@ -199,7 +266,7 @@ export function createZCloudExecutor({
         enabled: true,
         provider: "zcloud",
         reason: "zcloud_command_queued",
-        commandId: body.command_id ?? null,
+        commandId: body.command_id,
         answer:
           project.name +
           (action === "start"
