@@ -11,9 +11,10 @@ class GestureMonitorRegistrationContractTest {
 
         assertTrue(
             source.contains(
-                "else if (registerAccelerometer()) {\n" +
+                "if (registerAccelerometer()) {\n" +
                     "            updateNotification(\"Raise your watch to your mouth for Raise AI\")\n" +
-                    "        } else {"
+                    "            return true\n" +
+                    "        }"
             )
         )
         assertTrue(source.contains("CalibrationStore.setMonitoringEnabled(this, false)"))
