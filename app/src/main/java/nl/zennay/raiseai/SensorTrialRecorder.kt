@@ -49,9 +49,7 @@ object SensorTrialRecorder {
         detectorConfig: String
     ) {
         val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) {
-            file.writeText("$HEADER\n")
-        }
+        ensureHeader(file)
         file.appendText(
             "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity,$appVersion,$sourceRevision,$detectorConfig\n"
         )
@@ -155,6 +153,12 @@ object SensorTrialRecorder {
             rejectedTrials = rejectedTrials,
             mixedEvidenceIdentity = identities.size > 1
         )
+    }
+
+    internal fun ensureHeader(file: File) {
+        if (!file.exists() || file.length() == 0L) {
+            file.writeText("$HEADER\n")
+        }
     }
 
     fun clear(context: Context) {
