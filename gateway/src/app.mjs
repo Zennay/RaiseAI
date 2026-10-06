@@ -3,6 +3,8 @@ import { classifyIntent } from "./router.mjs";
 
 const MAX_BODY = 16 * 1024;
 const MAX_TEXT = 4000;
+const REQUESTS_PER_MINUTE = 120;
+const MAX_RATE_LIMIT_BUCKETS = 1024;
 
 function json(res, status, body) {
   const payload = Buffer.from(JSON.stringify(body));
@@ -107,6 +109,50 @@ function safeErrorStatus(error) {
     : 500;
 }
 
+export function createRateLimiter({
+  requestsPerMinute = REQUESTS_PER_MINUTE,
+  maxBuckets = MAX_RATE_LIMIT_BUCKETS
+} = {}) {
+  if (
+    !Number.isSafeInteger(requestsPerMinute) ||
+    requestsPerMinute < 1 ||
+    !Number.isSafeInteger(maxBuckets) ||
+    maxBuckets < 1
+  ) {
+    throw new Error("invalid_rate_limit_config");
+  }
+
+  const buckets = new Map();
+  let activeMinute = null;
+
+  return {
+    allow(clientKey, minute) {
+      if (!Number.isSafeInteger(minute)) return false;
+
+      if (activeMinute !== minute) {
+        buckets.clear();
+        activeMinute = minute;
+      }
+
+      const key =
+        typeof clientKey === "string" && clientKey.length > 0
+          ? clientKey
+          : "unknown";
+      const count = buckets.get(key);
+
+      if (count === undefined) {
+        if (buckets.size >= maxBuckets) return false;
+        buckets.set(key, 1);
+        return true;
+      }
+
+      if (count >= requestsPerMinute) return false;
+      buckets.set(key, count + 1);
+      return true;
+    }
+  };
+}
+
 async function readJson(req) {
   let size = 0;
   const chunks = [];
@@ -149,7 +195,7 @@ export function createHandler({
     );
   }
 
-  const buckets = new Map();
+  const rateLimiter = createRateLimiter();
 
   return async function handler(req, res) {
     const requestId = crypto.randomUUID();
@@ -180,11 +226,8 @@ export function createHandler({
 
     const ip = req.socket.remoteAddress ?? "unknown";
     const minute = Math.floor(now() / 60000);
-    const bucket = buckets.get(ip);
 
-    if (!bucket || bucket.minute !== minute) {
-      buckets.set(ip, { minute, count: 1 });
-    } else if (++bucket.count > 120) {
+    if (!rateLimiter.allow(ip, minute)) {
       return json(res, 429, { error: "rate_limited", requestId });
     }
 
