@@ -8,7 +8,7 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { httpsOrigin, positiveInteger } from "./readiness-config.mjs";
-import { evaluateReadinessResponse } from "./readiness-policy.mjs";
+import { evaluateReadinessHttpResponse } from "./readiness-http.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
@@ -87,7 +87,7 @@ function requestHealth() {
           try {
             json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           } catch {}
-          resolve({ status: res.statusCode, json });
+          resolve({ status: res.statusCode, json, contentType: res.headers["content-type"] });
         });
       }
     );
@@ -101,7 +101,7 @@ while (Date.now() <= deadline) {
   attempts += 1;
   try {
     const response = await requestHealth();
-    last = evaluateReadinessResponse({
+    last = evaluateReadinessHttpResponse({
       ...response,
       expectedRevision
     });
