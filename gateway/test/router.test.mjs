@@ -8,6 +8,19 @@ test("routes project execution to zCloud without an LLM classifier", () => {
 
 test("routes home device commands directly", () => {
   assert.equal(classifyIntent("Zet de lampen in de woonkamer uit").route, "smart_home");
+  assert.equal(classifyIntent("Zet de thermostaat op 20 graden").route, "smart_home");
+  assert.equal(classifyIntent("Verhoog het volume van de speaker").route, "smart_home");
+});
+
+test("home-related status questions never become device commands from nouns alone", () => {
+  assert.equal(
+    classifyIntent("Wat is de temperatuur in de woonkamer?").route,
+    "current_info"
+  );
+  assert.equal(
+    classifyIntent("Wat is het volume van de speaker?").route,
+    "quick_ai"
+  );
 });
 
 test("routes freshness-sensitive questions to search", () => {
