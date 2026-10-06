@@ -57,6 +57,25 @@ class RaiseGestureDetector {
     ).joinToString(";")
 
     fun onAccelerometer(x: Float, y: Float, z: Float, timeMs: Long, mouthPose: MouthPose?): DetectionDebug {
+        if (!x.isFinite() || !y.isFinite() || !z.isFinite()) {
+            return DetectionDebug(
+                triggered = false,
+                similarity = lastSimilarity.takeIf { hasSimilarity && it.isFinite() } ?: 0f,
+                dynamicAcceleration = 0f,
+                armed = armed
+            )
+        }
+
+        if (mouthPose != null && !isUsableMouthPose(mouthPose)) {
+            poseStartedMs = 0L
+            return DetectionDebug(
+                triggered = false,
+                similarity = lastSimilarity.takeIf { hasSimilarity && it.isFinite() } ?: 0f,
+                dynamicAcceleration = 0f,
+                armed = armed
+            )
+        }
+
         if (!initialized) {
             // Establish the current wrist orientation as the baseline. Do not count sensor
             // startup/filter settling as an intentional arm movement.
@@ -179,5 +198,15 @@ class RaiseGestureDetector {
         lastSimilarity = similarity
         hasSimilarity = true
         return DetectionDebug(false, similarity, dynamic, armed)
+    }
+
+    private fun isUsableMouthPose(pose: MouthPose): Boolean {
+        if (!pose.x.isFinite() || !pose.y.isFinite() || !pose.z.isFinite()) return false
+        val length = sqrt(pose.x * pose.x + pose.y * pose.y + pose.z * pose.z)
+        return length.isFinite() && length >= MIN_POSE_LENGTH
+    }
+
+    companion object {
+        private const val MIN_POSE_LENGTH = 0.001f
     }
 }
