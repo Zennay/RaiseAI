@@ -11,7 +11,11 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         if (!CalibrationStore.isMonitoringEnabled(context)) return
-        if (CalibrationStore.loadPose(context) == null) return
+        if (CalibrationStore.loadPose(context) == null) {
+            CalibrationStore.setMonitoringEnabled(context, false)
+            Log.w(TAG, "Monitoring preference disabled because mouth calibration is invalid")
+            return
+        }
 
         val service = Intent(context, GestureMonitorService::class.java)
         runCatching {
