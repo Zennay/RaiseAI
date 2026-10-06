@@ -9,6 +9,8 @@ on:
       - "PHYSICAL-ACCEPTANCE.md"
       - "tools/validate-physical-observations.py"
       - "tools/create-physical-observation-template.py"
+      - "tools/update-physical-session.py"
+      - "tests/test_physical_session_updater.py"
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
       - ".github/workflows/physical-quality-evidence-test.yml"
@@ -18,6 +20,8 @@ on:
       - "PHYSICAL-ACCEPTANCE.md"
       - "tools/validate-physical-observations.py"
       - "tools/create-physical-observation-template.py"
+      - "tools/update-physical-session.py"
+      - "tests/test_physical_session_updater.py"
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
       - ".github/workflows/physical-quality-evidence-test.yml"
@@ -51,9 +55,11 @@ jobs:
         run: |
           python3 -m py_compile \
             tools/validate-physical-observations.py \
-            tools/create-physical-observation-template.py \\\n            tools/update-physical-session.py
+            tools/create-physical-observation-template.py \
+            tools/update-physical-session.py
 
       - name: Physical quality evidence regressions
         run: |
           python3 -m unittest discover -s tests -p 'test_physical_observation_validator.py'
           python3 -m unittest discover -s tests -p 'test_physical_observation_template.py'
+          python3 -m unittest discover -s tests -p 'test_physical_session_updater.py'
