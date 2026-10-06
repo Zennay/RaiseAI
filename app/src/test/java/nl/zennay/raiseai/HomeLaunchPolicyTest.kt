@@ -5,10 +5,14 @@ import org.junit.Test
 
 class HomeLaunchPolicyTest {
     @Test
-    fun installedAppWinsOverStoreFallbacks() {
+    fun allAvailableRoutesKeepStrongestFirst() {
         assertEquals(
-            HomeLaunchTarget.INSTALLED_APP,
-            HomeLaunchPolicy.choose(
+            listOf(
+                HomeLaunchTarget.INSTALLED_APP,
+                HomeLaunchTarget.PLAY_STORE,
+                HomeLaunchTarget.WEB_STORE
+            ),
+            HomeLaunchPolicy.orderedAvailableTargets(
                 installedAppAvailable = true,
                 playStoreAvailable = true,
                 webStoreAvailable = true
@@ -17,10 +21,13 @@ class HomeLaunchPolicyTest {
     }
 
     @Test
-    fun playStoreIsPreferredWhenHomeIsNotInstalled() {
+    fun storeFallbacksRemainAvailableWhenHomeIsNotInstalled() {
         assertEquals(
-            HomeLaunchTarget.PLAY_STORE,
-            HomeLaunchPolicy.choose(
+            listOf(
+                HomeLaunchTarget.PLAY_STORE,
+                HomeLaunchTarget.WEB_STORE
+            ),
+            HomeLaunchPolicy.orderedAvailableTargets(
                 installedAppAvailable = false,
                 playStoreAvailable = true,
                 webStoreAvailable = true
@@ -29,10 +36,10 @@ class HomeLaunchPolicyTest {
     }
 
     @Test
-    fun webStoreIsUsedWhenWearStoreSchemeIsUnavailable() {
+    fun webStoreSurvivesMissingWearStoreScheme() {
         assertEquals(
-            HomeLaunchTarget.WEB_STORE,
-            HomeLaunchPolicy.choose(
+            listOf(HomeLaunchTarget.WEB_STORE),
+            HomeLaunchPolicy.orderedAvailableTargets(
                 installedAppAvailable = false,
                 playStoreAvailable = false,
                 webStoreAvailable = true
@@ -43,8 +50,8 @@ class HomeLaunchPolicyTest {
     @Test
     fun noResolvableTargetFailsClosed() {
         assertEquals(
-            HomeLaunchTarget.UNAVAILABLE,
-            HomeLaunchPolicy.choose(
+            emptyList<HomeLaunchTarget>(),
+            HomeLaunchPolicy.orderedAvailableTargets(
                 installedAppAvailable = false,
                 playStoreAvailable = false,
                 webStoreAvailable = false
