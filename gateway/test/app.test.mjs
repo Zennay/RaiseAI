@@ -244,6 +244,84 @@ test("malformed execution results fail closed as upstream errors", async () => {
   }
 });
 
+test("execution results enforce bounded public response fields", async () => {
+  const boundaryProvider = "p".repeat(256);
+  const boundaryModel = "m".repeat(256);
+  const boundaryAnswer = "a".repeat(4096);
+
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body: JSON.stringify({ text: "Wat is twee plus twee?" })
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.execution.provider.length, 256);
+    assert.equal(body.execution.model.length, 256);
+    assert.equal(body.answer.length, 4096);
+  }, {
+    execute: async () => ({
+      enabled: true,
+      provider: boundaryProvider,
+      model: boundaryModel,
+      answer: boundaryAnswer
+    })
+  });
+
+  const oversizedResults = [
+    {
+      enabled: true,
+      provider: "p".repeat(257),
+      model: "model",
+      answer: "ok"
+    },
+    {
+      enabled: true,
+      provider: "provider",
+      model: "m".repeat(257),
+      answer: "ok"
+    },
+    {
+      enabled: false,
+      provider: "provider",
+      reason: "r".repeat(257),
+      answer: "fallback"
+    },
+    {
+      enabled: true,
+      provider: "provider",
+      model: "model",
+      answer: "a".repeat(4097)
+    }
+  ];
+
+  for (const executionResult of oversizedResults) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Wat is twee plus twee?" })
+      });
+
+      assert.equal(res.status, 502);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+      assert.equal("execution" in body, false);
+      assert.equal("answer" in body, false);
+    }, {
+      execute: async () => executionResult
+    });
+  }
+});
+
 test("enabled AI execution without an answer fails closed", async () => {
   for (const routeText of [
     "Wat is twee plus twee?",

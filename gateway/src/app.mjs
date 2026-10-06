@@ -3,6 +3,8 @@ import { classifyIntent } from "./router.mjs";
 
 const MAX_BODY = 16 * 1024;
 const MAX_TEXT = 4000;
+const MAX_EXECUTION_TOKEN_CHARS = 256;
+const MAX_ANSWER_TEXT_CHARS = 4096;
 const REQUESTS_PER_MINUTE = 120;
 const MAX_RATE_LIMIT_BUCKETS = 1024;
 
@@ -38,6 +40,7 @@ function isCanonicalExecutionToken(value) {
   return (
     typeof value === "string" &&
     value.length > 0 &&
+    value.length <= MAX_EXECUTION_TOKEN_CHARS &&
     !/[\s\u0000-\u001f\u007f]/u.test(value)
   );
 }
@@ -87,7 +90,10 @@ function normalizeExecutionResult(result) {
     throw err;
   }
 
-  if (typeof result.answer === "string" && !result.answer.trim()) {
+  if (
+    typeof result.answer === "string" &&
+    (!result.answer.trim() || result.answer.length > MAX_ANSWER_TEXT_CHARS)
+  ) {
     const err = new Error("invalid_execution_result");
     err.statusCode = 502;
     throw err;
