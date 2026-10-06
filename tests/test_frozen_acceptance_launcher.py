@@ -194,6 +194,8 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
 
     def run_launcher(self, extra_env=None, args=None):
         env = os.environ.copy()
+        env.pop("ANDROID_SDK_ROOT", None)
+        env.pop("ANDROID_HOME", None)
         env["PATH"] = f"{self.bin}:{env['PATH']}"
         env["FAKE_HANDOFF_LOG"] = str(self.log)
         env["FAKE_FETCH_MARKER"] = str(self.fetch_marker)
@@ -320,6 +322,8 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
     ):
         adb_started = self.root / "adb-started"
         env = os.environ.copy()
+        env.pop("ANDROID_SDK_ROOT", None)
+        env.pop("ANDROID_HOME", None)
         env["PATH"] = f"{self.bin}:{env['PATH']}"
         env["FAKE_HANDOFF_LOG"] = str(self.log)
         env["FAKE_FETCH_MARKER"] = str(self.fetch_marker)
