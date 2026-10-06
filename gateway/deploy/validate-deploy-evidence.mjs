@@ -13,6 +13,40 @@ function push(errors, condition, message) {
   if (!condition) errors.push(message);
 }
 
+function isHex(value, length) {
+  return new RegExp(`^[0-9a-f]{${length}}#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const SUCCESS = "success";
+
+function text(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+, "i").test(text(value));
+}
+
+function isPositiveInteger(value) {
+  return Number.isInteger(value) && value > 0;
+}
+
+function payloadAttestationOk(report) {
+  const sourceDigest = text(report?.source_digest);
+  const installedDigest = text(report?.installed_digest);
+  const sourceFileCount = report?.source_file_count;
+  const installedFileCount = report?.installed_file_count;
+  return (
+    report?.outcome === SUCCESS &&
+    report?.ok === true &&
+    isHex(sourceDigest, 64) &&
+    installedDigest === sourceDigest &&
+    isPositiveInteger(sourceFileCount) &&
+    installedFileCount === sourceFileCount
+  );
+}
+
 function runtimeAttestationOk(report) {
   const checks = report?.checks ?? {};
   return (
@@ -71,16 +105,33 @@ export function validateDeployEvidence(
   if (!evidence || typeof evidence !== "object") return errors;
 
   push(errors, evidence.schema_version === 3, "unsupported evidence schema_version");
-  push(errors, Number.isInteger(evidence.workflow?.run_id), "workflow.run_id missing");
-  push(errors, Number.isInteger(evidence.workflow?.run_attempt), "workflow.run_attempt missing");
+  push(errors, isPositiveInteger(evidence.workflow?.run_id), "workflow.run_id must be a positive integer");
+  push(errors, isPositiveInteger(evidence.workflow?.run_attempt), "workflow.run_attempt must be a positive integer");
 
   const commit = text(evidence.workflow?.commit);
+  const attestedExpectedRevision = text(evidence.attestation?.expected_revision);
   const liveRevision = text(evidence.attestation?.live_revision);
-  push(errors, Boolean(commit), "workflow.commit missing");
-  push(errors, Boolean(liveRevision), "attestation.live_revision missing");
+  push(errors, isHex(commit, 40), "workflow.commit must be a 40-character hexadecimal revision");
+  push(
+    errors,
+    isHex(attestedExpectedRevision, 40),
+    "attestation.expected_revision must be a 40-character hexadecimal revision"
+  );
+  push(
+    errors,
+    isHex(liveRevision, 40),
+    "attestation.live_revision must be a 40-character hexadecimal revision"
+  );
+  push(
+    errors,
+    attestedExpectedRevision === commit,
+    "attestation.expected_revision does not match workflow.commit"
+  );
+  push(errors, liveRevision === commit, "live revision does not match workflow commit");
   push(errors, evidence.attestation?.exact_revision_match === true, "exact revision match not proven");
 
   if (expected) {
+    push(errors, isHex(expected, 40), "expected revision must be a 40-character hexadecimal revision");
     push(errors, commit === expected, "workflow.commit does not match expected revision");
     push(errors, liveRevision === expected, "live revision does not match expected revision");
   }
@@ -92,10 +143,7 @@ export function validateDeployEvidence(
   push(errors, verification.deploy?.outcome === SUCCESS, "deploy step did not succeed");
   push(
     errors,
-    verification.initial_payload?.outcome === SUCCESS &&
-      verification.initial_payload?.ok === true &&
-      verification.initial_payload?.source_digest &&
-      verification.initial_payload?.source_digest === verification.initial_payload?.installed_digest,
+    payloadAttestationOk(verification.initial_payload),
     "initial payload attestation did not succeed"
   );
   push(
@@ -120,10 +168,7 @@ export function validateDeployEvidence(
   );
   push(
     errors,
-    verification.repeat_payload?.outcome === SUCCESS &&
-      verification.repeat_payload?.ok === true &&
-      verification.repeat_payload?.source_digest &&
-      verification.repeat_payload?.source_digest === verification.repeat_payload?.installed_digest,
+    payloadAttestationOk(verification.repeat_payload),
     "repeat payload attestation did not succeed"
   );
   push(
