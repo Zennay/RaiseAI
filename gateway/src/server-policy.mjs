@@ -3,6 +3,23 @@ import path from "node:path";
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
 
+const SERVER_RUNTIME_LIMITS = Object.freeze({
+  requestTimeout: 10_000,
+  headersTimeout: 5_000,
+  keepAliveTimeout: 5_000,
+  maxHeadersCount: 64,
+  maxRequestsPerSocket: 100
+});
+
+export function applyServerRuntimeLimits(server) {
+  if (server === null || typeof server !== "object") {
+    throw new Error("server must be an HTTP(S) server object");
+  }
+
+  Object.assign(server, SERVER_RUNTIME_LIMITS);
+  return server;
+}
+
 function isLoopbackHost(host) {
   const normalized = host.toLowerCase();
   if (normalized === "localhost" || normalized === "::1") return true;
