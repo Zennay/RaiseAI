@@ -295,7 +295,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                         latencyMs = latencyMs,
                         response = response
                     )
-                    mainHandler.post {
+                    postToUiIfActive {
                         val backgroundAction =
                             response.executionEnabled &&
                                 response.answer == null &&
@@ -329,11 +329,19 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                         latencyMs = latencyMs,
                         error = error
                     )
-                    mainHandler.post {
+                    postToUiIfActive {
                         showError("VPS niet bereikbaar")
                         detailText.text = error.message ?: "Onbekende netwerkfout"
                     }
                 }
+        }
+    }
+
+    private fun postToUiIfActive(block: () -> Unit) {
+        mainHandler.post {
+            if (!isFinishing && !isDestroyed) {
+                block()
+            }
         }
     }
 
