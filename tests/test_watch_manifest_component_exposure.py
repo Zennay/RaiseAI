@@ -86,6 +86,65 @@ class WatchManifestComponentExposureTest(unittest.TestCase):
             },
         )
 
+    def test_manifest_permission_surface_is_pinned(self):
+        permissions = {
+            attr(node, "name")
+            for node in self.root.findall("uses-permission")
+        }
+        self.assertEqual(
+            permissions,
+            {
+                "android.permission.FOREGROUND_SERVICE",
+                "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+                "android.permission.INTERNET",
+                "android.permission.ACCESS_NETWORK_STATE",
+                "android.permission.RECORD_AUDIO",
+                "android.permission.POST_NOTIFICATIONS",
+                "android.permission.VIBRATE",
+                "android.permission.RECEIVE_BOOT_COMPLETED",
+                "android.permission.PACKAGE_USAGE_STATS",
+                "android.permission.SYSTEM_ALERT_WINDOW",
+            },
+        )
+        self.assertNotIn("android.permission.QUERY_ALL_PACKAGES", permissions)
+        self.assertNotIn("android.permission.READ_EXTERNAL_STORAGE", permissions)
+        self.assertNotIn("android.permission.WRITE_EXTERNAL_STORAGE", permissions)
+
+    def test_required_hardware_surface_stays_watch_specific(self):
+        features = {
+            attr(node, "name"): attr(node, "required")
+            for node in self.root.findall("uses-feature")
+        }
+        self.assertEqual(
+            features,
+            {
+                "android.hardware.type.watch": "true",
+                "android.hardware.sensor.accelerometer": "true",
+            },
+        )
+
+    def test_package_visibility_queries_are_narrow(self):
+        queries = self.root.find("queries")
+        self.assertIsNotNone(queries)
+        packages = {
+            attr(node, "name")
+            for node in queries.findall("package")
+        }
+        self.assertEqual(
+            packages,
+            {
+                "com.google.android.wearable.assistant",
+                "com.google.android.apps.chromecast.app",
+                "com.sec.android.app.sbrowser",
+            },
+        )
+        actions = {
+            attr(action, "name")
+            for intent_node in queries.findall("intent")
+            for action in intent_node.findall("action")
+        }
+        self.assertEqual(actions, {"android.intent.action.TTS_SERVICE"})
+
     def test_manifest_does_not_opt_into_cleartext(self):
         self.assertNotEqual(attr(self.application, "usesCleartextTraffic"), "true")
 
