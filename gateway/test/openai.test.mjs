@@ -12,7 +12,7 @@ function responseHeaders(contentType = "application/json") {
 
 function fakeResponse(answer, calls) {
   return async (url, options) => {
-    calls.push({ url, request: JSON.parse(options.body) });
+    calls.push({ url, request: JSON.parse(options.body), signal: options.signal });
     return {
       ok: true,
       status: 200,
@@ -41,6 +41,7 @@ test("quick AI uses nano by default", async () => {
   assert.equal(result.answer, "kort antwoord");
   assert.equal(result.model, "gpt-5.4-nano");
   assert.equal(calls[0].request.model, "gpt-5.4-nano");
+  assert.ok(calls[0].signal instanceof AbortSignal);
 });
 
 test("deep AI uses mini", async () => {
