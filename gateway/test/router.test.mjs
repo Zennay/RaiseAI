@@ -137,6 +137,20 @@ test("first-person informational home prompts never actuate devices", () => {
   assert.equal(classifyIntent("Ik wil de verwarming aan").route, "smart_home");
 });
 
+test("negated home prompts never actuate devices", () => {
+  for (const text of [
+    "Zet de lamp niet uit",
+    "Zet de verwarming niet aan",
+    "Stop de speaker niet",
+    "Doe de tv niet uit"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "smart_home", text);
+  }
+
+  assert.equal(classifyIntent("Zet de lamp uit").route, "smart_home");
+  assert.equal(classifyIntent("Stop de speaker").route, "smart_home");
+});
+
 test("routes freshness-sensitive questions to search", () => {
   assert.equal(classifyIntent("Wat is het laatste nieuws over OpenAI vandaag?").route, "current_info");
 });
