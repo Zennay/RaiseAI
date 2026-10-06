@@ -71,7 +71,7 @@ def extract_verified_archive(
             f"expected {expected_sha256}, got {actual}"
         )
 
-    if output_dir.exists():
+    if os.path.lexists(output_dir):
         raise HandoffError(f"Output already exists; refusing to overwrite: {output_dir}")
 
     output_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -111,7 +111,12 @@ def extract_verified_archive(
         launcher = stage / "start-physical-handoff.command"
         launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
 
-        output_dir.mkdir()
+        try:
+            output_dir.mkdir()
+        except FileExistsError as exc:
+            raise HandoffError(
+                f"Output already exists; refusing to overwrite: {output_dir}"
+            ) from exc
         for child in stage.iterdir():
             child.rename(output_dir / child.name)
         stage.rmdir()
@@ -167,7 +172,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    output_dir = args.output.expanduser().resolve()
+    output_dir = args.output.expanduser().absolute()
 
     if args.archive:
         archive = args.archive.expanduser().resolve()
