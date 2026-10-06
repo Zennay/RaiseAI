@@ -64,6 +64,21 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
             second = generator.main([str(session_path)])
             self.assertEqual(second, 1)
 
+    def test_cli_refuses_broken_symlink_without_creating_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session_path = root / "session.json"
+            output = root / "operator-observations.json"
+            target = root / "unexpected-target.json"
+            session_path.write_text(json.dumps(session_payload()), encoding="utf-8")
+            output.symlink_to(target)
+
+            code = generator.main([str(session_path)])
+
+            self.assertEqual(code, 1)
+            self.assertTrue(output.is_symlink())
+            self.assertFalse(target.exists())
+
     def test_normalizes_uppercase_hashes(self):
         payload = generator.build_template(
             session_payload(source_revision=REVISION.upper(), apk_sha256=APK.upper()),
