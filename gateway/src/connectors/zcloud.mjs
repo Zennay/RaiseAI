@@ -1,5 +1,7 @@
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 const VALID_DESIRED_STATES = new Set(["running", "paused", "draining"]);
+const PROJECT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
 
 function normalize(value) {
   return String(value ?? "")
@@ -88,8 +90,7 @@ function groupTargets(payload) {
     }
     if (
       typeof target.base_project_id !== "string" ||
-      !target.base_project_id ||
-      target.base_project_id.trim() !== target.base_project_id ||
+      !PROJECT_ID.test(target.base_project_id) ||
       typeof target.project_id !== "string" ||
       target.project_id !== workerKey ||
       !Number.isSafeInteger(target.worker_slot) ||
@@ -109,7 +110,15 @@ function groupTargets(payload) {
     ) {
       throw new Error("zcloud_targets_invalid");
     }
-    if (target.name !== undefined && target.name !== null && typeof target.name !== "string") {
+    if (
+      target.name !== undefined &&
+      target.name !== null &&
+      (
+        typeof target.name !== "string" ||
+        target.name !== target.name.trim() ||
+        CONTROL_CHARS.test(target.name)
+      )
+    ) {
       throw new Error("zcloud_targets_invalid");
     }
 

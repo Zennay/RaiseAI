@@ -366,6 +366,70 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
   }
 });
 
+test("zCloud target identities reject non-canonical IDs and unsafe display names", async () => {
+  const invalidTargets = [
+    {
+      key: "FTMO::w1",
+      target: {
+        project_id: "FTMO::w1",
+        base_project_id: "FTMO",
+        worker_slot: 1,
+        worker_count: 1,
+        name: "FTMO · worker 1/1",
+        desired_state: "running",
+        active: true
+      }
+    },
+    {
+      key: "ftmo/ops::w1",
+      target: {
+        project_id: "ftmo/ops::w1",
+        base_project_id: "ftmo/ops",
+        worker_slot: 1,
+        worker_count: 1,
+        name: "FTMO · worker 1/1",
+        desired_state: "running",
+        active: true
+      }
+    },
+    {
+      key: "ftmo::w1",
+      target: {
+        project_id: "ftmo::w1",
+        base_project_id: "ftmo",
+        worker_slot: 1,
+        worker_count: 1,
+        name: " FTMO · worker 1/1",
+        desired_state: "running",
+        active: true
+      }
+    },
+    {
+      key: "ftmo::w1",
+      target: {
+        project_id: "ftmo::w1",
+        base_project_id: "ftmo",
+        worker_slot: 1,
+        worker_count: 1,
+        name: "FTMO\nspoofed",
+        desired_state: "running",
+        active: true
+      }
+    }
+  ];
+
+  for (const { key, target } of invalidTargets) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async () => response(200, { projects: { [key]: target } })
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_targets_invalid");
+  }
+});
+
 test("zCloud target key, project_id, base_project_id and worker_slot must agree", async () => {
   const invalidSnapshots = [
     {
