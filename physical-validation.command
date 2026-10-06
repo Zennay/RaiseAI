@@ -95,26 +95,14 @@ resolve_session() {
 json_get() {
   local file="$1"
   local key="$2"
-  python3 - "$file" "$key" <<'PY'
-import json
-import sys
-path, key = sys.argv[1], sys.argv[2]
-data = json.load(open(path, encoding="utf-8"))
-value = data.get(key)
-if value is None:
-    raise SystemExit(2)
-if isinstance(value, bool):
-    print("true" if value else "false")
-else:
-    print(value)
-PY
+  python3 tools/update-physical-session.py "$file" --get "$key"
 }
 
 json_set() {
   local file="$1"
   local key="$2"
   local value="$3"
-  python3 tools/update-physical-session.py "$file" "$key" "$value"
+  python3 tools/update-physical-session.py "$file" --set "$key" "$value"
 }
 
 prepare_session() {
