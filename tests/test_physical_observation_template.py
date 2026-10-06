@@ -52,6 +52,20 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
         with self.assertRaisesRegex(generator.TemplateError, "apk_sha256"):
             generator.build_template(session)
 
+    def test_rejects_unsupported_session_schema(self):
+        with self.assertRaisesRegex(generator.TemplateError, "session schema_version must equal 1"):
+            generator.build_template(
+                session_payload(schema_version=2),
+                recorded_at_utc="2026-10-06T05:45:00Z",
+            )
+
+    def test_rejects_boolean_session_schema(self):
+        with self.assertRaisesRegex(generator.TemplateError, "session schema_version must equal 1"):
+            generator.build_template(
+                session_payload(schema_version=True),
+                recorded_at_utc="2026-10-06T05:45:00Z",
+            )
+
     def test_cli_creates_file_beside_session_and_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
