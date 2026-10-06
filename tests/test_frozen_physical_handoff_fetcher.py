@@ -1,7 +1,10 @@
 import hashlib
 import importlib.util
+import os
+import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 from pathlib import Path
 
@@ -97,6 +100,47 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
                 )
 
             self.assertFalse(output.exists())
+
+    def test_refuses_dangling_output_symlink_without_creating_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+            target = root / "unexpected-target"
+            output.symlink_to(target, target_is_directory=True)
+
+            with self.assertRaisesRegex(MODULE.HandoffError, "refusing to overwrite"):
+                MODULE.extract_verified_archive(
+                    archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertTrue(output.is_symlink())
+            self.assertFalse(target.exists())
+
+    def test_main_preserves_output_path_without_following_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "handoff.zip"
+            archive.write_bytes(b"placeholder")
+            output = root / "verified"
+            target = root / "unexpected-target"
+            output.symlink_to(target, target_is_directory=True)
+
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(MODULE_PATH), "--archive", str(archive), "--output", str(output)],
+            ), mock.patch.object(MODULE, "extract_verified_archive") as extract:
+                code = MODULE.main()
+
+            self.assertEqual(code, 0)
+            extract.assert_called_once()
+            passed_output = extract.call_args.args[1]
+            self.assertEqual(os.fspath(passed_output), os.fspath(output.absolute()))
+            self.assertNotEqual(os.fspath(passed_output), os.fspath(target.absolute()))
 
     def test_refuses_to_overwrite_existing_output(self):
         with tempfile.TemporaryDirectory() as tmp:
