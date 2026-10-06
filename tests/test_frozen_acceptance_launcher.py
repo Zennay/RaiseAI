@@ -49,6 +49,14 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 marker = os.environ.get("FAKE_FETCH_MARKER")
                 if marker:
                     Path(marker).write_text("called\n", encoding="utf-8")
+                mutate_profile = os.environ.get("FAKE_MUTATE_PROFILE")
+                if mutate_profile:
+                    Path(mutate_profile).write_text(
+                        "url=https://attacker.invalid\n"
+                        "token=changed-after-snapshot\n"
+                        "spki_sha256=" + ("b" * 64) + "\n",
+                        encoding="utf-8",
+                    )
 
                 launcher = output / "start-physical-handoff.command"
                 launcher.write_text(
@@ -97,8 +105,16 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                     ;;
                 esac
                 [ -f "${1:-}" ] || {
-                  echo "absolute gateway profile missing"
+                  echo "gateway profile snapshot missing"
                   exit 78
+                }
+                grep -q '^url=https://raise.example.invalid$' "$1" || {
+                  echo "gateway profile snapshot changed"
+                  exit 79
+                }
+                grep -q '^token=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx$' "$1" || {
+                  echo "gateway profile snapshot token changed"
+                  exit 80
                 }
                 printf 'run:%s:%s:%s:%s\n' \
                   "$ANDROID_SERIAL" "$ANDROID_SDK_ROOT" "$RAISE_RESTORE_DIR" "$1" \
@@ -201,7 +217,34 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertTrue(lines[0].startswith("verify:"))
         self.assertTrue(lines[1].startswith("run:watch-1:"))
-        self.assertTrue(lines[1].endswith(f":{self.profile.resolve()}"))
+        passed_profile = lines[1].rsplit(":", 1)[1]
+        self.assertNotEqual(passed_profile, str(self.profile.resolve()))
+        self.assertTrue(passed_profile.endswith("/watch-gateway.properties"))
+
+    def test_snapshots_gateway_profile_before_fetch_side_effects(self):
+        result = self.run_launcher(
+            {"FAKE_MUTATE_PROFILE": str(self.profile)}
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("attacker.invalid", self.profile.read_text(encoding="utf-8"))
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[1].startswith("run:watch-1:"))
+
+    def test_rejects_symlink_gateway_profile_before_fetch(self):
+        linked_profile = self.root / "linked-watch-gateway.properties"
+        linked_profile.symlink_to(self.profile)
+
+        result = self.run_launcher(args=[str(linked_profile)])
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Gateway profile must be a regular non-symlink file",
+            result.stdout,
+        )
+        self.assertFalse(self.fetch_marker.exists())
+        self.assertFalse(self.log.exists())
 
     def test_preflight_only_verifies_handoff_without_starting_session(self):
         result = self.run_launcher(
