@@ -66,6 +66,10 @@ function aliasesFor(project) {
 
   if (base === "raiseai") aliases.add("raise ai");
   if (base === "ulab") aliases.add("u lab");
+  if (base === "lightup") aliases.add("light up");
+  if (base === "cloud") aliases.add("z cloud");
+  if (base === "zssh") aliases.add("z ssh");
+  if (base === "zguard") aliases.add("z guard");
 
   return [...aliases].sort((a, b) => b.length - a.length);
 }
