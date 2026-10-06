@@ -188,6 +188,6 @@ test("zCloud rejection details stay secret-safe", async () => {
     assert.equal(result.enabled, false);
     assert.equal(result.reason, "zcloud_command_rejected");
     assert.equal(result.answer, "zCloud heeft de opdracht niet geaccepteerd.");
-    assert.equal(result.answer.includes(error.trim()), false);
+    if (error.trim()) assert.equal(result.answer.includes(error.trim()), false);
   }
 });
