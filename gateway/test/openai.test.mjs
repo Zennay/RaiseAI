@@ -2,12 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createOpenAIExecutor } from "../src/providers/openai.mjs";
 
+function responseHeaders(contentType = "application/json") {
+  return {
+    get(name) {
+      return String(name).toLowerCase() === "content-type" ? contentType : null;
+    }
+  };
+}
+
 function fakeResponse(answer, calls) {
   return async (url, options) => {
     calls.push({ url, request: JSON.parse(options.body) });
     return {
       ok: true,
       status: 200,
+      headers: responseHeaders(),
       async json() {
         return {
           output: [{
@@ -140,6 +149,7 @@ test("OpenAI response preserves every non-empty output_text block", async () => 
     fetchImpl: async () => ({
       ok: true,
       status: 200,
+      headers: responseHeaders(),
       async json() {
         return {
           output: [
@@ -179,6 +189,7 @@ test("OpenAI refusal content is returned when no normal output_text exists", asy
     fetchImpl: async () => ({
       ok: true,
       status: 200,
+      headers: responseHeaders(),
       async json() {
         return {
           output: [{
@@ -209,6 +220,7 @@ test("normal OpenAI output_text takes precedence over refusal content", async ()
     fetchImpl: async () => ({
       ok: true,
       status: 200,
+      headers: responseHeaders(),
       async json() {
         return {
           output: [{
@@ -244,6 +256,7 @@ test("malformed successful OpenAI response shapes fail as upstream 502 errors", 
       fetchImpl: async () => ({
         ok: true,
         status: 200,
+        headers: responseHeaders(),
         async json() {
           return body;
         }
@@ -261,6 +274,85 @@ test("malformed successful OpenAI response shapes fail as upstream 502 errors", 
   }
 });
 
+
+test("successful OpenAI responses require a JSON media type", async () => {
+  for (const contentType of [null, "", "text/plain", "text/html; charset=utf-8"]) {
+    let jsonCalls = 0;
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: responseHeaders(contentType),
+        async json() {
+          jsonCalls += 1;
+          return {
+            output: [{
+              content: [{ type: "output_text", text: "must not be trusted" }]
+            }]
+          };
+        }
+      })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+    assert.equal(jsonCalls, 0);
+  }
+});
+
+test("OpenAI accepts case-insensitive JSON media types with parameters", async () => {
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: responseHeaders("Application/JSON; charset=UTF-8"),
+      async json() {
+        return {
+          output: [{
+            content: [{ type: "output_text", text: "geldig antwoord" }]
+          }]
+        };
+      }
+    })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(result.answer, "geldig antwoord");
+});
+
+test("non-JSON OpenAI HTTP failures retain their HTTP failure classification", async () => {
+  let jsonCalls = 0;
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: false,
+      status: 429,
+      headers: responseHeaders("text/html"),
+      async json() {
+        jsonCalls += 1;
+        throw new Error("must not parse non-JSON error body");
+      }
+    })
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openai_http_429");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+  assert.equal(jsonCalls, 0);
+});
 
 test("OpenAI transport failure is classified as upstream 502", async () => {
   const execute = createOpenAIExecutor({
