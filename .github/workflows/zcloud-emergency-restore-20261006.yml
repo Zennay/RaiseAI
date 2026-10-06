@@ -159,8 +159,15 @@ jobs:
           fi
           restored=0
           for unit in "${units[@]}"; do
+            state="$(systemctl is-active "$unit" 2>/dev/null || true)"
+            echo "ZCLOUD_RUNNER_PRE unit=$unit state=$state"
+            if [[ "$state" == "active" ]]; then
+              echo "PRESERVE_ACTIVE_ZCLOUD_RUNNER=$unit"
+              restored=1
+              continue
+            fi
             echo "RESTORE_ZCLOUD_RUNNER=$unit"
-            if sudo -n systemctl reset-failed "$unit" >/dev/null 2>&1 || true; then :; fi
+            sudo -n systemctl reset-failed "$unit" >/dev/null 2>&1 || true
             if sudo -n systemctl restart "$unit"; then
               sudo -n systemctl is-active --quiet "$unit"
               restored=1
@@ -178,15 +185,23 @@ jobs:
 
           base="http://127.0.0.1:8765"
 
-          def call(method,path,payload=None):
-              data=None
-              headers={"User-Agent":"raiseai-zcloud-emergency-restore/1"}
-              if payload is not None:
-                  data=json.dumps(payload).encode("utf-8")
-                  headers["Content-Type"]="application/json"
-              req=urllib.request.Request(base+path,data=data,headers=headers,method=method)
-              with urllib.request.urlopen(req,timeout=20) as response:
-                  return json.load(response)
+          def call(method,path,payload=None,attempts=8):
+              last=None
+              for attempt in range(1,attempts+1):
+                  try:
+                      data=None
+                      headers={"User-Agent":"raiseai-zcloud-emergency-restore/2"}
+                      if payload is not None:
+                          data=json.dumps(payload).encode("utf-8")
+                          headers["Content-Type"]="application/json"
+                      req=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+                      with urllib.request.urlopen(req,timeout=20) as response:
+                          return json.load(response)
+                  except Exception as exc:
+                      last=exc
+                      print(f"ZCLOUD_API_RETRY method={method} path={path} attempt={attempt} error={exc!r}",flush=True)
+                      time.sleep(min(2*attempt,8))
+              raise last
 
           current=(call("GET","/api/dynamic-workers").get("dynamic_workers") or {})
           desired={
@@ -231,11 +246,37 @@ jobs:
               conn.close()
           print("WORKER_DESIRED_STATE_REPAIRED="+json.dumps(repaired,sort_keys=True))
 
-          pushed=call("POST","/api/dynamic-workers/force-push",{})
+          pushed=None
+          for push_attempt in range(1,6):
+              pushed=call("POST","/api/dynamic-workers/force-push",{})
+              refused=[r for r in (pushed.get("results") or []) if not r.get("queued")]
+              if pushed.get("ok") and not refused:
+                  break
+              print("WORKER_FORCE_PUSH_RETRY="+json.dumps({
+                  "attempt":push_attempt,
+                  "response":pushed,
+              },sort_keys=True),flush=True)
+              conn=sqlite3.connect(db, timeout=15)
+              try:
+                  conn.execute("PRAGMA busy_timeout=15000")
+                  conn.execute("BEGIN IMMEDIATE")
+                  for item in allocation:
+                      project=str(item.get("project_id") or "").strip()
+                      slot=int(item.get("worker_slot") or 1)
+                      if project:
+                          conn.execute(
+                              "UPDATE runner_workers SET desired_state='running' WHERE project_id=? AND worker_slot=?",
+                              (project,slot),
+                          )
+                  conn.commit()
+              finally:
+                  conn.close()
+              time.sleep(2)
+
           print("WORKER_CAPACITY_RECONCILED="+json.dumps(reconciled,sort_keys=True))
           print("WORKERS_FORCE_PUSHED="+json.dumps(pushed,sort_keys=True))
           print("WORKER_ALLOCATION="+json.dumps(allocation,sort_keys=True))
-          if not pushed.get("ok"):
+          if not pushed or not pushed.get("ok"):
               raise SystemExit("worker force-push failed: "+json.dumps(pushed,sort_keys=True))
           refused=[r for r in (pushed.get("results") or []) if not r.get("queued")]
           if refused:
@@ -278,7 +319,7 @@ jobs:
 
   verify-public:
     needs: recover
-    if: always()
+    if: needs.recover.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
