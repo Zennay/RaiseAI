@@ -23,6 +23,20 @@ test("home-related status questions never become device commands from nouns alon
   );
 });
 
+test("home state questions never dispatch commands from on/off state words", () => {
+  for (const text of [
+    "Is de verwarming aan?",
+    "Zijn de lampen uit?",
+    "Staat de thermostaat aan?",
+    "Staan de lichten uit?"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "smart_home", text);
+  }
+
+  assert.equal(classifyIntent("verwarming aan").route, "smart_home");
+  assert.equal(classifyIntent("lampen uit").route, "smart_home");
+});
+
 test("routes freshness-sensitive questions to search", () => {
   assert.equal(classifyIntent("Wat is het laatste nieuws over OpenAI vandaag?").route, "current_info");
 });
