@@ -78,18 +78,10 @@ object WatchE2eEvidence {
 
     private fun write(context: Context, payload: JSONObject) {
         val destination = File(context.filesDir, FILE_NAME)
-        val temporary = File(context.filesDir, "$FILE_NAME.tmp")
         val serialized = payload.toString() + "\n"
 
         synchronized(this) {
-            temporary.writeText(serialized, Charsets.UTF_8)
-            if (destination.exists()) {
-                destination.delete()
-            }
-            if (!temporary.renameTo(destination)) {
-                destination.writeText(serialized, Charsets.UTF_8)
-                temporary.delete()
-            }
+            EvidenceFileStore.replace(destination, serialized)
         }
     }
 }
