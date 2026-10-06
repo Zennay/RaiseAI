@@ -11,7 +11,7 @@ export function classifyIntent(rawText) {
   const text = String(rawText ?? "").trim();
   if (!text) throw new TypeError("text is required");
 
-  if (PROJECTS.test(text) && EXECUTION.test(text) && !PROJECT_QUESTION.test(text)) {
+  if (\n    PROJECTS.test(text) &&\n    EXECUTION.test(text) &&\n    !PROJECT_QUESTION.test(text) &&\n    !PROJECT_EXPLANATION.test(text)\n  ) {
     return {
       route: "zcloud_task",
       target: "zcloud.worker",
