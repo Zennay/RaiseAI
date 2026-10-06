@@ -233,15 +233,11 @@ export function createZCloudExecutor({
       );
 
       if (!response.ok) {
-        const errorMessage =
-          typeof body?.error === "string" && body.error.trim()
-            ? body.error.trim()
-            : "zCloud heeft de opdracht niet geaccepteerd.";
         return {
           enabled: false,
           provider: "zcloud",
           reason: "zcloud_command_rejected",
-          answer: errorMessage
+          answer: "zCloud heeft de opdracht niet geaccepteerd."
         };
       }
 
