@@ -63,6 +63,7 @@ class GestureMonitorService : Service(), SensorEventListener {
         stateSinceElapsedMs = SystemClock.elapsedRealtime()
 
         if (accelerometer == null) {
+            CalibrationStore.setMonitoringEnabled(this, false)
             Log.e(TAG, "No accelerometer found; stopping service")
             stopSelf()
             return
