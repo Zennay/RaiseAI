@@ -28,6 +28,21 @@ def _require(condition: bool, message: str) -> None:
         raise TemplateError(message)
 
 
+def _parse_timestamp(value: Any, field: str) -> dt.datetime:
+    _require(isinstance(value, str) and value.strip(), f"{field} must be a non-empty string")
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = dt.datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise TemplateError(f"{field} must be ISO-8601") from exc
+    _require(parsed.tzinfo is not None, f"{field} must include a timezone")
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def _format_utc(value: dt.datetime) -> str:
+    return value.astimezone(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[str, Any]:
     _require(isinstance(session, dict), "session root must be a JSON object")
     missing = sorted(REQUIRED_SESSION_KEYS - set(session))
@@ -52,12 +67,19 @@ def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[
         "session apk_sha256 must be a 64-character SHA-256",
     )
 
+    started_at = _parse_timestamp(session["started_at_utc"], "session started_at_utc")
     if recorded_at_utc is None:
-        recorded_at_utc = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        recorded_at = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    else:
+        recorded_at = _parse_timestamp(recorded_at_utc, "recorded_at_utc")
+    _require(
+        recorded_at >= started_at,
+        "recorded_at_utc must not be before the physical session started",
+    )
 
     return {
         "schema_version": 1,
-        "recorded_at_utc": recorded_at_utc,
+        "recorded_at_utc": _format_utc(recorded_at),
         "watch_serial": watch_serial,
         "app_version": app_version,
         "source_revision": source_revision.lower(),
