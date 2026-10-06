@@ -676,6 +676,34 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
   }
 });
 
+test("sparse large worker counts fail closed without range enumeration", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      return response(200, {
+        projects: {
+          "ftmo::w1": {
+            project_id: "ftmo::w1",
+            base_project_id: "ftmo",
+            worker_slot: 1,
+            worker_count: 1_000_000,
+            name: "FTMO · worker 1/1000000",
+            desired_state: "running",
+            active: true
+          }
+        }
+      });
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_targets_invalid");
+  assert.equal(calls.length, 1);
+});
+
 test("ambiguous project aliases never dispatch a command", async () => {
   const calls = [];
   const execute = createZCloudExecutor({

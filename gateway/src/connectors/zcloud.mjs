@@ -181,13 +181,11 @@ function groupTargets(payload) {
   }
 
   for (const group of groups.values()) {
+    // Every slot is already proven unique and inside 1..workerCount. If the
+    // cardinality matches workerCount, the set must therefore be complete;
+    // do not linearly scan an untrusted worker_count value.
     if (group.workerSlots.size !== group.workerCount) {
       throw new Error("zcloud_targets_invalid");
-    }
-    for (let slot = 1; slot <= group.workerCount; slot += 1) {
-      if (!group.workerSlots.has(slot)) {
-        throw new Error("zcloud_targets_invalid");
-      }
     }
   }
 
