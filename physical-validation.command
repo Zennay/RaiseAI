@@ -104,6 +104,15 @@ mark_session_gate_passed() {
   python3 tools/update-physical-session.py "$file" --mark-passed "$gate" "$verified_at_utc"
 }
 
+require_new_result_path() {
+  local result="$1"
+  if [ -e "$result" ] || [ -L "$result" ]; then
+    echo "Refusing to reuse physical validation result path: $result" >&2
+    echo "Start a fresh prepared session instead of mixing new evidence into an accepted stage." >&2
+    return 1
+  fi
+}
+
 publish_json_result() {
   local result="$1"
   shift
@@ -343,9 +352,11 @@ verify_e2e() {
   watch_serial="$(json_get "$session/session.json" watch_serial)"
   [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
-
   local diag evidence result
+  result="$session/e2e-result.json"
+  require_new_result_path "$result"
+
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_E2E_EXPECT_APP_VERSION="$version"   RAISE_E2E_EXPECT_SOURCE_REVISION="$revision"     bash ./pull-diagnostics.command
   diag="$(find "$session" -maxdepth 1 -type d -name 'watch-diagnostics-*' -print | sort | tail -n 1)"
   [ -n "$diag" ] || { echo "No diagnostics directory produced"; exit 1; }
   evidence="$diag/watch-e2e-evidence.json"
@@ -355,7 +366,6 @@ verify_e2e() {
     exit 1
   }
 
-  result="$session/e2e-result.json"
   publish_json_result "$result" \
     python3 tools/validate-watch-e2e-evidence.py \
       "$evidence" \
@@ -392,13 +402,14 @@ verify_v1() {
   watch_serial="$(json_get "$session/session.json" watch_serial)"
   [ -n "$watch_serial" ] || { echo "Session is missing the prepared Watch serial."; exit 1; }
 
-  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
-
   local trials result
+  result="$session/v1-result.json"
+  require_new_result_path "$result"
+
+  ANDROID_SERIAL="$watch_serial"   RAISE_OUTPUT_DIR="$session"   RAISE_REQUIRE_V1_TRACE_GATE=1   RAISE_REQUIRE_V1_TRIAL_GATE=1     bash ./pull-watch-data.command
   trials="$(find "$session" -maxdepth 1 -type f -name 'watch-sensor-trials-*.csv' -print | sort | tail -n 1)"
   [ -n "$trials" ] || { echo "No trial evidence was exported"; exit 1; }
 
-  result="$session/v1-result.json"
   publish_json_result "$result" \
     python3 tools/analyze-watch-sensor-trials.py "$trials" \
       --expect-app-version "$version" \
