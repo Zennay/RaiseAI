@@ -63,3 +63,23 @@ test("payload manifest hashes only deploy files and never serializes their conte
   assert.equal(serialized.includes("should-never-appear"), false);
   assert.deepEqual(Object.keys(manifest).sort(), ["digest", "file_count"]);
 });
+
+
+test("payload attestation rejects symlinked installed package metadata", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-payload-"));
+  const source = path.join(root, "source");
+  const installed = path.join(root, "installed");
+  makePayload(source);
+  makePayload(installed);
+
+  fs.unlinkSync(path.join(installed, "package.json"));
+  fs.symlinkSync(
+    path.join(source, "package.json"),
+    path.join(installed, "package.json")
+  );
+
+  assert.throws(
+    () => attestPayload({ sourceRoot: source, installedRoot: installed }),
+    /package\.json must be a regular file/
+  );
+});
