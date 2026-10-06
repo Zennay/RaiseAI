@@ -44,6 +44,20 @@ test("accepts a watch profile bound to gateway token, TLS pin and HTTPS port", (
   });
 });
 
+test("rejects matching tokens that violate the runtime minimum length", () => {
+  const values = maps({ token: "short-token" });
+  const report = attestWatchProfile({
+    ...values,
+    certificateSpki: "a".repeat(64),
+    certificateHostMatch: true,
+    certificateCurrentlyValid: true,
+    profileMode: 0o600
+  });
+
+  assert.equal(report.ok, false);
+  assert.equal(report.checks.token_match, false);
+});
+
 test("rejects stale token or pin without serializing either secret", () => {
   const values = maps({ token: "s".repeat(64), pin: "b".repeat(64) });
   values.envValues.set("RAISE_GATEWAY_TOKEN", "t".repeat(64));
