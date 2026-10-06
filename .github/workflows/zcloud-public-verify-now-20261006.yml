@@ -57,18 +57,25 @@ jobs:
                       r.read(256)
                   with urllib.request.urlopen(base+"/api/status",timeout=20) as r:
                       status=json.load(r)
-                  with urllib.request.urlopen(base+"/api/runner-targets",timeout=20) as r:
-                      targets=json.load(r)
-                  allocation=(targets.get("global_allocation") or {}).get("workers") or []
+                  dynamic=status.get("dynamic_workers") or {}
+                  local_guard=None
+                  try:
+                      urllib.request.urlopen(base+"/api/runner-targets",timeout=10)
+                      local_guard="unexpected-public-access"
+                  except urllib.error.HTTPError as exc:
+                      local_guard=f"http-{exc.code}"
                   evidence={
                       "attempt":attempt,
                       "root_http":root_status,
                       "status_time":status.get("time"),
                       "errors":status.get("errors"),
-                      "allocation_count":len(allocation),
-                      "workers":[w.get("worker_key") for w in allocation],
+                      "allocated_workers":dynamic.get("allocated_workers"),
+                      "chatgpt_count":dynamic.get("chatgpt_count"),
+                      "runner_targets_guard":local_guard,
                   }
-                  if root_status==200 and status.get("time") and len(allocation)==7:
+                  seven=(dynamic.get("allocated_workers")==7 or dynamic.get("chatgpt_count")==7)
+                  guard_ok=(local_guard=="http-403")
+                  if root_status==200 and status.get("time") and seven and guard_ok:
                       ok=True
                       break
               except Exception as exc:
@@ -80,7 +87,7 @@ jobs:
           payload=json.dumps({
               "state":state,
               "context":"zcloud/public-final",
-              "description":f"public zCloud {state}; workers={evidence.get('allocation_count','?')}/7",
+              "description":f"public zCloud {state}; workers={evidence.get('allocated_workers', evidence.get('chatgpt_count','?'))}/7",
               "target_url":f"{os.environ['GITHUB_SERVER_URL']}/{repo}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
           }).encode()
           req=urllib.request.Request(
