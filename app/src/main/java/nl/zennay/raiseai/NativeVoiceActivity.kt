@@ -143,9 +143,19 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
         val recognitionGeneration = recognitionSessions.beginSession()
         recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
-            it.setRecognitionListener(scopedRecognitionListener(recognitionGeneration))
+
+        val nextRecognizer = runCatching {
+            SpeechRecognizer.createSpeechRecognizer(this).also {
+                it.setRecognitionListener(scopedRecognitionListener(recognitionGeneration))
+            }
+        }.getOrElse { error ->
+            recognitionSessions.invalidate(recognitionGeneration)
+            recognizer = null
+            showError("Spraakherkenning kon niet starten")
+            detailText.text = error.message ?: "Android kon de spraakservice niet openen."
+            return
         }
+        recognizer = nextRecognizer
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
@@ -163,7 +173,15 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
         submitted = false
         setState("listening", "Ik luister")
-        recognizer?.startListening(intent)
+        runCatching {
+            nextRecognizer.startListening(intent)
+        }.onFailure { error ->
+            recognitionSessions.invalidate(recognitionGeneration)
+            runCatching { nextRecognizer.destroy() }
+            if (recognizer === nextRecognizer) recognizer = null
+            showError("Spraakherkenning kon niet starten")
+            detailText.text = error.message ?: "Android kon de spraakservice niet starten."
+        }
     }
 
     private fun scopedRecognitionListener(generation: Long): RecognitionListener =
