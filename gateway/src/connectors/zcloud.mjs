@@ -24,7 +24,13 @@ function isLoopbackHost(hostname) {
 }
 
 function normalizeBaseUrl(value) {
-  if (typeof value !== "string" || !value || value.trim() !== value) {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.trim() !== value ||
+    /\s/u.test(value) ||
+    CONTROL_CHARS.test(value)
+  ) {
     throw new Error("zcloud_base_url_invalid");
   }
 
