@@ -136,6 +136,59 @@ test("invalid OpenRouter model config fails closed before provider calls", async
   }
 });
 
+test("OpenRouter response model provenance is normalized or falls back when omitted", async () => {
+  const padded = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      httpResponse(200, {
+        model: "  z-ai/glm-5.3-flash  ",
+        choices: [{ message: { content: "ok" } }]
+      })
+  });
+
+  const paddedResult = await padded({ route: "quick_ai" }, "hoi");
+  assert.equal(paddedResult.model, "z-ai/glm-5.3-flash");
+
+  const omitted = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      httpResponse(200, {
+        choices: [{ message: { content: "ok" } }]
+      })
+  });
+
+  const omittedResult = await omitted({ route: "quick_ai" }, "hoi");
+  assert.equal(omittedResult.model, "z-ai/glm-5.3-flash");
+});
+
+test("malformed OpenRouter response model fails closed", async () => {
+  for (const model of ["", "bad model", 42, {}]) {
+    let calls = 0;
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      retryDelayMs: 0,
+      sleepImpl: async () => {},
+      fetchImpl: async () => {
+        calls += 1;
+        return httpResponse(200, {
+          model,
+          choices: [{ message: { content: "ok" } }]
+        });
+      }
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+    assert.equal(calls, 1);
+  }
+});
+
 test("transient OpenRouter 5xx is retried once and then succeeds", async () => {
   let calls = 0;
   const execute = createOpenRouterExecutor({
