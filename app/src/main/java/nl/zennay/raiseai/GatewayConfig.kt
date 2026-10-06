@@ -25,7 +25,7 @@ object GatewayConfig {
         val baseUrl = GatewayEndpointPolicy.normalize(properties.getProperty("url")) ?: return null
         val token = properties.getProperty("token")?.trim() ?: return null
         val rawPin = properties.getProperty("spki_sha256")?.trim().orEmpty()
-        val pin = if (rawPin.isBlank()) null else PinnedTls.normalizePin(rawPin) ?: return null
+        val pin = PinnedTls.normalizePin(rawPin) ?: return null
 
         if (!GatewayTokenPolicy.isValid(token)) return null
 
