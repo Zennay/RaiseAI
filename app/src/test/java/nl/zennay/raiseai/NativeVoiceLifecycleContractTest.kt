@@ -6,6 +6,37 @@ import org.junit.Test
 
 class NativeVoiceLifecycleContractTest {
     @Test
+    fun asynchronousOutcomeGateRequiresStartedUiAndClosesOnStop() {
+        val source = findSource(
+            "src/main/java/nl/zennay/raiseai/NativeVoiceActivity.kt"
+        ).readText()
+
+        val onStart = source.substring(
+            source.indexOf("override fun onStart()"),
+            source.indexOf("override fun onStop()")
+        )
+        val onStop = source.substring(
+            source.indexOf("override fun onStop()"),
+            source.indexOf("override fun onRequestPermissionsResult")
+        )
+        val postGate = source.substring(
+            source.indexOf("private fun postToUiIfActive"),
+            source.indexOf("private fun setState")
+        )
+
+        assertTrue("onStart must open UI delivery", onStart.contains("isUiStarted = true"))
+        assertTrue("onStop must close UI delivery", onStop.contains("isUiStarted = false"))
+        assertTrue(
+            "async outcomes must be rejected before posting while UI is stopped",
+            postGate.contains("if (!isUiStarted) return")
+        )
+        assertTrue(
+            "async outcomes must be rechecked on the main thread",
+            postGate.contains("if (isUiStarted && !isFinishing && !isDestroyed)")
+        )
+    }
+
+    @Test
     fun asynchronousGatewayOutcomeIsRecordedOnlyInsideActiveUiDelivery() {
         val source = findSource(
             "src/main/java/nl/zennay/raiseai/NativeVoiceActivity.kt"
