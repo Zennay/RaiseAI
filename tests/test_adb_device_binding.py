@@ -574,6 +574,21 @@ exit 2
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_preflight_rejects_bound_phone(self):
+        env = os.environ.copy()
+        env["ANDROID_SDK_ROOT"] = str(self.sdk)
+        env["ANDROID_SERIAL"] = "phone-a"
+        result = subprocess.run(
+            ["bash", str(ROOT / "watch-preflight.command")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing preflight on non-Wear ADB target: phone-a", result.stdout)
+
     def test_preflight_rejects_ambiguous_multiple_watches_without_serial(self):
         env = os.environ.copy()
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
