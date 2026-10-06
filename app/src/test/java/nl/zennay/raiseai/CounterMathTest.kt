@@ -5,6 +5,14 @@ import org.junit.Test
 
 class CounterMathTest {
     @Test
+    fun sanitizesPersistedNegativeCountersOnRead() {
+        assertEquals(0L, CounterMath.nonNegative(-1L))
+        assertEquals(12L, CounterMath.nonNegative(12L))
+        assertEquals(0, CounterMath.nonNegative(-1))
+        assertEquals(12, CounterMath.nonNegative(12))
+    }
+
+    @Test
     fun addsNormalNonNegativeRuntimeCounters() {
         assertEquals(15L, CounterMath.addNonNegative(10L, 5L))
     }
