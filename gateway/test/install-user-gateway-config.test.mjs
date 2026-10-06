@@ -84,8 +84,8 @@ case "\${1:-}" in
 esac
 `
   );
-  writeExecutable(path.join(bin, "systemctl"), "#!/usr/bin/env bash\\nexit 0\\n");
-  writeExecutable(path.join(bin, "node"), "#!/usr/bin/env bash\\nexit 0\\n");
+  writeExecutable(path.join(bin, "systemctl"), "#!/usr/bin/env bash\nexit 0\n");
+  writeExecutable(path.join(bin, "node"), "#!/usr/bin/env bash\nexit 0\n");
 
   try {
     const result = spawnSync("bash", [installer], {
