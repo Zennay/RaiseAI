@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GATEWAY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=token-policy.sh
+source "$SCRIPT_DIR/token-policy.sh"
 PUBLIC_HOST="${RAISE_PUBLIC_HOST:-$(hostname -f)}"
 PORT="${RAISE_PUBLIC_PORT:-8787}"
 DEPLOY_REVISION="${RAISE_DEPLOY_REVISION:-unknown}"
@@ -35,7 +37,7 @@ upsert_env() {
 }
 
 TOKEN="$(awk -F= '/^RAISE_GATEWAY_TOKEN=/{sub(/^[^=]*=/,"");print;exit}' "$ENV_FILE" 2>/dev/null || true)"
-if [ "${#TOKEN}" -lt 32 ]; then
+if ! raise_gateway_token_is_valid "$TOKEN"; then
   TOKEN="$(openssl rand -hex 32)"
 fi
 
