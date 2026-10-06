@@ -2,6 +2,8 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 const VALID_DESIRED_STATES = new Set(["running", "paused", "draining"]);
 const PROJECT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
+const UNSAFE_DISPLAY_CHARS = /[\p{Cc}\p{Cf}]/u;
+const MAX_DISPLAY_NAME_LENGTH = 160;
 
 function normalize(value) {
   return String(value ?? "")
@@ -137,7 +139,8 @@ function groupTargets(payload) {
       (
         typeof target.name !== "string" ||
         target.name !== target.name.trim() ||
-        CONTROL_CHARS.test(target.name)
+        target.name.length > MAX_DISPLAY_NAME_LENGTH ||
+        UNSAFE_DISPLAY_CHARS.test(target.name)
       )
     ) {
       throw new Error("zcloud_targets_invalid");
