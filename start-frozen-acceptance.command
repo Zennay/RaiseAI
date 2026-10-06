@@ -179,16 +179,25 @@ PY
 )"
 
 find_adb() {
+  local sdk_root candidate
+
+  for sdk_root in "${ANDROID_SDK_ROOT:-}" "${ANDROID_HOME:-}"; do
+    [ -n "$sdk_root" ] || continue
+    candidate="$sdk_root/platform-tools/adb"
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+
   if command -v adb >/dev/null 2>&1; then
     command -v adb
     return
   fi
-  for candidate in \
-    "${ANDROID_SDK_ROOT:-}/platform-tools/adb" \
-    "${ANDROID_HOME:-}/platform-tools/adb" \
-    "$HOME/Library/Android/sdk/platform-tools/adb" \
-    "$HOME/Android/Sdk/platform-tools/adb"; do
-    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+
+  for sdk_root in "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+    candidate="$sdk_root/platform-tools/adb"
+    if [ -x "$candidate" ]; then
       printf '%s\n' "$candidate"
       return
     fi
