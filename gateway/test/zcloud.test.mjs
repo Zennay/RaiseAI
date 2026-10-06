@@ -106,6 +106,7 @@ test("zCloud connector base URL must be a clean HTTP(S) origin", async () => {
 test("generic continuation recognizer is strict", () => {
   assert.equal(isGenericContinuation("Ga door met FTMO", ["ftmo"]), true);
   assert.equal(isGenericContinuation("Werk verder met project FTMO", ["ftmo"]), true);
+  assert.equal(isGenericContinuation("Werk verder aan FTMO", ["ftmo"]), true);
   assert.equal(isGenericContinuation("Ga door met FTMO en test de pipeline", ["ftmo"]), false);
 });
 
@@ -184,6 +185,42 @@ test("allocated worker names with contradictory project suffixes fail closed", a
   assert.equal(result.enabled, false);
   assert.equal(result.reason, "zcloud_targets_invalid");
   assert.equal(calls.length, 1);
+});
+
+test("current portfolio projects accept canonical werk-verder-aan continuation", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, {
+          projects: {
+            "lightup::w1": {
+              project_id: "lightup::w1",
+              base_project_id: "lightup",
+              worker_slot: 1,
+              worker_count: 1,
+              name: "LightUp · worker 1/1",
+              desired_state: "running",
+              active: true
+            }
+          }
+        });
+      }
+      return response(200, commandAck(73));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Werk verder aan LightUp");
+
+  assert.equal(result.enabled, true);
+  assert.equal(result.provider, "zcloud");
+  assert.equal(result.commandId, 73);
+  assert.equal(result.answer, "LightUp heeft een nieuwe push gekregen in zCloud.");
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    project_id: "lightup",
+    action: "push"
+  });
 });
 
 test("active project receives push", async () => {
