@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -133,6 +134,12 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 r"""#!/bin/bash
                 set -eu
                 if [ "${1:-}" = "start-server" ]; then
+                  if [ -n "${FAKE_ADB_START_MARKER:-}" ]; then
+                    printf 'started\n' > "$FAKE_ADB_START_MARKER"
+                  fi
+                  if [ "${FAKE_ADB_START_DELAY:-0}" != "0" ]; then
+                    sleep "$FAKE_ADB_START_DELAY"
+                  fi
                   exit 0
                 fi
                 if [ "${1:-}" = "devices" ]; then
@@ -259,6 +266,41 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         )
         self.assertFalse(self.fetch_marker.exists())
         self.assertFalse(self.log.exists())
+
+    def test_term_exits_before_post_signal_fetch_side_effects(self):
+        adb_started = self.root / "adb-started"
+        env = os.environ.copy()
+        env["PATH"] = f"{self.bin}:{env['PATH']}"
+        env["FAKE_HANDOFF_LOG"] = str(self.log)
+        env["FAKE_FETCH_MARKER"] = str(self.fetch_marker)
+        env["FAKE_ADB_START_MARKER"] = str(adb_started)
+        env["FAKE_ADB_START_DELAY"] = "0.4"
+
+        process = subprocess.Popen(
+            [
+                "bash",
+                str(self.repo / "start-frozen-acceptance.command"),
+                str(self.profile),
+            ],
+            cwd=self.repo,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        deadline = time.monotonic() + 2.0
+        while not adb_started.exists() and process.poll() is None:
+            if time.monotonic() >= deadline:
+                process.kill()
+                self.fail("launcher did not reach the fake adb start-server boundary")
+            time.sleep(0.01)
+
+        process.terminate()
+        stdout, _ = process.communicate(timeout=3)
+
+        self.assertEqual(process.returncode, 143, stdout)
+        self.assertFalse(self.fetch_marker.exists(), stdout)
+        self.assertFalse(self.log.exists(), stdout)
 
     def test_preflight_only_verifies_handoff_without_starting_session(self):
         result = self.run_launcher(
