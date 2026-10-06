@@ -12,6 +12,28 @@ if [[ ! "$DEPLOY_REVISION" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
   exit 1
 fi
 
+valid_public_host() {
+  local host="$1" label
+  [ -n "$host" ] && [ "${#host}" -le 253 ] || return 1
+  [[ ! "$host" =~ [[:space:][:cntrl:]] ]] || return 1
+  [[ "$host" != .* && "$host" != *. && "$host" != *..* ]] || return 1
+  IFS='.' read -r -a labels <<< "$host"
+  for label in "${labels[@]}"; do
+    [ -n "$label" ] && [ "${#label}" -le 63 ] || return 1
+    [[ "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] || return 1
+  done
+}
+
+if ! valid_public_host "$PUBLIC_HOST"; then
+  echo "Invalid RAISE_PUBLIC_HOST" >&2
+  exit 1
+fi
+
+if [[ ! "$PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( 10#$PORT > 65535 )); then
+  echo "Invalid RAISE_PUBLIC_PORT" >&2
+  exit 1
+fi
+
 CONFIG_DIR="$HOME/.config/raiseai"
 TLS_DIR="$CONFIG_DIR/tls"
 ENV_FILE="$CONFIG_DIR/gateway.env"
