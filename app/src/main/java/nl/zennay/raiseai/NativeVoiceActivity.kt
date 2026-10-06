@@ -289,13 +289,13 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             runCatching { GatewayClient(settings).send(text) }
                 .onSuccess { response ->
                     val latencyMs = SystemClock.elapsedRealtime() - requestStartedMs
-                    WatchE2eEvidence.recordSuccess(
-                        context = applicationContext,
-                        inputLengthChars = text.length,
-                        latencyMs = latencyMs,
-                        response = response
-                    )
                     postToUiIfActive {
+                        WatchE2eEvidence.recordSuccess(
+                            context = applicationContext,
+                            inputLengthChars = text.length,
+                            latencyMs = latencyMs,
+                            response = response
+                        )
                         val backgroundAction =
                             response.executionEnabled &&
                                 response.answer == null &&
@@ -323,13 +323,13 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                 }
                 .onFailure { error ->
                     val latencyMs = SystemClock.elapsedRealtime() - requestStartedMs
-                    WatchE2eEvidence.recordFailure(
-                        context = applicationContext,
-                        inputLengthChars = text.length,
-                        latencyMs = latencyMs,
-                        error = error
-                    )
                     postToUiIfActive {
+                        WatchE2eEvidence.recordFailure(
+                            context = applicationContext,
+                            inputLengthChars = text.length,
+                            latencyMs = latencyMs,
+                            error = error
+                        )
                         showError("VPS niet bereikbaar")
                         detailText.text = error.message ?: "Onbekende netwerkfout"
                     }
