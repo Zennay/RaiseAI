@@ -143,7 +143,9 @@ export function createOpenRouterExecutor({
 }) {
   const fallbacks = Array.isArray(fallbackModels)
     ? fallbackModels
-    : parseFallbackModels(fallbackModels);
+    : typeof fallbackModels === "string"
+      ? parseFallbackModels(fallbackModels)
+      : null;
   const attempts = Math.max(1, Math.min(Number(maxAttempts) || 1, 3));
 
   return async function execute(decision, text) {
@@ -171,7 +173,8 @@ export function createOpenRouterExecutor({
     const primaryModel = normalizeModelName(
       decision.route === "deep_ai" ? deepModel : fastModel
     );
-    const normalizedFallbacks = normalizeFallbackModels(fallbacks);
+    const normalizedFallbacks =
+      fallbacks === null ? null : normalizeFallbackModels(fallbacks);
 
     if (!primaryModel || !normalizedFallbacks) {
       return {
