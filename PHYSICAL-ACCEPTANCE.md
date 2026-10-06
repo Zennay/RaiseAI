@@ -226,7 +226,8 @@ A passing session must contain provenance-bound summary evidence including:
 - `session.json`
 - `e2e-result.json`
 - `v1-result.json`
-- `operator-observations.json` (validated by `tools/validate-physical-observations.py`)
+- `operator-observations.json` (local/raw operator record validated by `tools/validate-physical-observations.py`)
+- `quality-result.json` (secret-safe provenance/completeness summary suitable for attachment)
 
 Keep the raw trace/trial evidence from that same session. Do **not** upload gateway profiles, tokens, provider credentials, transcript text, or assistant response text.
 
