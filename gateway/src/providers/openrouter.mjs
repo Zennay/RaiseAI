@@ -76,8 +76,19 @@ function outputText(response) {
   }
 
   if (Array.isArray(content)) {
+    const validTextParts =
+      content.length > 0 &&
+      content.every(
+        (part) =>
+          part !== null &&
+          typeof part === "object" &&
+          !Array.isArray(part) &&
+          part.type === "text" &&
+          typeof part.text === "string"
+      );
+    if (!validTextParts) return null;
+
     const text = content
-      .filter((part) => part?.type === "text" && typeof part.text === "string")
       .map((part) => part.text)
       .join("")
       .trim();
