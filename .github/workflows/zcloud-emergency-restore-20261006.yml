@@ -1,0 +1,216 @@
+name: Emergency restore zCloud control plane and workers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-emergency-restore-20261006.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: raiseai-zcloud-emergency-restore-20261006
+  cancel-in-progress: true
+
+jobs:
+  recover:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 8
+    steps:
+      - name: Mark recovery pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          python3 - <<'PY'
+          import json, os, urllib.request
+          repo=os.environ["GITHUB_REPOSITORY"]; sha=os.environ["GITHUB_SHA"]; token=os.environ["GH_TOKEN"]
+          payload=json.dumps({
+              "state":"pending",
+              "context":"zcloud/raiseai-emergency-restore",
+              "description":"RaiseAI VPS runner recovery started",
+              "target_url":f"{os.environ['GITHUB_SERVER_URL']}/{repo}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }).encode()
+          req=urllib.request.Request(
+              f"https://api.github.com/repos/{repo}/statuses/{sha}",
+              data=payload, method="POST",
+              headers={
+                  "Authorization":f"Bearer {token}",
+                  "Accept":"application/vnd.github+json",
+                  "X-GitHub-Api-Version":"2022-11-28",
+                  "Content-Type":"application/json",
+                  "User-Agent":"raiseai-zcloud-emergency-restore",
+              })
+          with urllib.request.urlopen(req,timeout=20) as r:
+              assert r.status == 201
+          PY
+
+      - name: Repair SQLite and restore zCloud service
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="/home/ubuntu/zennay-cloud"
+          db="$root/history.db"
+          service="zennay-cloud.service"
+
+          sudo -n rm -f "$root/.disable-self-heal"
+          service_user="$(systemctl show "$service" -p User --value 2>/dev/null || true)"
+          [[ -n "$service_user" ]] || service_user="root"
+          service_group="$(systemctl show "$service" -p Group --value 2>/dev/null || true)"
+          [[ -n "$service_group" ]] || service_group="$(id -gn "$service_user")"
+
+          sudo -n systemctl stop "$service" || true
+          sudo -n chown "$service_user:$service_group" "$root" "$db"
+          sudo -n chmod u+rwx "$root"
+          sudo -n chmod u+rw "$db"
+
+          for candidate in "$db-wal" "$db-shm"; do
+            [[ -e "$candidate" ]] || continue
+            attrs="$(lsattr -d "$candidate" 2>/dev/null | awk '{print $1}' || true)"
+            [[ "$attrs" != *i* ]] || sudo -n chattr -i "$candidate"
+            sudo -n chown "$service_user:$service_group" "$candidate"
+            sudo -n chmod u+rw "$candidate"
+          done
+
+          sudo -n -u "$service_user" python3 - <<'PY'
+          import sqlite3
+          db="/home/ubuntu/zennay-cloud/history.db"
+          conn=sqlite3.connect(db, timeout=10)
+          try:
+              conn.execute("BEGIN IMMEDIATE")
+              conn.rollback()
+          finally:
+              conn.close()
+          print("ZCLOUD_SQLITE_WRITE_PROBE_GREEN")
+          PY
+
+          sudo -n systemctl reset-failed "$service" || true
+          if ! timeout 20s sudo -n systemctl restart "$service"; then
+            sudo -n systemctl kill --kill-whom=all --signal=KILL "$service" || true
+            sleep 2
+            sudo -n systemctl reset-failed "$service" || true
+            timeout 20s sudo -n systemctl start "$service"
+          fi
+
+          for _ in $(seq 1 30); do
+            if sudo -n systemctl is-active --quiet "$service" &&
+               curl -fsS --max-time 5 http://127.0.0.1:8765/api/status >/tmp/zcloud-emergency-status.json 2>/dev/null; then
+              echo "ZCLOUD_SERVICE_LOCAL_GREEN=1"
+              break
+            fi
+            sleep 1
+          done
+          sudo -n systemctl is-active --quiet "$service"
+          curl -fsS --max-time 8 http://127.0.0.1:8765/api/status >/tmp/zcloud-emergency-status.json
+
+      - name: Restore zCloud Actions listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t units < <(
+            systemctl list-unit-files --type=service --no-legend 2>/dev/null |
+            awk '{print $1}' |
+            grep -Ei '^actions\.runner\..*zcloud.*\.service$' || true
+          )
+          if (( ${#units[@]} == 0 )); then
+            echo "No zCloud Actions runner service found" >&2
+            exit 3
+          fi
+          restored=0
+          for unit in "${units[@]}"; do
+            echo "RESTORE_ZCLOUD_RUNNER=$unit"
+            if sudo -n systemctl reset-failed "$unit" >/dev/null 2>&1 || true; then :; fi
+            if sudo -n systemctl restart "$unit"; then
+              sudo -n systemctl is-active --quiet "$unit"
+              restored=1
+            fi
+          done
+          test "$restored" -eq 1
+          echo "ZCLOUD_ACTIONS_RUNNER_GREEN=1"
+
+      - name: Restore seven workers and force work
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, time, urllib.request
+
+          base="http://127.0.0.1:8765"
+
+          def call(method,path,payload=None):
+              data=None
+              headers={"User-Agent":"raiseai-zcloud-emergency-restore/1"}
+              if payload is not None:
+                  data=json.dumps(payload).encode("utf-8")
+                  headers["Content-Type"]="application/json"
+              req=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  return json.load(response)
+
+          current=(call("GET","/api/dynamic-workers").get("dynamic_workers") or {})
+          desired={
+              key: current.get(key)
+              for key in (
+                  "chatgpt_count","claude_count",
+                  "chatgpt_cooldown_seconds","claude_cooldown_seconds",
+                  "check_interval_ms","tick_interval_ms","heartbeat_interval_ms",
+                  "generation_start_timeout_ms","scheduler_interval_seconds",
+              )
+              if current.get(key) is not None
+          }
+          desired["chatgpt_count"]=7
+          reconciled=call("POST","/api/dynamic-workers",desired)
+          if not reconciled.get("ok"):
+              raise SystemExit("worker capacity reconcile failed: "+json.dumps(reconciled,sort_keys=True))
+
+          pushed=call("POST","/api/dynamic-workers/force-push",{})
+          if not pushed.get("ok"):
+              raise SystemExit("worker force-push failed: "+json.dumps(pushed,sort_keys=True))
+
+          targets=call("GET","/api/runner-targets")
+          allocation=(targets.get("global_allocation") or {}).get("workers") or []
+          print("WORKER_CAPACITY_RECONCILED="+json.dumps(reconciled,sort_keys=True))
+          print("WORKERS_FORCE_PUSHED="+json.dumps(pushed,sort_keys=True))
+          print("WORKER_ALLOCATION="+json.dumps(allocation,sort_keys=True))
+          if not allocation:
+              raise SystemExit("worker allocation is empty after reconcile")
+          PY
+
+      - name: Publish recovery result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.request
+          state="success" if os.environ.get("JOB_STATUS") == "success" else "failure"
+          repo=os.environ["GITHUB_REPOSITORY"]; sha=os.environ["GITHUB_SHA"]; token=os.environ["GH_TOKEN"]
+          payload=json.dumps({
+              "state":state,
+              "context":"zcloud/raiseai-emergency-restore",
+              "description":"zCloud service + listener + seven-worker restore " + state,
+              "target_url":f"{os.environ['GITHUB_SERVER_URL']}/{repo}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }).encode()
+          req=urllib.request.Request(
+              f"https://api.github.com/repos/{repo}/statuses/{sha}",
+              data=payload, method="POST",
+              headers={
+                  "Authorization":f"Bearer {token}",
+                  "Accept":"application/vnd.github+json",
+                  "X-GitHub-Api-Version":"2022-11-28",
+                  "Content-Type":"application/json",
+                  "User-Agent":"raiseai-zcloud-emergency-restore",
+              })
+          with urllib.request.urlopen(req,timeout=20) as r:
+              assert r.status == 201
+          print("ZCLOUD_RAISEAI_RECOVERY_STATUS="+state)
+          PY
