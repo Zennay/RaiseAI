@@ -607,6 +607,99 @@ test("paused inactive zCloud worker remains a valid start target", async () => {
   });
 });
 
+
+test("zCloud target snapshots bound project cardinality", async () => {
+  const projects = {};
+  for (let index = 1; index <= 257; index += 1) {
+    const project = "p" + index;
+    projects[project + "::w1"] = {
+      project_id: project + "::w1",
+      base_project_id: project,
+      worker_slot: 1,
+      worker_count: 1,
+      name: "Project " + index + " · worker 1/1",
+      desired_state: "running",
+      active: true
+    };
+  }
+
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      return response(200, { projects });
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met p1");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_targets_invalid");
+  assert.equal(calls.length, 1);
+});
+
+test("zCloud target display names have a bounded canonical length", async () => {
+  for (const length of [257, 4_096]) {
+    const calls = [];
+    const execute = createZCloudExecutor({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        if (url.endsWith("/api/runner-targets")) {
+          return response(200, {
+            projects: {
+              "ftmo::w1": {
+                project_id: "ftmo::w1",
+                base_project_id: "ftmo",
+                worker_slot: 1,
+                worker_count: 1,
+                name: "F".repeat(length),
+                desired_state: "running",
+                active: true
+              }
+            }
+          });
+        }
+        return response(200, commandAck(81));
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_targets_invalid");
+    assert.equal(calls.length, 1);
+  }
+
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, {
+          projects: {
+            "ftmo::w1": {
+              project_id: "ftmo::w1",
+              base_project_id: "ftmo",
+              worker_slot: 1,
+              worker_count: 1,
+              name: "F".repeat(256),
+              desired_state: "running",
+              active: true
+            }
+          }
+        });
+      }
+      return response(200, commandAck(82));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, true);
+  assert.equal(result.commandId, 82);
+  assert.equal(calls.length, 2);
+});
+
 test("incomplete or inconsistent worker-count snapshots fail closed", async () => {
   const invalidSnapshots = [
     {
