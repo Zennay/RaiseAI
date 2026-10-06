@@ -87,3 +87,104 @@ test("inactive project receives start", async () => {
     action: "start"
   });
 });
+
+
+test("malformed target state fails closed before runner control", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      return response(200, {
+        projects: {
+          "ftmo::w1": {
+            base_project_id: "ftmo",
+            name: "FTMO · worker 1/1",
+            active: "false"
+          }
+        }
+      });
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_targets_invalid");
+  assert.equal(calls.length, 1);
+});
+
+test("ambiguous project aliases never dispatch a command", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      return response(200, {
+        projects: {
+          "alpha::w1": {
+            base_project_id: "alpha",
+            name: "Shared · worker 1/1",
+            active: true
+          },
+          "beta::w1": {
+            base_project_id: "beta",
+            name: "Shared · worker 1/1",
+            active: false
+          }
+        }
+      });
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met Shared");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_project_ambiguous");
+  assert.match(result.answer, /niets gestart/);
+  assert.equal(calls.length, 1);
+});
+
+test("successful HTTP status requires canonical zCloud command acknowledgement", async () => {
+  const invalidAcks = [
+    null,
+    {},
+    { ok: false, command_id: 51, status: "pending" },
+    { ok: true, command_id: null, status: "pending" },
+    { ok: true, command_id: 0, status: "pending" },
+    { ok: true, command_id: 1.5, status: "pending" },
+    { ok: true, command_id: 52, status: "completed" }
+  ];
+
+  for (const acknowledgement of invalidAcks) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async url => {
+        if (url.endsWith("/api/runner-targets")) {
+          return response(200, targets({ active: true }));
+        }
+        return response(200, acknowledgement);
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_invalid_ack");
+    assert.match(result.answer, /niet als gestart/);
+  }
+});
+
+test("blank zCloud rejection errors fall back to a non-empty safe message", async () => {
+  const execute = createZCloudExecutor({
+    fetchImpl: async url => {
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, targets({ active: true }));
+      }
+      return response(409, { error: "   " });
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_command_rejected");
+  assert.equal(result.answer, "zCloud heeft de opdracht niet geaccepteerd.");
+});
