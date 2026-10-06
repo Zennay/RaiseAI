@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Atomically update mutable fields in a physical-validation session."""
+"""Read and atomically update physical-validation session metadata."""
 
 from __future__ import annotations
 
@@ -12,6 +12,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+READABLE_FIELDS = {
+    "app_version": str,
+    "source_revision": str,
+    "watch_serial": str,
+    "e2e_passed": bool,
+}
 MUTABLE_FIELDS = {
     "e2e_passed": bool,
     "e2e_verified_at_utc": str,
@@ -56,6 +62,25 @@ def _load_session(path: Path) -> tuple[dict[str, Any], int]:
     return payload, stat.S_IMODE(file_stat.st_mode)
 
 
+def read_session_field(path: Path, field: str) -> str:
+    expected_type = READABLE_FIELDS.get(field)
+    if expected_type is None:
+        raise SessionUpdateError(f"field is not readable: {field}")
+    payload, _ = _load_session(path)
+    if field not in payload:
+        raise SessionUpdateError(f"session is missing {field}")
+    value = payload[field]
+    if expected_type is bool:
+        if type(value) is not bool:
+            raise SessionUpdateError(f"{field} must be boolean")
+        return "true" if value else "false"
+    if not isinstance(value, str) or not value.strip():
+        raise SessionUpdateError(f"{field} must be a non-empty string")
+    if "\n" in value or "\r" in value:
+        raise SessionUpdateError(f"{field} must be a single-line string")
+    return value
+
+
 def _parse_value(field: str, raw_value: str) -> Any:
     expected_type = MUTABLE_FIELDS.get(field)
     if expected_type is None:
@@ -68,6 +93,8 @@ def _parse_value(field: str, raw_value: str) -> Any:
         raise SessionUpdateError(f"{field} must be true or false")
     if not raw_value.strip():
         raise SessionUpdateError(f"{field} must be a non-empty string")
+    if "\n" in raw_value or "\r" in raw_value:
+        raise SessionUpdateError(f"{field} must be a single-line string")
     return raw_value
 
 
@@ -99,7 +126,10 @@ def update_session(path: Path, field: str, raw_value: str) -> None:
             directory_fd = None
         if directory_fd is not None:
             try:
-                os.fsync(directory_fd)
+                try:
+                    os.fsync(directory_fd)
+                except OSError:
+                    pass
             finally:
                 os.close(directory_fd)
     except OSError as exc:
@@ -115,15 +145,20 @@ def update_session(path: Path, field: str, raw_value: str) -> None:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
-    parser.add_argument("field", choices=sorted(MUTABLE_FIELDS))
-    parser.add_argument("value")
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--get", dest="get_field", choices=sorted(READABLE_FIELDS))
+    action.add_argument("--set", dest="set_values", nargs=2, metavar=("FIELD", "VALUE"))
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        update_session(args.session, args.field, args.value)
+        if args.get_field is not None:
+            print(read_session_field(args.session, args.get_field))
+        else:
+            field, value = args.set_values
+            update_session(args.session, field, value)
     except SessionUpdateError as exc:
         print(str(exc), file=sys.stderr)
         return 1
