@@ -212,6 +212,62 @@ test("malformed execution results fail closed as upstream errors", async () => {
   }
 });
 
+test("enabled AI execution without an answer fails closed", async () => {
+  for (const routeText of [
+    "Wat is twee plus twee?",
+    "Analyseer deze architectuur",
+    "Wat is het nieuws vandaag?"
+  ]) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: routeText })
+      });
+
+      assert.equal(res.status, 502);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+      assert.equal("answer" in body, false);
+      assert.equal("execution" in body, false);
+    }, {
+      execute: async () => ({
+        enabled: true,
+        provider: "broken-provider",
+        model: "broken-model"
+      })
+    });
+  }
+});
+
+test("non-AI routed execution may remain answerless", async () => {
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body: JSON.stringify({ text: "Zet de lampen in de woonkamer uit" })
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.route, "smart_home");
+    assert.equal(body.status, "routed");
+    assert.equal(body.execution.enabled, true);
+    assert.equal(body.answer, null);
+  }, {
+    execute: async () => ({
+      enabled: true,
+      provider: "google_home"
+    })
+  });
+});
+
 test("disabled connector result may return a user-facing string without claiming enabled", async () => {
   await withServer(async base => {
     const res = await fetch(base + "/v1/assistant", {
