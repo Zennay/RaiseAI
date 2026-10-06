@@ -79,3 +79,36 @@ test("enabled current-info route requests web search explicitly", async () => {
   assert.equal(result.answer, "actueel antwoord");
   assert.deepEqual(calls[0].request.tools, [{ type: "web_search" }]);
 });
+
+test("malformed successful OpenAI response shapes fail as upstream 502 errors", async () => {
+  const malformedBodies = [
+    null,
+    {},
+    { output: {} },
+    { output: [null] },
+    { output: [{ content: {} }] },
+    { output: [{ content: [null, { type: "output_text", text: "   " }] }] }
+  ];
+
+  for (const body of malformedBodies) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return body;
+        }
+      })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_empty_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
