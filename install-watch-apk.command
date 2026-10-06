@@ -138,6 +138,11 @@ if [ -z "$TARGET" ]; then
   exit 1
 fi
 
+"$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$TARGET" || {
+  echo "Selected ADB target is not connected: $TARGET"
+  exit 1
+}
+
 if [ -n "$LAST_ENDPOINT" ]; then
   printf '%s\n' "$LAST_ENDPOINT" > "$ENDPOINT_FILE"
 elif printf '%s' "$TARGET" | grep -Eq '^[0-9.]+:[0-9]+$'; then
