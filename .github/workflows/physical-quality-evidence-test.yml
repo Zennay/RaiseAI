@@ -56,4 +56,5 @@ jobs:
       - name: Physical quality evidence regressions
         run: |
           python3 -m unittest discover -s tests -p 'test_physical_observation_validator.py'
-          python3 -m unittest discover -s tests -p 'test_physical_observation_template.py'\n          python3 -m unittest discover -s tests -p 'test_quality_workflow_action_pinning.py'
+          python3 -m unittest discover -s tests -p 'test_physical_observation_template.py'
+          python3 -m unittest discover -s tests -p 'test_quality_workflow_action_pinning.py'
