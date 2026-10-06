@@ -135,6 +135,15 @@ jobs:
           echo "ZCLOUD_LISTENER_AFTER_PUBLIC_REPAIR=${listener:-missing}"
           [[ "${listener:-}" == "0.0.0.0:8765" || "${listener:-}" == "*:8765" || "${listener:-}" == "[::]:8765" ]]
 
+          if command -v ufw >/dev/null 2>&1; then
+            ufw_status="$(sudo -n ufw status 2>/dev/null || true)"
+            echo "$ufw_status"
+            if grep -Fq "Status: active" <<<"$ufw_status" && ! grep -Eq '(^|[[:space:]])8765(/tcp)?([[:space:]]|$)' <<<"$ufw_status"; then
+              sudo -n ufw allow 8765/tcp comment 'zCloud dashboard'
+              echo "ZCLOUD_UFW_8765_RESTORED=1"
+            fi
+          fi
+
       - name: Restore zCloud Actions listener
         shell: bash
         run: |
@@ -195,17 +204,42 @@ jobs:
           if not reconciled.get("ok"):
               raise SystemExit("worker capacity reconcile failed: "+json.dumps(reconciled,sort_keys=True))
 
-          pushed=call("POST","/api/dynamic-workers/force-push",{})
-          if not pushed.get("ok"):
-              raise SystemExit("worker force-push failed: "+json.dumps(pushed,sort_keys=True))
-
           targets=call("GET","/api/runner-targets")
           allocation=(targets.get("global_allocation") or {}).get("workers") or []
+          if len(allocation) != 7:
+              raise SystemExit("expected seven allocated workers: "+json.dumps(allocation,sort_keys=True))
+
+          import sqlite3
+          db="/home/ubuntu/zennay-cloud/history.db"
+          conn=sqlite3.connect(db, timeout=15)
+          try:
+              conn.execute("PRAGMA busy_timeout=15000")
+              conn.execute("BEGIN IMMEDIATE")
+              repaired=[]
+              for item in allocation:
+                  project=str(item.get("project_id") or "").strip()
+                  slot=int(item.get("worker_slot") or 1)
+                  if not project:
+                      continue
+                  conn.execute(
+                      "UPDATE runner_workers SET desired_state='running' WHERE project_id=? AND worker_slot=?",
+                      (project,slot),
+                  )
+                  repaired.append(f"{project}::w{slot}")
+              conn.commit()
+          finally:
+              conn.close()
+          print("WORKER_DESIRED_STATE_REPAIRED="+json.dumps(repaired,sort_keys=True))
+
+          pushed=call("POST","/api/dynamic-workers/force-push",{})
           print("WORKER_CAPACITY_RECONCILED="+json.dumps(reconciled,sort_keys=True))
           print("WORKERS_FORCE_PUSHED="+json.dumps(pushed,sort_keys=True))
           print("WORKER_ALLOCATION="+json.dumps(allocation,sort_keys=True))
-          if not allocation:
-              raise SystemExit("worker allocation is empty after reconcile")
+          if not pushed.get("ok"):
+              raise SystemExit("worker force-push failed: "+json.dumps(pushed,sort_keys=True))
+          refused=[r for r in (pushed.get("results") or []) if not r.get("queued")]
+          if refused:
+              raise SystemExit("one or more workers refused push: "+json.dumps(refused,sort_keys=True))
           PY
 
       - name: Publish recovery result
@@ -308,3 +342,31 @@ jobs:
           if not ok:
               raise SystemExit("public zCloud verification failed")
           PY
+
+
+  diagnose-public-failure:
+    needs: [recover, verify-public]
+    if: needs.recover.result == 'success' && needs.verify-public.result == 'failure'
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 3
+    steps:
+      - name: Capture public API failure evidence
+        shell: bash
+        run: |
+          set +e
+          echo "=== listener ==="
+          ss -lntp | grep -E '(:8765[[:space:]])' || true
+          echo "=== local root ==="
+          curl -i --max-time 8 http://127.0.0.1:8765/ | head -40
+          echo "=== local status ==="
+          curl -i --max-time 12 http://127.0.0.1:8765/api/status | head -80
+          echo "=== public self-probe ==="
+          curl -i --max-time 12 http://198.244.191.182:8765/api/status | head -80
+          echo "=== service ==="
+          sudo -n systemctl --no-pager --full status zennay-cloud.service | tail -120 || true
+          echo "=== journal ==="
+          sudo -n journalctl -u zennay-cloud.service -n 180 --no-pager || true
+          echo "=== ufw ==="
+          sudo -n ufw status verbose || true
+          echo "=== nft 8765 ==="
+          sudo -n nft list ruleset 2>/dev/null | grep -C 4 -E '8765|reject|drop' || true
