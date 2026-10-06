@@ -60,11 +60,22 @@ test("web search is opt-in", async () => {
   assert.equal(called, false);
 });
 
-test("missing API key fails closed", async () => {
-  const execute = createOpenAIExecutor({ apiKey: "" });
-  const result = await execute({ route: "quick_ai" }, "hoi");
-  assert.equal(result.enabled, false);
-  assert.equal(result.reason, "openai_not_configured");
+test("missing or whitespace-contaminated API key fails closed without a provider call", async () => {
+  for (const apiKey of ["", " ", "\t", " test-key", "test-key ", "test key"]) {
+    let called = false;
+    const execute = createOpenAIExecutor({
+      apiKey,
+      fetchImpl: async () => {
+        called = true;
+        throw new Error("should not run");
+      }
+    });
+
+    const result = await execute({ route: "quick_ai" }, "hoi");
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "openai_not_configured");
+    assert.equal(called, false);
+  }
 });
 
 test("enabled current-info route requests web search explicitly", async () => {

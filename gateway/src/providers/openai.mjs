@@ -1,5 +1,9 @@
 const API_URL = "https://api.openai.com/v1/responses";
 
+function hasUsableApiKey(value) {
+  return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
+}
+
 function outputText(response) {
   const output = Array.isArray(response?.output) ? response.output : [];
 
@@ -31,7 +35,7 @@ export function createOpenAIExecutor({
 
     if (!supported) return null;
 
-    if (!apiKey) {
+    if (!hasUsableApiKey(apiKey)) {
       return {
         enabled: false,
         reason: "openai_not_configured"
