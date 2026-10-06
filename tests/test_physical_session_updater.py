@@ -32,9 +32,12 @@ def session_payload():
 
 
 class PhysicalSessionUpdaterTests(unittest.TestCase):
-    def write_session(self, root: pathlib.Path) -> pathlib.Path:
+    def write_session(self, root: pathlib.Path, payload=None) -> pathlib.Path:
         path = root / "session.json"
-        path.write_text(json.dumps(session_payload()) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(payload or session_payload()) + "\n",
+            encoding="utf-8",
+        )
         os.chmod(path, 0o640)
         return path
 
@@ -48,28 +51,58 @@ class PhysicalSessionUpdaterTests(unittest.TestCase):
             with self.assertRaisesRegex(updater.SessionUpdateError, "field is not readable"):
                 updater.read_session_field(path, "apk_sha256")
 
-    def test_updates_allowed_field_atomically_and_preserves_mode(self):
+    def test_e2e_gate_commits_flag_and_timestamp_in_one_atomic_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             path = self.write_session(root)
-            updater.update_session(path, "e2e_passed", "true")
+            updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00Z")
             payload = json.loads(path.read_text(encoding="utf-8"))
             self.assertTrue(payload["e2e_passed"])
+            self.assertEqual(payload["e2e_verified_at_utc"], "2026-10-06T09:05:00Z")
             self.assertEqual(path.stat().st_mode & 0o777, 0o640)
             self.assertEqual(list(root.glob(".session.json.*.tmp")), [])
 
-    def test_replace_failure_preserves_original_and_cleans_temp(self):
+    def test_replace_failure_preserves_complete_original_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             path = self.write_session(root)
             original = path.read_bytes()
             with mock.patch.object(updater.os, "replace", side_effect=OSError("simulated interruption")):
                 with self.assertRaisesRegex(updater.SessionUpdateError, "atomic session update failed"):
-                    updater.update_session(path, "e2e_passed", "true")
+                    updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00Z")
             self.assertEqual(path.read_bytes(), original)
             self.assertEqual(list(root.glob(".session.json.*.tmp")), [])
 
-    def test_rejects_symlink_session_metadata_for_read_and_write(self):
+    def test_v1_requires_committed_e2e_and_monotonic_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            path = self.write_session(root)
+            with self.assertRaisesRegex(updater.SessionUpdateError, "before the E2E gate"):
+                updater.mark_gate_passed(path, "v1", "2026-10-06T09:10:00Z")
+
+            updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00Z")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "cannot precede E2E verification"):
+                updater.mark_gate_passed(path, "v1", "2026-10-06T09:04:59Z")
+
+            updater.mark_gate_passed(path, "v1", "2026-10-06T09:10:00Z")
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertTrue(payload["v1_gate_passed"])
+            self.assertEqual(payload["v1_verified_at_utc"], "2026-10-06T09:10:00Z")
+
+    def test_rejects_pre_session_noncanonical_and_duplicate_gate_commits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            path = self.write_session(root)
+            with self.assertRaisesRegex(updater.SessionUpdateError, "cannot precede started_at_utc"):
+                updater.mark_gate_passed(path, "e2e", "2026-10-06T08:59:59Z")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "canonical UTC form"):
+                updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00+00:00")
+
+            updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00Z")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "already committed"):
+                updater.mark_gate_passed(path, "e2e", "2026-10-06T09:06:00Z")
+
+    def test_rejects_symlink_session_metadata_for_read_and_gate_commit(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             target = self.write_session(root)
@@ -78,28 +111,28 @@ class PhysicalSessionUpdaterTests(unittest.TestCase):
             with self.assertRaisesRegex(updater.SessionUpdateError, "refusing symlink"):
                 updater.read_session_field(link, "app_version")
             with self.assertRaisesRegex(updater.SessionUpdateError, "refusing symlink"):
-                updater.update_session(link, "e2e_passed", "true")
+                updater.mark_gate_passed(link, "e2e", "2026-10-06T09:05:00Z")
 
-    def test_rejects_duplicate_json_keys_for_read_and_write(self):
+    def test_rejects_duplicate_json_keys_for_read_and_gate_commit(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             path = root / "session.json"
             path.write_text(
-                '{"schema_version":1,"app_version":"1.5.2","e2e_passed":false,"e2e_passed":true}\n',
+                '{"schema_version":1,"started_at_utc":"2026-10-06T09:00:00Z",'
+                '"e2e_passed":false,"e2e_passed":true,"v1_gate_passed":false}\n',
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(updater.SessionUpdateError, "duplicate JSON object key"):
-                updater.read_session_field(path, "app_version")
+                updater.read_session_field(path, "e2e_passed")
             with self.assertRaisesRegex(updater.SessionUpdateError, "duplicate JSON object key"):
-                updater.update_session(path, "e2e_passed", "true")
+                updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00Z")
 
     def test_rejects_invalid_read_types_and_multiline_values(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             payload = session_payload()
             payload["e2e_passed"] = 1
-            path = root / "session.json"
-            path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            path = self.write_session(root, payload)
             with self.assertRaisesRegex(updater.SessionUpdateError, "e2e_passed must be boolean"):
                 updater.read_session_field(path, "e2e_passed")
 
@@ -109,14 +142,18 @@ class PhysicalSessionUpdaterTests(unittest.TestCase):
             with self.assertRaisesRegex(updater.SessionUpdateError, "single-line"):
                 updater.read_session_field(path, "watch_serial")
 
-    def test_rejects_unknown_or_invalid_mutation(self):
+    def test_rejects_unknown_gate_and_invalid_session_gate_types(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             path = self.write_session(root)
-            with self.assertRaisesRegex(updater.SessionUpdateError, "field is not mutable"):
-                updater.update_session(path, "watch_serial", "other")
-            with self.assertRaisesRegex(updater.SessionUpdateError, "must be true or false"):
-                updater.update_session(path, "e2e_passed", "yes")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "unknown physical validation gate"):
+                updater.mark_gate_passed(path, "other", "2026-10-06T09:05:00Z")
+
+            payload = session_payload()
+            payload["v1_gate_passed"] = 0
+            path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "v1_gate_passed must be boolean"):
+                updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00Z")
 
 
 if __name__ == "__main__":
