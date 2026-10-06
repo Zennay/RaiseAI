@@ -65,6 +65,20 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
         self.assertFalse(sessions[0].monotonic)
         self.assertFalse(sessions[0].qualifying)
 
+    def test_duplicate_elapsed_timestamp_is_rejected(self):
+        samples = make_session(1, "normal_move")
+        samples[8] = analyzer.Sample(
+            "normal_move",
+            1,
+            samples[7].elapsed_ms,
+            0.1,
+            0.2,
+            9.7,
+        )
+        sessions = analyzer.summarize_sessions(samples)
+        self.assertFalse(sessions[0].monotonic)
+        self.assertFalse(sessions[0].qualifying)
+
     def test_read_samples_rejects_mixed_labels_for_same_session(self):
         content = (
             "label,session_id,elapsed_ms,x,y,z\n"
