@@ -330,6 +330,52 @@ test("text-only OpenRouter content arrays remain supported", async () => {
   assert.equal(result.answer, "volledig antwoord");
 });
 
+test("OpenRouter answer text is bounded before it reaches the Watch", async () => {
+  const accepted = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      httpResponse(200, {
+        model: "z-ai/glm-5.3-flash",
+        choices: [{
+          finish_reason: "stop",
+          message: { role: "assistant", content: "x".repeat(4_096) }
+        }]
+      })
+  });
+
+  const acceptedResult = await accepted({ route: "quick_ai" }, "hoi");
+  assert.equal(acceptedResult.answer.length, 4_096);
+
+  for (const content of [
+    "x".repeat(4_097),
+    [
+      { type: "text", text: "x".repeat(2_048) },
+      { type: "text", text: "y".repeat(2_049) }
+    ]
+  ]) {
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () =>
+        httpResponse(200, {
+          model: "z-ai/glm-5.3-flash",
+          choices: [{
+            finish_reason: "stop",
+            message: { role: "assistant", content }
+          }]
+        })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_empty_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
+
 test("explicitly incomplete OpenRouter completions fail closed", async () => {
   for (const finishReason of ["length", "content_filter", "tool_calls", "", 42, {}]) {
     const execute = createOpenRouterExecutor({

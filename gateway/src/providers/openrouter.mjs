@@ -1,5 +1,6 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const REQUEST_BUDGET_MS = 7_000;
+const MAX_RESPONSE_TEXT_CHARS = 4_096;
 
 function hasWhitespaceOrControl(value) {
   return /[\s\u0000-\u001f\u007f]/u.test(value);
@@ -87,7 +88,7 @@ function outputText(response) {
   const content = firstChoice.message.content;
   if (typeof content === "string") {
     const text = content.trim();
-    return text || null;
+    return text && text.length <= MAX_RESPONSE_TEXT_CHARS ? text : null;
   }
 
   if (Array.isArray(content)) {
@@ -107,7 +108,7 @@ function outputText(response) {
       .map((part) => part.text)
       .join("")
       .trim();
-    return text || null;
+    return text && text.length <= MAX_RESPONSE_TEXT_CHARS ? text : null;
   }
 
   return null;
