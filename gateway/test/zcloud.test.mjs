@@ -32,17 +32,23 @@ function targets({ active = true } = {}) {
   return {
     projects: {
       "ftmo::w1": {
+        project_id: "ftmo::w1",
         base_project_id: "ftmo",
+        worker_slot: 1,
         name: "FTMO · worker 1/2",
         active
       },
       "ftmo::w2": {
+        project_id: "ftmo::w2",
         base_project_id: "ftmo",
+        worker_slot: 2,
         name: "FTMO · worker 2/2",
         active
       },
       "haxlab::w1": {
+        project_id: "haxlab::w1",
         base_project_id: "haxlab",
+        worker_slot: 1,
         name: "HaxLab · worker 1/1",
         active: true
       }
@@ -146,7 +152,9 @@ test("malformed target state fails closed before runner control", async () => {
       return response(200, {
         projects: {
           "ftmo::w1": {
+            project_id: "ftmo::w1",
             base_project_id: "ftmo",
+            worker_slot: 1,
             name: "FTMO · worker 1/1",
             active: "false"
           }
@@ -167,7 +175,9 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
     {
       projects: {
         "ftmo::w1": {
+          project_id: "ftmo::w1",
           base_project_id: " ftmo",
+          worker_slot: 1,
           name: "FTMO · worker 1/2",
           active: true
         }
@@ -176,12 +186,16 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
     {
       projects: {
         "ftmo::w1": {
+          project_id: "ftmo::w1",
           base_project_id: "ftmo",
+          worker_slot: 1,
           name: "FTMO · worker 1/2",
           active: true
         },
         "ftmo::w2": {
+          project_id: "ftmo::w2",
           base_project_id: "ftmo",
+          worker_slot: 2,
           name: "HaxLab · worker 2/2",
           active: false
         }
@@ -190,8 +204,75 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
     {
       projects: {
         "ftmo::w1": {
+          project_id: "ftmo::w1",
           base_project_id: "ftmo",
+          worker_slot: 1,
           name: " · worker 1/1",
+          active: true
+        }
+      }
+    }
+  ];
+
+  for (const snapshot of invalidSnapshots) {
+    const calls = [];
+    const execute = createZCloudExecutor({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        return response(200, snapshot);
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_targets_invalid");
+    assert.equal(calls.length, 1);
+  }
+});
+
+test("zCloud target key, project_id, base_project_id and worker_slot must agree", async () => {
+  const invalidSnapshots = [
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "haxlab::w1",
+          base_project_id: "ftmo",
+          worker_slot: 1,
+          name: "FTMO · worker 1/1",
+          active: true
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w2": {
+          project_id: "ftmo::w2",
+          base_project_id: "ftmo",
+          worker_slot: 1,
+          name: "FTMO · worker 1/1",
+          active: true
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "ftmo::w1",
+          base_project_id: "haxlab",
+          worker_slot: 1,
+          name: "FTMO · worker 1/1",
+          active: true
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "ftmo::w1",
+          base_project_id: "ftmo",
+          worker_slot: "1",
+          name: "FTMO · worker 1/1",
           active: true
         }
       }
@@ -223,12 +304,16 @@ test("ambiguous project aliases never dispatch a command", async () => {
       return response(200, {
         projects: {
           "alpha::w1": {
+            project_id: "alpha::w1",
             base_project_id: "alpha",
+            worker_slot: 1,
             name: "Shared · worker 1/1",
             active: true
           },
           "beta::w1": {
+            project_id: "beta::w1",
             base_project_id: "beta",
+            worker_slot: 1,
             name: "Shared · worker 1/1",
             active: false
           }
