@@ -6,6 +6,19 @@ test("routes project execution to zCloud without an LLM classifier", () => {
   assert.equal(classifyIntent("Ga door met FTMO en test de volgende gate").route, "zcloud_task");
 });
 
+test("explicit project start commands reach zCloud routing", () => {
+  for (const text of [
+    "Start FTMO",
+    "Start project HaxLab",
+    "Start Raise AI",
+    "Start Light Up"
+  ]) {
+    assert.equal(classifyIntent(text).route, "zcloud_task", text);
+  }
+
+  assert.notEqual(classifyIntent("Start FTMO niet").route, "zcloud_task");
+});
+
 test("routes current zCloud portfolio project continuations", () => {
   for (const text of [
     "Werk verder aan LightUp",
