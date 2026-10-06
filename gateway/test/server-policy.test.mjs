@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseServerPort, validateServerConfig } from "../src/server-policy.mjs";
+import { parseDeployRevision, parseServerPort, validateServerConfig } from "../src/server-policy.mjs";
 
 function valid(overrides = {}) {
   return {
@@ -97,6 +97,38 @@ test("listener rejects empty host and invalid ports before binding", () => {
     assert.throws(
       () => validateServerConfig(valid({ port })),
       /integer from 1 through 65535/
+    );
+  }
+});
+
+test("deploy revision accepts only unknown or canonical Git object IDs", () => {
+  const sha1 = "0123456789abcdef".repeat(2) + "01234567";
+  const sha256 = "0123456789abcdef".repeat(4);
+
+  assert.equal(parseDeployRevision(undefined), "unknown");
+  assert.equal(parseDeployRevision("unknown"), "unknown");
+  assert.equal(parseDeployRevision(sha1), sha1);
+  assert.equal(parseDeployRevision(sha256), sha256);
+
+  for (const value of [
+    "",
+    " UNKNOWN",
+    "unknown ",
+    "Unknown",
+    "g".repeat(40),
+    "A".repeat(40),
+    "a".repeat(39),
+    "a".repeat(41),
+    "a".repeat(63),
+    "a".repeat(65),
+    "main",
+    "v1.2.3",
+    "deadbeef\n" + "a".repeat(31)
+  ]) {
+    assert.throws(
+      () => parseDeployRevision(value),
+      /canonical 40\/64-character lowercase Git revision/,
+      value
     );
   }
 });
