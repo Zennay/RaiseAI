@@ -70,3 +70,78 @@ test("authenticated request routes but does not fake execution", async () => {
     assert.equal(body.execution.reason, "connector_not_configured");
   });
 });
+
+test("rejects non-object JSON bodies before routing", async () => {
+  let executeCalls = 0;
+
+  await withServer(async base => {
+    for (const payload of [null, [], 42, "question"]) {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify(payload)
+      });
+
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.equal(body.error, "invalid_request");
+    }
+  }, {
+    execute: async () => {
+      executeCalls += 1;
+      return { enabled: true, answer: "must not run" };
+    }
+  });
+
+  assert.equal(executeCalls, 0);
+});
+
+test("rejects non-string text before routing", async () => {
+  let executeCalls = 0;
+
+  await withServer(async base => {
+    for (const text of [123, true, {}, ["question"]]) {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text })
+      });
+
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.equal(body.error, "invalid_text");
+    }
+  }, {
+    execute: async () => {
+      executeCalls += 1;
+      return { enabled: true, answer: "must not run" };
+    }
+  });
+
+  assert.equal(executeCalls, 0);
+});
+
+test("missing and whitespace-only text retain text_required contract", async () => {
+  await withServer(async base => {
+    for (const payload of [{}, { text: "   \n\t" }]) {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify(payload)
+      });
+
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.equal(body.error, "text_required");
+    }
+  });
+});
