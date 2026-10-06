@@ -76,6 +76,9 @@ test("zCloud connector base URL must be a clean HTTP(S) origin", async () => {
     "http://10.0.0.5:8765",
     "http://zcloud.internal:8765",
     "http://user:pass@127.0.0.1:8765",
+    "http://127.0.0.1:\t8765",
+    "http://127.0.0.1:87\n65",
+    "https://zcloud.in\u0000ternal:8765",
     "http://127.0.0.1:8765/api",
     "http://127.0.0.1:8765?mode=test",
     "http://127.0.0.1:8765#fragment"
