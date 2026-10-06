@@ -6,6 +6,36 @@ import org.junit.Test
 
 class NativeVoiceLifecycleContractTest {
     @Test
+    fun speechRecognizerStartupIsFailClosed() {
+        val source = findSource(
+            "src/main/java/nl/zennay/raiseai/NativeVoiceActivity.kt"
+        ).readText()
+
+        val start = source.indexOf("private fun startListening()")
+        val end = source.indexOf("private fun scopedRecognitionListener", start)
+        assertTrue("startListening must exist", start >= 0)
+        assertTrue("scoped listener must follow startListening", end > start)
+
+        val startListening = source.substring(start, end)
+        assertTrue(
+            "SpeechRecognizer creation must be guarded",
+            startListening.contains("val nextRecognizer = runCatching {")
+        )
+        assertTrue(
+            "SpeechRecognizer startListening must be guarded",
+            startListening.contains("nextRecognizer.startListening(intent)")
+        )
+        assertTrue(
+            "startup failures must use the user-visible fallback state",
+            startListening.contains("showError(\"Spraakherkenning kon niet starten\")")
+        )
+        assertTrue(
+            "failed startup must invalidate the recognizer generation",
+            startListening.contains("recognitionSessions.invalidate(recognitionGeneration)")
+        )
+    }
+
+    @Test
     fun asynchronousOutcomeGateRequiresStartedUiAndClosesOnStop() {
         val source = findSource(
             "src/main/java/nl/zennay/raiseai/NativeVoiceActivity.kt"
