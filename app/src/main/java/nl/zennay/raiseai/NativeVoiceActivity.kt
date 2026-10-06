@@ -37,6 +37,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var recognizer: SpeechRecognizer? = null
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
+    @Volatile private var isUiStarted = false
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
     private val recognitionSessions = VoiceRecognitionSessionGate()
     private val retryListeningRunnable = Runnable {
@@ -58,6 +59,16 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         } else {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        isUiStarted = true
+    }
+
+    override fun onStop() {
+        isUiStarted = false
+        super.onStop()
     }
 
     override fun onRequestPermissionsResult(
@@ -338,8 +349,9 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     private fun postToUiIfActive(block: () -> Unit) {
+        if (!isUiStarted) return
         mainHandler.post {
-            if (!isFinishing && !isDestroyed) {
+            if (isUiStarted && !isFinishing && !isDestroyed) {
                 block()
             }
         }
