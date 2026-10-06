@@ -98,6 +98,70 @@ test("invalid OpenAI model config fails closed before provider calls", async () 
   }
 });
 
+test("OpenAI response model provenance is normalized or falls back when omitted", async () => {
+  const padded = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: responseHeaders(),
+      async json() {
+        return {
+          model: "  gpt-5.4-nano-2026-09-01  ",
+          output: [{
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "ok" }]
+          }]
+        };
+      }
+    })
+  });
+
+  const paddedResult = await padded({ route: "quick_ai" }, "hoi");
+  assert.equal(paddedResult.model, "gpt-5.4-nano-2026-09-01");
+
+  const omitted = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: fakeResponse("ok", [])
+  });
+
+  const omittedResult = await omitted({ route: "quick_ai" }, "hoi");
+  assert.equal(omittedResult.model, "gpt-5.4-nano");
+});
+
+test("malformed OpenAI response model fails closed", async () => {
+  for (const model of ["", "bad model", 42, {}]) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: responseHeaders(),
+        async json() {
+          return {
+            model,
+            output: [{
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "must not pass" }]
+            }]
+          };
+        }
+      })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
+
 test("web search is opt-in", async () => {
   let called = false;
   const execute = createOpenAIExecutor({
@@ -277,6 +341,7 @@ test("OpenAI output text is accepted only from assistant message items", async (
       fetchImpl: async () => ({
         ok: true,
         status: 200,
+        headers: responseHeaders(),
         async json() {
           return body;
         }
@@ -371,6 +436,8 @@ test("OpenAI accepts case-insensitive JSON media types with parameters", async (
       async json() {
         return {
           output: [{
+            type: "message",
+            role: "assistant",
             content: [{ type: "output_text", text: "geldig antwoord" }]
           }]
         };
