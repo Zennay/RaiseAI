@@ -121,6 +121,13 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 observation_payload(recorded_at_utc="2026-10-06T04:59:59Z"),
             )
 
+    def test_canonicalizes_recorded_timestamp_to_utc(self):
+        result = validator.validate_observations(
+            session_payload(),
+            observation_payload(recorded_at_utc="2026-10-06T07:45:00+02:00"),
+        )
+        self.assertEqual(result["recorded_at_utc"], "2026-10-06T05:45:00Z")
+
     def test_rejects_non_string_failure_entry(self):
         with self.assertRaisesRegex(validator.ObservationError, r"visible_ux_failures\[0\]"):
             validator.validate_observations(
