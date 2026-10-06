@@ -13,6 +13,7 @@ import os
 import shutil
 import stat
 import tempfile
+import unicodedata
 import urllib.request
 import zipfile
 from collections import Counter
@@ -53,7 +54,7 @@ def _member_is_symlink(info: zipfile.ZipInfo) -> bool:
     return stat.S_ISLNK(mode)
 
 
-def _validate_member_path(name: str) -> None:
+def _validate_member_path(name: str) -> str:
     if "\\" in name:
         raise HandoffError(f"Unsafe archive member path: {name}")
 
@@ -65,6 +66,7 @@ def _validate_member_path(name: str) -> None:
         or rendered != candidate.as_posix()
     ):
         raise HandoffError(f"Unsafe archive member path: {name}")
+    return candidate.as_posix()
 
 
 def extract_verified_archive(
@@ -106,8 +108,18 @@ def extract_verified_archive(
                 )
 
             names = set()
+            portable_paths: dict[str, str] = {}
             for info in infos:
-                _validate_member_path(info.filename)
+                canonical_path = _validate_member_path(info.filename)
+                portable_key = unicodedata.normalize("NFC", canonical_path).casefold()
+                previous = portable_paths.get(portable_key)
+                if previous is not None:
+                    raise HandoffError(
+                        "Frozen handoff contains portable path collision: "
+                        f"{previous} <> {info.filename}"
+                    )
+                portable_paths[portable_key] = info.filename
+
                 if _member_is_symlink(info):
                     raise HandoffError(
                         f"Symlink entries are not allowed in frozen handoff: {info.filename}"
