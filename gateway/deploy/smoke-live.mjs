@@ -20,6 +20,7 @@ import fs from "node:fs";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
+import { httpsOrigin } from "./readiness-config.mjs";
 import { evaluateZCloudProbe } from "./smoke-policy.mjs";
 
 const configDir =
@@ -38,7 +39,10 @@ const env = readKeyValueFile(path.join(configDir, "gateway.env"));
 const profile = readKeyValueFile(path.join(configDir, "watch-gateway.properties"));
 
 const token = env.get("RAISE_GATEWAY_TOKEN") ?? "";
-const baseUrl = new URL(process.env.RAISE_SMOKE_URL ?? profile.get("url") ?? "");
+const baseUrl = httpsOrigin(
+  process.env.RAISE_SMOKE_URL ?? profile.get("url") ?? "",
+  "Raise smoke URL"
+);
 const certFile = env.get("RAISE_TLS_CERT") ?? "";
 const expectedRevision =
   process.env.RAISE_EXPECTED_REVISION ?? env.get("RAISE_DEPLOY_REVISION") ?? "";
