@@ -35,6 +35,18 @@ test("project explanation prompts stay informational even with execution vocabul
   assert.equal(classifyIntent("Kan je Raise AI testen?").route, "zcloud_task");
 });
 
+test("broader project explanation prompts never dispatch work", () => {
+  for (const text of [
+    "Vertel me meer over het testen van HaxLab",
+    "Vertel iets over waarom zCloud deze build test",
+    "Geef me uitleg over wanneer ik Supa push",
+    "Beschrijf hoe ik Raise AI test",
+    "Licht toe waarom uLab een update nodig heeft"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "zcloud_task", text);
+  }
+});
+
 test("routes home device commands directly", () => {
   assert.equal(classifyIntent("Zet de lampen in de woonkamer uit").route, "smart_home");
   assert.equal(classifyIntent("Zet de thermostaat op 20 graden").route, "smart_home");
@@ -70,6 +82,31 @@ test("home questions never dispatch commands from action-like words", () => {
   assert.equal(classifyIntent("verwarming aan").route, "smart_home");
   assert.equal(classifyIntent("lampen uit").route, "smart_home");
   assert.equal(classifyIntent("zet de thermostaat uit").route, "smart_home");
+});
+
+test("home state statements never actuate devices", () => {
+  for (const text of [
+    "De verwarming staat aan",
+    "De lampen in de woonkamer staan uit",
+    "Mijn tv is uit",
+    "De speaker is aan"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "smart_home", text);
+  }
+
+  assert.equal(classifyIntent("de lampen uit").route, "smart_home");
+});
+
+test("home explanation prompts never actuate devices", () => {
+  for (const text of [
+    "Vertel me meer over de lampen uit zetten",
+    "Vertel iets over waarom de verwarming aan staat",
+    "Geef me uitleg over de thermostaat uit zetten",
+    "Beschrijf hoe ik de speaker stop",
+    "Licht toe waarom de tv uit staat"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "smart_home", text);
+  }
 });
 
 test("routes freshness-sensitive questions to search", () => {

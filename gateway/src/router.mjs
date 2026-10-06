@@ -1,10 +1,11 @@
 const PROJECTS = /\b(ftmo|haxlab|ulab|zcloud|raise\s*ai|supa|flowly)\b/i;
 const EXECUTION = /\b(ga\s+door|werk\s+verder|fix|repareer|voer\s+uit|uitvoeren|deploy|build(?:en)?|bouw|commit|push|test(?:en)?|implementeer|update|maak|onderzoek\s+en)\b/i;
 const PROJECT_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
-const PROJECT_EXPLANATION = /^\s*(?:(?:kun|kan)\s+je(?:\s+me)?\s+(?:uitleggen|vertellen)|leg(?:\s+me)?\s+uit|vertel(?:\s+me)?\s+(?:hoe|waarom))\b/i;
+const EXPLANATION = /^\s*(?:(?:kun|kan)\s+je(?:\s+me)?\s+(?:uitleggen|vertellen)|leg(?:\s+me)?\s+uit|vertel(?:\s+me)?\s+(?:hoe|waarom|meer\s+over|iets\s+over)|geef(?:\s+me)?\s+(?:uitleg|informatie|info)\s+over|beschrijf|licht(?:\s+me)?\s+toe)\b/i;
 const HOME = /\b(google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermostaat|verwarming|speaker|tv|televisie|woonkamer|slaapkamer|keuken)\b/i;
 const HOME_ACTION = /\b(aan|uit|zet|dim|verhoog|verlaag|speel|pauzeer|stop)\b/i;
 const HOME_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
+const HOME_STATE_STATEMENT = /^\s*(?:(?:de|het|mijn|onze|die|deze)\s+)?(?:google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermostaat|verwarming|speaker|tv|televisie)\b.*\b(?:is|zijn|staat|staan)\b/i;
 const CURRENT = /\b(vandaag|nu|actueel|laatste|nieuwste|recent|weer|temperatuur|nieuws|verkeer|koers|prijs|stand|uitslag)\b/i;
 const DEEP = /\b(analyseer|vergelijk|architectuur|debug|onderzoek|strategie|trade-?off|optimaliseer|ontwerp|implementeer|waarom|stappenplan|code|programmeer)\b/i;
 
@@ -16,7 +17,7 @@ export function classifyIntent(rawText) {
     PROJECTS.test(text) &&
     EXECUTION.test(text) &&
     !PROJECT_QUESTION.test(text) &&
-    !PROJECT_EXPLANATION.test(text)
+    !EXPLANATION.test(text)
   ) {
     return {
       route: "zcloud_task",
@@ -27,7 +28,13 @@ export function classifyIntent(rawText) {
     };
   }
 
-  if (HOME.test(text) && HOME_ACTION.test(text) && !HOME_QUESTION.test(text)) {
+  if (
+    HOME.test(text) &&
+    HOME_ACTION.test(text) &&
+    !HOME_QUESTION.test(text) &&
+    !HOME_STATE_STATEMENT.test(text) &&
+    !EXPLANATION.test(text)
+  ) {
     return {
       route: "smart_home",
       target: "home.command",
