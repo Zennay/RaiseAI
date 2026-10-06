@@ -3,19 +3,17 @@ package nl.zennay.raiseai
 internal enum class HomeLaunchTarget {
     INSTALLED_APP,
     PLAY_STORE,
-    WEB_STORE,
-    UNAVAILABLE
+    WEB_STORE
 }
 
 internal object HomeLaunchPolicy {
-    fun choose(
+    fun orderedAvailableTargets(
         installedAppAvailable: Boolean,
         playStoreAvailable: Boolean,
         webStoreAvailable: Boolean
-    ): HomeLaunchTarget = when {
-        installedAppAvailable -> HomeLaunchTarget.INSTALLED_APP
-        playStoreAvailable -> HomeLaunchTarget.PLAY_STORE
-        webStoreAvailable -> HomeLaunchTarget.WEB_STORE
-        else -> HomeLaunchTarget.UNAVAILABLE
+    ): List<HomeLaunchTarget> = buildList {
+        if (installedAppAvailable) add(HomeLaunchTarget.INSTALLED_APP)
+        if (playStoreAvailable) add(HomeLaunchTarget.PLAY_STORE)
+        if (webStoreAvailable) add(HomeLaunchTarget.WEB_STORE)
     }
 }
