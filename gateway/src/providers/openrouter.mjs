@@ -1,6 +1,10 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const REQUEST_BUDGET_MS = 7_000;
 const MAX_RESPONSE_TEXT_CHARS = 4_096;
+const MAX_MODEL_NAME_LENGTH = 256;
+const MAX_FALLBACK_MODELS = 8;
+const MAX_FALLBACK_CONFIG_CHARS =
+  MAX_FALLBACK_MODELS * (MAX_MODEL_NAME_LENGTH + 1);
 
 function hasWhitespaceOrControl(value) {
   return /[\s\u0000-\u001f\u007f]/u.test(value);
@@ -21,27 +25,51 @@ function upstreamFailure(message, cause) {
 }
 
 function parseFallbackModels(value) {
-  return String(value ?? "")
+  if (
+    typeof value !== "string" ||
+    value.length > MAX_FALLBACK_CONFIG_CHARS
+  ) {
+    return null;
+  }
+
+  const models = value
     .split(",")
     .map((model) => model.trim())
     .filter(Boolean);
+
+  return models.length <= MAX_FALLBACK_MODELS ? models : null;
 }
 
 function normalizeModelName(value) {
   if (typeof value !== "string") return null;
   const model = value.trim();
-  if (!model || hasWhitespaceOrControl(model)) return null;
+  if (
+    !model ||
+    model.length > MAX_MODEL_NAME_LENGTH ||
+    hasWhitespaceOrControl(model)
+  ) {
+    return null;
+  }
   return model;
 }
 
 function normalizeFallbackModels(models) {
+  if (!Array.isArray(models) || models.length > MAX_FALLBACK_MODELS) {
+    return null;
+  }
+
   const normalized = [];
 
   for (const value of models) {
     if (typeof value !== "string") return null;
     const model = value.trim();
     if (!model) continue;
-    if (hasWhitespaceOrControl(model)) return null;
+    if (
+      model.length > MAX_MODEL_NAME_LENGTH ||
+      hasWhitespaceOrControl(model)
+    ) {
+      return null;
+    }
     normalized.push(model);
   }
 
