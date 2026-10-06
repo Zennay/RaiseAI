@@ -79,6 +79,7 @@ object CalibrationStore {
     fun triggerCount(context: Context): Int =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getInt(KEY_TRIGGER_COUNT, 0)
+            .let(CounterMath::nonNegative)
 
     fun lastTriggerAt(context: Context): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -134,16 +135,24 @@ object CalibrationStore {
     }
 
     fun activeMonitoringMs(context: Context): Long =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_ACTIVE_MS, 0L)
+        CounterMath.nonNegative(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_ACTIVE_MS, 0L)
+        )
 
     fun sleepPausedMs(context: Context): Long =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SLEEP_PAUSED_MS, 0L)
+        CounterMath.nonNegative(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SLEEP_PAUSED_MS, 0L)
+        )
 
     fun sensorEventCount(context: Context): Long =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SENSOR_EVENTS, 0L)
+        CounterMath.nonNegative(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SENSOR_EVENTS, 0L)
+        )
 
     fun sessionBlockCount(context: Context): Long =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SESSION_BLOCKS, 0L)
+        CounterMath.nonNegative(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SESSION_BLOCKS, 0L)
+        )
 
     fun clearTriggerStats(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
