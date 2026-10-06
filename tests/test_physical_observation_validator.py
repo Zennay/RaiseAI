@@ -72,6 +72,20 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.ObservationError, "missing observation fields"):
             validator.validate_observations(session_payload(), observations)
 
+    def test_rejects_unsupported_session_schema(self):
+        with self.assertRaisesRegex(validator.ObservationError, "session schema_version must equal 1"):
+            validator.validate_observations(
+                session_payload(schema_version=2),
+                observation_payload(),
+            )
+
+    def test_rejects_boolean_observation_schema(self):
+        with self.assertRaisesRegex(validator.ObservationError, "schema_version must equal 1"):
+            validator.validate_observations(
+                session_payload(),
+                observation_payload(schema_version=True),
+            )
+
     def test_rejects_unexpected_fields(self):
         with self.assertRaisesRegex(validator.ObservationError, "unexpected observation fields"):
             validator.validate_observations(
