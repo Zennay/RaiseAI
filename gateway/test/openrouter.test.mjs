@@ -119,6 +119,33 @@ test("OpenRouter model config trims benign padding and deduplicates fallbacks", 
   ]);
 });
 
+test("OpenRouter config rejects non-whitespace control characters before provider calls", async () => {
+  const cases = [
+    { fastModel: "z-ai/glm-5.3-flash\u0000shadow" },
+    { deepModel: "z-ai/glm-5.3\u001fpreview" },
+    { fallbackModels: ["google/gemini-3.8-flash\u007flegacy"] }
+  ];
+
+  for (const options of cases) {
+    let called = false;
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      ...options,
+      fetchImpl: async () => {
+        called = true;
+        throw new Error("should not run");
+      }
+    });
+
+    const route = Object.hasOwn(options, "deepModel") ? "deep_ai" : "quick_ai";
+    const result = await execute({ route }, "hoi");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "openrouter_model_config_invalid");
+    assert.equal(called, false);
+  }
+});
+
 test("invalid OpenRouter model config fails closed before provider calls", async () => {
   const cases = [
     { fastModel: "" },
@@ -427,7 +454,7 @@ test("OpenRouter accepts a configured fallback model as response provenance", as
 });
 
 test("malformed OpenRouter response model fails closed", async () => {
-  for (const model of ["", "bad model", 42, {}]) {
+  for (const model of ["", "bad model", "bad\u0000model", "bad\u001fmodel", "bad\u007fmodel", 42, {}]) {
     let calls = 0;
     const execute = createOpenRouterExecutor({
       apiKey: "test-key",
@@ -613,6 +640,28 @@ test("persistent OpenRouter 5xx still fails closed after bounded retry", async (
     /openrouter_http_503/
   );
   assert.equal(calls, 2);
+});
+
+test("control-character-contaminated API keys fail closed without a provider call", async () => {
+  for (const apiKey of [
+    "test-key\u0000suffix",
+    "test-key\u001fsuffix",
+    "test-key\u007fsuffix"
+  ]) {
+    let called = false;
+    const execute = createOpenRouterExecutor({
+      apiKey,
+      fetchImpl: async () => {
+        called = true;
+        throw new Error("should not run");
+      }
+    });
+
+    const result = await execute({ route: "quick_ai" }, "hoi");
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "openrouter_not_configured");
+    assert.equal(called, false);
+  }
 });
 
 test("missing or whitespace-contaminated API key fails closed without a provider call", async () => {
