@@ -47,6 +47,20 @@ test("broader project explanation prompts never dispatch work", () => {
   }
 });
 
+test("first-person informational project prompts never dispatch work", () => {
+  for (const text of [
+    "Ik wil weten hoe ik HaxLab test",
+    "Ik vraag me af waarom zCloud deze build test",
+    "Ik ben benieuwd wanneer ik Supa push",
+    "Ik wil uitleg over waarom Raise AI een update nodig heeft",
+    "Vertel me wat er gebeurt als ik uLab test"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "zcloud_task", text);
+  }
+
+  assert.equal(classifyIntent("Ik wil HaxLab testen").route, "zcloud_task");
+});
+
 test("routes home device commands directly", () => {
   assert.equal(classifyIntent("Zet de lampen in de woonkamer uit").route, "smart_home");
   assert.equal(classifyIntent("Zet de thermostaat op 20 graden").route, "smart_home");
@@ -107,6 +121,20 @@ test("home explanation prompts never actuate devices", () => {
   ]) {
     assert.notEqual(classifyIntent(text).route, "smart_home", text);
   }
+});
+
+test("first-person informational home prompts never actuate devices", () => {
+  for (const text of [
+    "Ik wil weten hoe ik de thermostaat uit zet",
+    "Ik vraag me af waarom de verwarming aan staat",
+    "Ik ben benieuwd hoe ik de speaker stop",
+    "Ik wil informatie over wanneer de lampen uit staan",
+    "Vertel me wat er gebeurt als ik de tv uit zet"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "smart_home", text);
+  }
+
+  assert.equal(classifyIntent("Ik wil de verwarming aan").route, "smart_home");
 });
 
 test("routes freshness-sensitive questions to search", () => {
