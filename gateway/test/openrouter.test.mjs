@@ -127,7 +127,7 @@ test("transient fetch failure is retried once", async () => {
   assert.equal(result.answer, "ok");
 });
 
-test("provider timeout fails fast without a second request", async () => {
+test("provider timeout fails fast as upstream 502 without a second request", async () => {
   let calls = 0;
   const execute = createOpenRouterExecutor({
     apiKey: "test-key",
@@ -143,9 +143,38 @@ test("provider timeout fails fast without a second request", async () => {
 
   await assert.rejects(
     execute({ route: "quick_ai" }, "hoi"),
-    /timeout/
+    error => {
+      assert.equal(error.message, "openrouter_request_failed");
+      assert.equal(error.statusCode, 502);
+      assert.equal(error.cause?.name, "TimeoutError");
+      return true;
+    }
   );
   assert.equal(calls, 1);
+});
+
+test("persistent OpenRouter transport failure becomes upstream 502 after bounded retry", async () => {
+  let calls = 0;
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    retryDelayMs: 0,
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      throw new Error("connection refused");
+    }
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openrouter_request_failed");
+      assert.equal(error.statusCode, 502);
+      assert.equal(error.cause?.message, "connection refused");
+      return true;
+    }
+  );
+  assert.equal(calls, 2);
 });
 
 test("permanent OpenRouter 4xx fails closed without retry", async () => {
