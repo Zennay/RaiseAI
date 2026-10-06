@@ -1,3 +1,8 @@
+function revision(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return /^[0-9a-f]{40}$/i.test(normalized) ? normalized : null;
+}
+
 export function evaluateReadinessResponse({
   status,
   json,
@@ -19,28 +24,38 @@ export function evaluateReadinessResponse({
     };
   }
 
-  const revision =
-    typeof json?.revision === "string" && json.revision ? json.revision : null;
-
-  if (!revision) {
+  const expected = revision(expectedRevision);
+  if (!expected) {
     return {
       ok: false,
-      reason: "health_revision_missing",
+      reason: "expected_revision_invalid",
+      revision: json?.revision ?? null
+    };
+  }
+
+  const liveRevision = revision(json?.revision);
+  if (!liveRevision) {
+    return {
+      ok: false,
+      reason:
+        typeof json?.revision === "string" && json.revision.trim()
+          ? "health_revision_invalid"
+          : "health_revision_missing",
       revision: null
     };
   }
 
-  if (revision !== expectedRevision) {
+  if (liveRevision !== expected) {
     return {
       ok: false,
       reason: "health_revision_mismatch",
-      revision
+      revision: liveRevision
     };
   }
 
   return {
     ok: true,
     reason: "ready",
-    revision
+    revision: liveRevision
   };
 }
