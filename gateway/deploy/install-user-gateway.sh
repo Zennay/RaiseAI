@@ -24,9 +24,25 @@ valid_public_host() {
   done
 }
 
+is_ipv4_host() {
+  local host="$1" octet
+  local -a octets
+  [[ "$host" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  IFS='.' read -r -a octets <<< "$host"
+  [ "${#octets[@]}" -eq 4 ] || return 1
+  for octet in "${octets[@]}"; do
+    (( 10#$octet <= 255 )) || return 1
+  done
+}
+
 if ! valid_public_host "$PUBLIC_HOST"; then
   echo "Invalid RAISE_PUBLIC_HOST" >&2
   exit 1
+fi
+
+PUBLIC_HOST_SAN="DNS:$PUBLIC_HOST"
+if is_ipv4_host "$PUBLIC_HOST"; then
+  PUBLIC_HOST_SAN="IP:$PUBLIC_HOST"
 fi
 
 if [[ ! "$PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( 10#$PORT > 65535 )); then
@@ -65,7 +81,7 @@ CERT="$TLS_DIR/gateway-cert.pem"
 KEY="$TLS_DIR/gateway-key.pem"
 
 if [ ! -s "$CERT" ] || [ ! -s "$KEY" ]; then
-  openssl req -x509 -newkey ec     -pkeyopt ec_paramgen_curve:P-256     -sha256 -nodes -days 1825     -keyout "$KEY"     -out "$CERT"     -subj "/CN=$PUBLIC_HOST"     -addext "subjectAltName=DNS:$PUBLIC_HOST"
+  openssl req -x509 -newkey ec     -pkeyopt ec_paramgen_curve:P-256     -sha256 -nodes -days 1825     -keyout "$KEY"     -out "$CERT"     -subj "/CN=$PUBLIC_HOST"     -addext "subjectAltName=$PUBLIC_HOST_SAN"
   chmod 600 "$KEY"
   chmod 644 "$CERT"
 fi
