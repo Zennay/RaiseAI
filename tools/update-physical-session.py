@@ -150,6 +150,14 @@ def mark_gate_passed(path: Path, gate: str, verified_at_utc: str) -> None:
 
     e2e_passed = _require_bool(payload, "e2e_passed")
     v1_passed = _require_bool(payload, "v1_gate_passed")
+    has_e2e_time = "e2e_verified_at_utc" in payload
+    has_v1_time = "v1_verified_at_utc" in payload
+    if e2e_passed != has_e2e_time:
+        raise SessionUpdateError("E2E gate flag/timestamp state is incoherent")
+    if v1_passed != has_v1_time:
+        raise SessionUpdateError("V1 gate flag/timestamp state is incoherent")
+    if v1_passed and not e2e_passed:
+        raise SessionUpdateError("V1 gate cannot be committed without E2E")
 
     if gate == "e2e":
         if e2e_passed or "e2e_verified_at_utc" in payload:
