@@ -6,6 +6,22 @@ test("routes project execution to zCloud without an LLM classifier", () => {
   assert.equal(classifyIntent("Ga door met FTMO en test de volgende gate").route, "zcloud_task");
 });
 
+test("project questions never dispatch work from execution-like words", () => {
+  for (const text of [
+    "Hoe test ik HaxLab lokaal?",
+    "Wat test zCloud voordat een worker start?",
+    "Waarom build Supa niet automatisch?",
+    "Welke commit update Raise AI?",
+    "Waar maak ik een nieuwe uLab release?"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "zcloud_task", text);
+  }
+
+  assert.equal(classifyIntent("Test HaxLab en commit de fix").route, "zcloud_task");
+  assert.equal(classifyIntent("Werk verder aan zCloud").route, "zcloud_task");
+  assert.equal(classifyIntent("Kan je Supa builden en testen?").route, "zcloud_task");
+});
+
 test("routes home device commands directly", () => {
   assert.equal(classifyIntent("Zet de lampen in de woonkamer uit").route, "smart_home");
   assert.equal(classifyIntent("Zet de thermostaat op 20 graden").route, "smart_home");
