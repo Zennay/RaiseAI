@@ -57,6 +57,7 @@ jobs:
           protected=(
               "zcloud-emergency-restore-20261006",
               "zcloud-workers-live-recovery-20261006",
+              "zcloud-public-dashboard-recovery-20261004",
               "zcloud-emergency-queue-preempt-20261006",
           )
           cancelled=[]; preserved=[]
