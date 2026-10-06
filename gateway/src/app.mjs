@@ -198,7 +198,19 @@ export function createHandler({
         decision.route === "deep_ai" ||
         decision.route === "current_info";
 
-      if (aiRoute && execution.enabled && execution.answer === null) {
+      if (
+        aiRoute &&
+        execution.enabled &&
+        (
+          execution.answer === null ||
+          typeof execution.provider !== "string" ||
+          !execution.provider ||
+          execution.provider !== execution.provider.trim() ||
+          typeof execution.model !== "string" ||
+          !execution.model ||
+          execution.model !== execution.model.trim()
+        )
+      ) {
         const err = new Error("invalid_execution_result");
         err.statusCode = 502;
         throw err;
