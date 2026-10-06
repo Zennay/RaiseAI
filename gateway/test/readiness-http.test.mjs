@@ -11,7 +11,8 @@ test("readiness HTTP gate accepts only application/json media identity", () => {
   for (const value of [
     "application/json",
     "application/json; charset=utf-8",
-    "Application/JSON; Charset=UTF-8"
+    "Application/JSON; Charset=UTF-8",
+    'application/json; charset="UTF-8"'
   ]) {
     assert.equal(hasJsonMediaType(value), true, value);
   }
@@ -22,7 +23,13 @@ test("readiness HTTP gate accepts only application/json media identity", () => {
     "",
     "text/plain",
     "text/html; charset=utf-8",
-    "application/problem+json"
+    "application/problem+json",
+    "application/json;",
+    "application/json; charset=iso-8859-1",
+    "application/json; charset=",
+    "application/json; profile=watch",
+    "application/json; charset=utf-8; profile=watch",
+    "application/json; charset=utf-8; charset=utf-8"
   ]) {
     assert.equal(hasJsonMediaType(value), false, String(value));
   }
