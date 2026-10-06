@@ -1,4 +1,4 @@
-const PROJECTS = /\b(ftmo|haxlab|ulab|zcloud|raise\s*ai|supa|flowly|zssh|lightup|zguard)\b/i;
+const PROJECTS = /\b(ftmo|haxlab|ulab|z\s*cloud|raise\s*ai|supa|flowly|z\s*ssh|light\s*up|z\s*guard)\b/i;
 const EXECUTION = /\b(ga\s+door|werk\s+verder|fix|repareer|voer\s+uit|uitvoeren|deploy|build(?:en)?|bouw|commit|push|test(?:en)?|implementeer|update|maak|onderzoek\s+en)\b/i;
 const PROJECT_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
 const EXPLANATION = /^\s*(?:(?:kun|kan)\s+je(?:\s+me)?\s+(?:uitleggen|vertellen)|leg(?:\s+me)?\s+uit|vertel(?:\s+me)?\s+(?:hoe|waarom|wat|meer\s+over|iets\s+over)|geef(?:\s+me)?\s+(?:uitleg|informatie|info)\s+over|beschrijf|licht(?:\s+me)?\s+toe|ik\s+(?:wil\s+(?:weten|uitleg|informatie)|vraag\s+me\s+af|ben\s+benieuwd))\b/i;
