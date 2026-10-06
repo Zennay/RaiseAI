@@ -173,7 +173,42 @@ Working pass targets:
 
 Record failures as failures. Do not discard missed raises or false triggers merely to satisfy the threshold.
 
-## 7. Finish and preserve evidence
+## 7. Record explicit physical quality observations
+
+Issue #34 requires the observed screen-off/background behavior and visible UX failures to be explicit rather than inferred from a passing E2E or reliability score. Before closing the physical gate, create `operator-observations.json` inside the same evidence session directory.
+
+Use the exact identity from that session's `session.json`:
+
+```json
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-06T06:00:00Z",
+  "watch_serial": "<same watch_serial as session.json>",
+  "app_version": "<same app_version as session.json>",
+  "source_revision": "<same source_revision as session.json>",
+  "apk_sha256": "<same apk_sha256 as session.json>",
+  "screen_off_tested": true,
+  "screen_off_behavior": "<what actually happened when tested with the display off>",
+  "background_tested": true,
+  "background_behavior": "<what actually happened while Raise AI was backgrounded>",
+  "ux_failures_reviewed": true,
+  "visible_ux_failures": []
+}
+```
+
+If a visible failure occurred, keep it in `visible_ux_failures`; an empty array means the operator explicitly reviewed the session and observed none. Do not include transcript text, assistant answers, tokens or other secrets.
+
+Validate the record against the same physical session:
+
+```bash
+python3 tools/validate-physical-observations.py \
+  ~/.raiseai/evidence/<session>/session.json \
+  ~/.raiseai/evidence/<session>/operator-observations.json
+```
+
+A passing validator means the observation record is complete and provenance-bound. It does **not** turn poor observed behavior into a product pass; failures remain evidence that must be assessed when issue #34 is closed.
+
+## 8. Finish and preserve evidence
 
 The canonical flow writes evidence under:
 
@@ -184,6 +219,7 @@ A passing session must contain provenance-bound summary evidence including:
 - `session.json`
 - `e2e-result.json`
 - `v1-result.json`
+- `operator-observations.json` (validated by `tools/validate-physical-observations.py`)
 
 Keep the raw trace/trial evidence from that same session. Do **not** upload gateway profiles, tokens, provider credentials, transcript text, or assistant response text.
 
