@@ -4,6 +4,13 @@ function hasUsableApiKey(value) {
   return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
 }
 
+function normalizeModelName(value) {
+  if (typeof value !== "string") return null;
+  const model = value.trim();
+  if (!model || /\s/u.test(model)) return null;
+  return model;
+}
+
 function upstreamFailure(message, cause) {
   const error = new Error(message, { cause });
   error.statusCode = 502;
@@ -64,7 +71,17 @@ export function createOpenAIExecutor({
       };
     }
 
-    const model = decision.route === "deep_ai" ? deepModel : fastModel;
+    const model = normalizeModelName(
+      decision.route === "deep_ai" ? deepModel : fastModel
+    );
+
+    if (!model) {
+      return {
+        enabled: false,
+        reason: "openai_model_config_invalid"
+      };
+    }
+
     const request = {
       model,
       input: text,
