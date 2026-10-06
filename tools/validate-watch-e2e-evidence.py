@@ -35,6 +35,7 @@ SUCCESS_KEYS = COMMON_KEYS | {
 }
 FAILURE_KEYS = COMMON_KEYS | {"error_code"}
 MAX_FUTURE_SKEW_SECONDS = 60
+MAX_GATEWAY_INPUT_LENGTH_CHARS = 4_000
 
 
 class EvidenceError(ValueError):
@@ -168,6 +169,10 @@ def validate_evidence(
     _require(isinstance(route, str) and route in KNOWN_ROUTES, f"unknown route: {route!r}")
     _require(status in {"answered", "routed"}, "status must be answered or routed")
     _require(input_length > 0, "successful evidence must record a non-empty input")
+    _require(
+        input_length <= MAX_GATEWAY_INPUT_LENGTH_CHARS,
+        f"successful input_length_chars must be at most {MAX_GATEWAY_INPUT_LENGTH_CHARS}",
+    )
     for key in ("execution_enabled", "execution_reason_present", "answer_present"):
         _require(type(payload[key]) is bool, f"{key} must be boolean")
     _require(
