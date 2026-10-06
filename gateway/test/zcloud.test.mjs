@@ -135,6 +135,46 @@ test("zCloud connector base URL must be a clean HTTP(S) origin", async () => {
   assert.equal(calls[1].url, "http://127.0.0.1:8765/api/runner-control");
 });
 
+test("zCloud connector refuses redirects for target reads and control writes", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, targets({ active: true }));
+      }
+      return response(200, commandAck(91));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.redirect, "error");
+  assert.equal(calls[1].options.redirect, "error");
+});
+
+test("zCloud connector does not allow a caller to weaken redirect policy", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, targets({ active: true }));
+      }
+      return response(200, commandAck(92));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, true);
+  for (const call of calls) {
+    assert.equal(call.options.redirect, "error");
+  }
+});
+
 test("generic continuation recognizer is strict", () => {
   assert.equal(isGenericContinuation("Ga door met FTMO", ["ftmo"]), true);
   assert.equal(isGenericContinuation("Werk verder met project FTMO", ["ftmo"]), true);
