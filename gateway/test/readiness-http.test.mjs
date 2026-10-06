@@ -82,6 +82,48 @@ test("readiness body reader enforces byte bounds and strict UTF-8", async () => 
   );
 });
 
+test("readiness body reader validates declared Content-Length before trust", async () => {
+  const exactBody = Buffer.from('{"ok":true}');
+  const exact = Readable.from([exactBody]);
+  exact.headers = { "content-length": String(exactBody.length) };
+  assert.deepEqual(await readReadinessJson(exact), {
+    json: { ok: true },
+    bodyError: null
+  });
+
+  let readStarted = false;
+  const oversized = {
+    headers: { "content-length": String(MAX_READINESS_BODY_BYTES + 1) },
+    async *[Symbol.asyncIterator]() {
+      readStarted = true;
+      yield Buffer.from("{}");
+    }
+  };
+  assert.deepEqual(await readReadinessJson(oversized), {
+    json: null,
+    bodyError: "health_body_too_large"
+  });
+  assert.equal(readStarted, false);
+
+  for (const declared of ["", " ", "abc", "-1", "1.5", "10, 10"]) {
+    const malformed = Readable.from([Buffer.from("{}")]);
+    malformed.headers = { "content-length": declared };
+    assert.deepEqual(await readReadinessJson(malformed), {
+      json: null,
+      bodyError: "health_content_length_invalid"
+    }, JSON.stringify(declared));
+  }
+
+  for (const declared of [exactBody.length - 1, exactBody.length + 1]) {
+    const mismatched = Readable.from([exactBody]);
+    mismatched.headers = { "content-length": String(declared) };
+    assert.deepEqual(await readReadinessJson(mismatched), {
+      json: null,
+      bodyError: "health_content_length_mismatch"
+    }, String(declared));
+  }
+});
+
 test("readiness HTTP gate preserves bounded-body failure reasons", () => {
   const result = evaluateReadinessHttpResponse({
     status: 200,
