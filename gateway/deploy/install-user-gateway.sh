@@ -50,7 +50,7 @@ if [[ ! "$PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( 10#$PORT > 65535 )); then
   exit 1
 fi
 
-CONFIG_DIR="$HOME/.config/raiseai"
+CONFIG_DIR="${RAISE_CONFIG_DIR:-$HOME/.config/raiseai}"
 TLS_DIR="$CONFIG_DIR/tls"
 ENV_FILE="$CONFIG_DIR/gateway.env"
 WATCH_PROFILE="$CONFIG_DIR/watch-gateway.properties"
