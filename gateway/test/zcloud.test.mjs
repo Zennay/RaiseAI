@@ -775,7 +775,7 @@ test("zCloud target display names have a bounded canonical length", async () => 
               base_project_id: "ftmo",
               worker_slot: 1,
               worker_count: 1,
-              name: "F".repeat(256),
+              name: "FTMO · worker 1/1",
               desired_state: "running",
               active: true
             }
@@ -897,21 +897,21 @@ test("ambiguous project aliases never dispatch a command", async () => {
       calls.push({ url, options });
       return response(200, {
         projects: {
-          "alpha::w1": {
-            project_id: "alpha::w1",
-            base_project_id: "alpha",
+          "cloud::w1": {
+            project_id: "cloud::w1",
+            base_project_id: "cloud",
             worker_slot: 1,
             worker_count: 1,
-            name: "Shared · worker 1/1",
+            name: "zCloud · worker 1/1",
             desired_state: "running",
             active: true
           },
-          "beta::w1": {
-            project_id: "beta::w1",
-            base_project_id: "beta",
+          "zcloud::w1": {
+            project_id: "zcloud::w1",
+            base_project_id: "zcloud",
             worker_slot: 1,
             worker_count: 1,
-            name: "Shared · worker 1/1",
+            name: "zCloud · worker 1/1",
             desired_state: "running",
             active: false
           }
@@ -920,7 +920,7 @@ test("ambiguous project aliases never dispatch a command", async () => {
     }
   });
 
-  const result = await execute({ route: "zcloud_task" }, "Ga door met Shared");
+  const result = await execute({ route: "zcloud_task" }, "Ga door met zCloud");
 
   assert.equal(result.enabled, false);
   assert.equal(result.reason, "zcloud_project_ambiguous");
