@@ -300,3 +300,72 @@ test("application/json media type is case-insensitive and permits parameters", a
     assert.equal(body.route, "quick_ai");
   });
 });
+
+
+test("executor errors cannot turn failure payloads into non-error HTTP statuses", async () => {
+  for (const statusCode of [200, 204, 302, 399, 600, 999, "502"]) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Trigger executor failure" })
+      });
+
+      assert.equal(res.status, 500);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+      assert.equal("answer" in body, false);
+    }, {
+      execute: async () => {
+        const error = new Error("must_not_leak");
+        error.statusCode = statusCode;
+        throw error;
+      }
+    });
+  }
+});
+
+test("valid upstream 4xx and 5xx error statuses remain failures", async () => {
+  for (const statusCode of [400, 429, 502, 503, 599]) {
+    await withServer(async base => {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Trigger bounded failure" })
+      });
+
+      assert.equal(res.status, statusCode);
+      const body = await res.json();
+      assert.equal(body.error, "internal_error");
+    }, {
+      execute: async () => {
+        const error = new Error("private_upstream_detail");
+        error.statusCode = statusCode;
+        throw error;
+      }
+    });
+  }
+});
+
+test("invalid JSON keeps its explicit public 400 contract", async () => {
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body: "{not-json"
+    });
+
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error, "invalid_json");
+  });
+});
