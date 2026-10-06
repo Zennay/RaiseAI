@@ -199,6 +199,99 @@ test("allocated worker names with contradictory project suffixes fail closed", a
   assert.equal(calls.length, 1);
 });
 
+test("zCloud display identity cannot alias a different base project", async () => {
+  for (const name of [
+    "HaxLab · worker 1/1",
+    "Portfolio Worker 2/7 · HaxLab"
+  ]) {
+    const calls = [];
+    const execute = createZCloudExecutor({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        return response(200, {
+          projects: {
+            "ftmo::w1": {
+              project_id: "ftmo::w1",
+              base_project_id: "ftmo",
+              worker_slot: 1,
+              worker_count: 1,
+              name,
+              desired_state: "running",
+              active: true
+            }
+          }
+        });
+      }
+    });
+
+    const result = await execute(
+      { route: "zcloud_task" },
+      "Ga door met HaxLab"
+    );
+
+    assert.equal(result.enabled, false, name);
+    assert.equal(result.reason, "zcloud_targets_invalid", name);
+    assert.equal(calls.length, 1, name);
+  }
+});
+
+test("canonical zCloud display identities remain valid control aliases", async () => {
+  const cases = [
+    {
+      base: "cloud",
+      name: "zCloud · worker 1/1",
+      prompt: "Ga door met zCloud"
+    },
+    {
+      base: "zguard",
+      name: "zGuard / zBrowse · worker 1/1",
+      prompt: "Ga door met zGuard / zBrowse"
+    },
+    {
+      base: "portfolio-review",
+      name: "Portfolio Birdseye Review",
+      prompt: "Ga door met Portfolio Birdseye Review"
+    }
+  ];
+
+  let commandId = 90;
+  for (const item of cases) {
+    const calls = [];
+    const execute = createZCloudExecutor({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        if (url.endsWith("/api/runner-targets")) {
+          const workerKey = item.base + "::w1";
+          return response(200, {
+            projects: {
+              [workerKey]: {
+                project_id: workerKey,
+                base_project_id: item.base,
+                worker_slot: 1,
+                worker_count: 1,
+                name: item.name,
+                desired_state: "running",
+                active: true
+              }
+            }
+          });
+        }
+        return response(200, commandAck(commandId));
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, item.prompt);
+
+    assert.equal(result.enabled, true, item.name);
+    assert.equal(result.commandId, commandId, item.name);
+    assert.deepEqual(JSON.parse(calls[1].options.body), {
+      project_id: item.base,
+      action: "push"
+    });
+    commandId += 1;
+  }
+});
+
 test("current portfolio projects accept canonical werk-verder-aan continuation", async () => {
   const calls = [];
   const execute = createZCloudExecutor({
@@ -682,7 +775,7 @@ test("zCloud target display names have a bounded canonical length", async () => 
               base_project_id: "ftmo",
               worker_slot: 1,
               worker_count: 1,
-              name: "F".repeat(256),
+              name: "FTMO · worker 1/1",
               desired_state: "running",
               active: true
             }
@@ -804,21 +897,21 @@ test("ambiguous project aliases never dispatch a command", async () => {
       calls.push({ url, options });
       return response(200, {
         projects: {
-          "alpha::w1": {
-            project_id: "alpha::w1",
-            base_project_id: "alpha",
+          "cloud::w1": {
+            project_id: "cloud::w1",
+            base_project_id: "cloud",
             worker_slot: 1,
             worker_count: 1,
-            name: "Shared · worker 1/1",
+            name: "zCloud · worker 1/1",
             desired_state: "running",
             active: true
           },
-          "beta::w1": {
-            project_id: "beta::w1",
-            base_project_id: "beta",
+          "zcloud::w1": {
+            project_id: "zcloud::w1",
+            base_project_id: "zcloud",
             worker_slot: 1,
             worker_count: 1,
-            name: "Shared · worker 1/1",
+            name: "zCloud · worker 1/1",
             desired_state: "running",
             active: false
           }
@@ -827,7 +920,7 @@ test("ambiguous project aliases never dispatch a command", async () => {
     }
   });
 
-  const result = await execute({ route: "zcloud_task" }, "Ga door met Shared");
+  const result = await execute({ route: "zcloud_task" }, "Ga door met zCloud");
 
   assert.equal(result.enabled, false);
   assert.equal(result.reason, "zcloud_project_ambiguous");

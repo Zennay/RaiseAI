@@ -76,20 +76,39 @@ function projectDisplayName(project) {
   return raw;
 }
 
-function aliasesFor(project) {
+function canonicalAliasesForBase(baseProjectId) {
+  const base = normalize(baseProjectId);
   const aliases = new Set();
-  const base = normalize(project.base_project_id);
-  const name = normalize(projectDisplayName(project));
 
   if (base) aliases.add(base);
-  if (name) aliases.add(name);
 
   if (base === "raiseai") aliases.add("raise ai");
   if (base === "ulab") aliases.add("u lab");
   if (base === "lightup") aliases.add("light up");
-  if (base === "cloud") aliases.add("z cloud");
+  if (base === "cloud") {
+    aliases.add("zcloud");
+    aliases.add("z cloud");
+  }
   if (base === "zssh") aliases.add("z ssh");
-  if (base === "zguard") aliases.add("z guard");
+  if (base === "zguard") {
+    aliases.add("z guard");
+    aliases.add("zguard zbrowse");
+  }
+  if (base === "portfolio review") aliases.add("portfolio birdseye review");
+
+  return aliases;
+}
+
+function displayNameMatchesBase(baseProjectId, displayName) {
+  const name = normalize(displayName);
+  return name && canonicalAliasesForBase(baseProjectId).has(name);
+}
+
+function aliasesFor(project) {
+  const aliases = canonicalAliasesForBase(project.base_project_id);
+  const name = normalize(projectDisplayName(project));
+
+  if (name) aliases.add(name);
 
   return [...aliases].sort((a, b) => b.length - a.length);
 }
@@ -155,7 +174,11 @@ function groupTargets(payload) {
     const base = target.base_project_id;
     const displayName = projectDisplayName(target);
     const nameKey = displayName ? normalize(displayName) : null;
-    if (target.name !== undefined && target.name !== null && !nameKey) {
+    if (
+      target.name !== undefined &&
+      target.name !== null &&
+      (!nameKey || !displayNameMatchesBase(base, displayName))
+    ) {
       throw new Error("zcloud_targets_invalid");
     }
 
