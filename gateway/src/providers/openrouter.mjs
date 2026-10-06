@@ -1,6 +1,7 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const REQUEST_BUDGET_MS = 7_000;
 const MAX_RESPONSE_TEXT_CHARS = 4_096;
+const MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 const MAX_MODEL_NAME_LENGTH = 256;
 const MAX_FALLBACK_MODELS = 8;
 const MAX_FALLBACK_CONFIG_CHARS =
@@ -87,6 +88,67 @@ function hasJsonResponseType(response) {
   if (parts.length !== 1) return false;
 
   return /^charset\s*=\s*(?:utf-8|"utf-8")$/iu.test(parts[0].trim());
+}
+
+async function cancelResponseBody(response) {
+  try {
+    await response?.body?.cancel?.();
+  } catch {
+    // Best-effort release only; the original provider error remains authoritative.
+  }
+}
+
+async function readBoundedJsonResponse(response) {
+  const contentLength = response?.headers?.get?.("content-length");
+  if (
+    typeof contentLength === "string" &&
+    contentLength.trim() &&
+    (!/^\d+$/u.test(contentLength.trim()) ||
+      Number(contentLength.trim()) > MAX_RESPONSE_BODY_BYTES)
+  ) {
+    await cancelResponseBody(response);
+    return { ok: false, json: null };
+  }
+
+  const reader = response?.body?.getReader?.();
+  if (!reader) return { ok: false, json: null };
+
+  const chunks = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, json: null };
+      }
+
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, json: null };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { ok: false, json: null };
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { ok: true, json: JSON.parse(text) };
+  } catch {
+    return { ok: false, json: null };
+  }
 }
 
 function outputText(response) {
@@ -266,11 +328,9 @@ export function createOpenRouterExecutor({
         });
 
         const jsonMediaType = hasJsonResponseType(response);
-        const body = jsonMediaType
-          ? await response.json().catch(() => ({}))
-          : {};
 
         if (!response.ok) {
+          await cancelResponseBody(response);
           const error = new Error("openrouter_http_" + response.status);
           error.statusCode = 502;
           lastError = error;
@@ -284,11 +344,20 @@ export function createOpenRouterExecutor({
         }
 
         if (!jsonMediaType) {
+          await cancelResponseBody(response);
           const error = new Error("openrouter_invalid_response");
           error.statusCode = 502;
           throw error;
         }
 
+        const parsedBody = await readBoundedJsonResponse(response);
+        if (!parsedBody.ok) {
+          const error = new Error("openrouter_invalid_response");
+          error.statusCode = 502;
+          throw error;
+        }
+
+        const body = parsedBody.json;
         const answer = outputText(body);
         if (!answer) {
           const error = new Error("openrouter_empty_response");
