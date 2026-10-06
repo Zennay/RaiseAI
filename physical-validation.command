@@ -84,12 +84,11 @@ resolve_session() {
     printf '%s\n' "$requested"
     return
   fi
-  [ -f "$LATEST_SESSION_FILE" ] || {
-    echo "No previous physical validation session found." >&2
+  if ! python3 tools/physical-session-pointer.py resolve "$LATEST_SESSION_FILE" "$EVIDENCE_ROOT"; then
+    echo "No valid previous physical validation session found." >&2
     echo "Run: bash ./physical-validation.command prepare [gateway-profile]" >&2
     return 1
-  }
-  tr -d '\r\n' < "$LATEST_SESSION_FILE"
+  fi
 }
 
 json_get() {
@@ -303,7 +302,7 @@ payload = {
 )
 PY
 
-  printf '%s\n' "$session" > "$LATEST_SESSION_FILE"
+  python3 tools/physical-session-pointer.py publish "$LATEST_SESSION_FILE" "$session" "$EVIDENCE_ROOT" >/dev/null
   echo
   echo "PREPARE PASS"
   echo "On the Watch: open Native Raise AI and complete one short normal AI question."
