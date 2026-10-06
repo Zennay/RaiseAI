@@ -15,6 +15,19 @@ function response(status, body) {
   };
 }
 
+function commandAck(commandId, overrides = {}) {
+  return {
+    ok: true,
+    command_id: commandId,
+    status: "pending",
+    active: true,
+    desired_state: "running",
+    deduplicated: false,
+    forced: false,
+    ...overrides
+  };
+}
+
 function targets({ active = true } = {}) {
   return {
     projects: {
@@ -51,7 +64,7 @@ test("active project receives push", async () => {
       if (url.endsWith("/api/runner-targets")) {
         return response(200, targets({ active: true }));
       }
-      return response(200, { ok: true, command_id: 41, status: "pending" });
+      return response(200, commandAck(41));
     }
   });
 
@@ -75,7 +88,7 @@ test("inactive project receives start", async () => {
       if (url.endsWith("/api/runner-targets")) {
         return response(200, targets({ active: false }));
       }
-      return response(200, { ok: true, command_id: 42, status: "pending" });
+      return response(200, commandAck(42));
     }
   });
 
@@ -151,7 +164,11 @@ test("successful HTTP status requires canonical zCloud command acknowledgement",
     { ok: true, command_id: null, status: "pending" },
     { ok: true, command_id: 0, status: "pending" },
     { ok: true, command_id: 1.5, status: "pending" },
-    { ok: true, command_id: 52, status: "completed" }
+    { ok: true, command_id: 52, status: "completed" },
+    commandAck(53, { active: false }),
+    commandAck(54, { desired_state: "paused" }),
+    commandAck(55, { deduplicated: "false" }),
+    commandAck(56, { forced: true })
   ];
 
   for (const acknowledgement of invalidAcks) {
@@ -170,6 +187,23 @@ test("successful HTTP status requires canonical zCloud command acknowledgement",
     assert.equal(result.reason, "zcloud_invalid_ack");
     assert.match(result.answer, /niet als gestart/);
   }
+});
+
+test("valid zCloud acknowledgement may be deduplicated but must remain coherent", async () => {
+  const execute = createZCloudExecutor({
+    fetchImpl: async url => {
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, targets({ active: true }));
+      }
+      return response(200, commandAck(61, { deduplicated: true }));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, true);
+  assert.equal(result.commandId, 61);
+  assert.equal(result.reason, "zcloud_command_queued");
 });
 
 test("zCloud rejection details stay secret-safe", async () => {
