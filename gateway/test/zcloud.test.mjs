@@ -37,6 +37,7 @@ function targets({ active = true } = {}) {
         worker_slot: 1,
         worker_count: 2,
         name: "FTMO · worker 1/2",
+        desired_state: "running",
         active
       },
       "ftmo::w2": {
@@ -45,6 +46,7 @@ function targets({ active = true } = {}) {
         worker_slot: 2,
         worker_count: 2,
         name: "FTMO · worker 2/2",
+        desired_state: "running",
         active
       },
       "haxlab::w1": {
@@ -53,6 +55,7 @@ function targets({ active = true } = {}) {
         worker_slot: 1,
         worker_count: 1,
         name: "HaxLab · worker 1/1",
+        desired_state: "running",
         active: true
       }
     }
@@ -115,6 +118,7 @@ test("current allocated zCloud worker names resolve to the underlying project", 
               worker_slot: 1,
               worker_count: 2,
               name: "Portfolio Worker 2/7 · FTMO",
+              desired_state: "running",
               active: true
             },
             "ftmo::w2": {
@@ -123,6 +127,7 @@ test("current allocated zCloud worker names resolve to the underlying project", 
               worker_slot: 2,
               worker_count: 2,
               name: "Portfolio Worker 5/7 · FTMO",
+              desired_state: "running",
               active: true
             }
           }
@@ -152,6 +157,7 @@ test("allocated worker names with contradictory project suffixes fail closed", a
             worker_slot: 1,
             worker_count: 2,
             name: "Portfolio Worker 2/7 · FTMO",
+            desired_state: "running",
             active: true
           },
           "ftmo::w2": {
@@ -160,6 +166,7 @@ test("allocated worker names with contradictory project suffixes fail closed", a
             worker_slot: 2,
             worker_count: 2,
             name: "Portfolio Worker 5/7 · HaxLab",
+            desired_state: "running",
             active: true
           }
         }
@@ -233,6 +240,7 @@ test("malformed target state fails closed before runner control", async () => {
             worker_slot: 1,
             worker_count: 1,
             name: "FTMO · worker 1/1",
+            desired_state: "running",
             active: "false"
           }
         }
@@ -257,6 +265,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_slot: 1,
           worker_count: 2,
           name: "FTMO · worker 1/2",
+          desired_state: "running",
           active: true
         }
       }
@@ -269,6 +278,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_slot: 1,
           worker_count: 2,
           name: "FTMO · worker 1/2",
+          desired_state: "running",
           active: true
         },
         "ftmo::w2": {
@@ -277,6 +287,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_slot: 2,
           worker_count: 2,
           name: "HaxLab · worker 2/2",
+          desired_state: "running",
           active: false
         }
       }
@@ -289,6 +300,7 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_slot: 1,
           worker_count: 1,
           name: " · worker 1/1",
+          desired_state: "running",
           active: true
         }
       }
@@ -322,6 +334,7 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_slot: 1,
           worker_count: 1,
           name: "FTMO · worker 1/1",
+          desired_state: "running",
           active: true
         }
       }
@@ -334,6 +347,7 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_slot: 1,
           worker_count: 1,
           name: "FTMO · worker 1/1",
+          desired_state: "running",
           active: true
         }
       }
@@ -346,6 +360,7 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_slot: 1,
           worker_count: 1,
           name: "FTMO · worker 1/1",
+          desired_state: "running",
           active: true
         }
       }
@@ -358,6 +373,7 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_slot: "1",
           worker_count: 1,
           name: "FTMO · worker 1/1",
+          desired_state: "running",
           active: true
         }
       }
@@ -381,6 +397,98 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
   }
 });
 
+test("invalid zCloud desired-state snapshots fail closed", async () => {
+  const invalidSnapshots = [
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "ftmo::w1",
+          base_project_id: "ftmo",
+          worker_slot: 1,
+          worker_count: 1,
+          name: "FTMO · worker 1/1",
+          active: true
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "ftmo::w1",
+          base_project_id: "ftmo",
+          worker_slot: 1,
+          worker_count: 1,
+          name: "FTMO · worker 1/1",
+          desired_state: "sleeping",
+          active: false
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w1": {
+          project_id: "ftmo::w1",
+          base_project_id: "ftmo",
+          worker_slot: 1,
+          worker_count: 1,
+          name: "FTMO · worker 1/1",
+          desired_state: "paused",
+          active: true
+        }
+      }
+    }
+  ];
+
+  for (const snapshot of invalidSnapshots) {
+    const calls = [];
+    const execute = createZCloudExecutor({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        return response(200, snapshot);
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_targets_invalid");
+    assert.equal(calls.length, 1);
+  }
+});
+
+test("paused inactive zCloud worker remains a valid start target", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, {
+          projects: {
+            "ftmo::w1": {
+              project_id: "ftmo::w1",
+              base_project_id: "ftmo",
+              worker_slot: 1,
+              worker_count: 1,
+              name: "FTMO · worker 1/1",
+              desired_state: "paused",
+              active: false
+            }
+          }
+        });
+      }
+      return response(200, commandAck(71));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, true);
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    project_id: "ftmo",
+    action: "start"
+  });
+});
+
 test("incomplete or inconsistent worker-count snapshots fail closed", async () => {
   const invalidSnapshots = [
     {
@@ -391,6 +499,7 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_slot: 1,
           worker_count: 2,
           name: "FTMO · worker 1/2",
+          desired_state: "running",
           active: true
         }
       }
@@ -403,6 +512,7 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_slot: 1,
           worker_count: 2,
           name: "FTMO · worker 1/2",
+          desired_state: "running",
           active: true
         },
         "ftmo::w2": {
@@ -411,6 +521,7 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_slot: 2,
           worker_count: 3,
           name: "FTMO · worker 2/3",
+          desired_state: "running",
           active: false
         }
       }
@@ -423,6 +534,7 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_slot: 2,
           worker_count: 1,
           name: "FTMO · worker 2/1",
+          desired_state: "running",
           active: true
         }
       }
@@ -459,6 +571,7 @@ test("ambiguous project aliases never dispatch a command", async () => {
             worker_slot: 1,
             worker_count: 1,
             name: "Shared · worker 1/1",
+            desired_state: "running",
             active: true
           },
           "beta::w1": {
@@ -467,6 +580,7 @@ test("ambiguous project aliases never dispatch a command", async () => {
             worker_slot: 1,
             worker_count: 1,
             name: "Shared · worker 1/1",
+            desired_state: "running",
             active: false
           }
         }

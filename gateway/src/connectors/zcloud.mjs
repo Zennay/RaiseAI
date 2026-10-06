@@ -1,4 +1,5 @@
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
+const VALID_DESIRED_STATES = new Set(["running", "paused", "draining"]);
 
 function normalize(value) {
   return String(value ?? "")
@@ -100,7 +101,12 @@ function groupTargets(payload) {
     ) {
       throw new Error("zcloud_targets_invalid");
     }
-    if (typeof target.active !== "boolean") {
+    if (
+      typeof target.active !== "boolean" ||
+      typeof target.desired_state !== "string" ||
+      !VALID_DESIRED_STATES.has(target.desired_state) ||
+      (target.desired_state === "paused" && target.active)
+    ) {
       throw new Error("zcloud_targets_invalid");
     }
     if (target.name !== undefined && target.name !== null && typeof target.name !== "string") {
