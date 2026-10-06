@@ -115,6 +115,39 @@ function safeErrorStatus(error) {
     : 500;
 }
 
+export function validateRequestContentLength(headers) {
+  const rawValue = headers?.["content-length"];
+  if (rawValue === undefined) return null;
+
+  if (typeof rawValue !== "string") {
+    const err = new Error("invalid_json");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const normalized = rawValue.trim();
+  if (!/^\d+$/u.test(normalized)) {
+    const err = new Error("invalid_json");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const declaredLength = Number(normalized);
+  if (!Number.isSafeInteger(declaredLength)) {
+    const err = new Error("payload_too_large");
+    err.statusCode = 413;
+    throw err;
+  }
+
+  if (declaredLength > MAX_BODY) {
+    const err = new Error("payload_too_large");
+    err.statusCode = 413;
+    throw err;
+  }
+
+  return declaredLength;
+}
+
 export function createRateLimiter({
   requestsPerMinute = REQUESTS_PER_MINUTE,
   maxBuckets = MAX_RATE_LIMIT_BUCKETS
@@ -160,6 +193,7 @@ export function createRateLimiter({
 }
 
 async function readJson(req) {
+  const declaredLength = validateRequestContentLength(req.headers);
   let size = 0;
   const chunks = [];
 
@@ -171,6 +205,12 @@ async function readJson(req) {
       throw err;
     }
     chunks.push(chunk);
+  }
+
+  if (declaredLength !== null && declaredLength !== size) {
+    const err = new Error("invalid_json");
+    err.statusCode = 400;
+    throw err;
   }
 
   try {
