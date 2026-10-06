@@ -9,6 +9,9 @@ on:
       - ".github/workflows/gateway-deploy.yml"
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 concurrency:
   group: raise-gateway-deploy
   cancel-in-progress: false
@@ -20,7 +23,18 @@ jobs:
       run:
         working-directory: gateway
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact deploy revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact deploy revision
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Baseline health (pre-deploy, best-effort)
         id: baseline
