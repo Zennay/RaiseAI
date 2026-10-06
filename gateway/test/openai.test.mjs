@@ -91,6 +91,45 @@ test("enabled current-info route requests web search explicitly", async () => {
   assert.deepEqual(calls[0].request.tools, [{ type: "web_search" }]);
 });
 
+test("OpenAI response preserves every non-empty output_text block", async () => {
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          output: [
+            {
+              type: "reasoning",
+              summary: []
+            },
+            {
+              type: "message",
+              content: [
+                { type: "output_text", text: "Eerste regel." },
+                { type: "refusal", refusal: "ignored non-text part" },
+                { type: "output_text", text: "Tweede regel." }
+              ]
+            },
+            {
+              type: "message",
+              content: [
+                { type: "output_text", text: "   " },
+                { type: "output_text", text: "Derde regel." }
+              ]
+            }
+          ]
+        };
+      }
+    })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "Geef drie regels");
+
+  assert.equal(result.answer, "Eerste regel.\nTweede regel.\nDerde regel.");
+});
+
 test("malformed successful OpenAI response shapes fail as upstream 502 errors", async () => {
   const malformedBodies = [
     null,
