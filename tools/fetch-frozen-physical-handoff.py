@@ -15,6 +15,7 @@ import stat
 import tempfile
 import urllib.request
 import zipfile
+from collections import Counter
 from pathlib import Path
 
 REPOSITORY = "Zennay/RaiseAI"
@@ -84,8 +85,20 @@ def extract_verified_archive(
 
     try:
         with zipfile.ZipFile(archive) as package:
+            infos = package.infolist()
+            duplicate_names = sorted(
+                name
+                for name, count in Counter(info.filename for info in infos).items()
+                if count > 1
+            )
+            if duplicate_names:
+                raise HandoffError(
+                    "Frozen handoff contains duplicate archive members: "
+                    + ", ".join(duplicate_names)
+                )
+
             names = set()
-            for info in package.infolist():
+            for info in infos:
                 _validate_member_path(info.filename)
                 if _member_is_symlink(info):
                     raise HandoffError(
@@ -100,7 +113,7 @@ def extract_verified_archive(
                     "Frozen handoff is missing required members: " + ", ".join(missing)
                 )
 
-            for info in package.infolist():
+            for info in infos:
                 if info.is_dir():
                     continue
                 target = stage / info.filename
@@ -112,16 +125,19 @@ def extract_verified_archive(
         launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
 
         try:
-            output_dir.mkdir()
-        except FileExistsError as exc:
+            stage.rename(output_dir)
+        except OSError as exc:
+            if os.path.lexists(output_dir):
+                raise HandoffError(
+                    f"Output already exists; refusing to overwrite: {output_dir}"
+                ) from exc
             raise HandoffError(
-                f"Output already exists; refusing to overwrite: {output_dir}"
+                f"Could not publish verified handoff atomically: {exc}"
             ) from exc
-        for child in stage.iterdir():
-            child.rename(output_dir / child.name)
-        stage.rmdir()
+        stage = None
     except Exception:
-        shutil.rmtree(stage, ignore_errors=True)
+        if stage is not None:
+            shutil.rmtree(stage, ignore_errors=True)
         raise
 
 
