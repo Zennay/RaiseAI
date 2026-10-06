@@ -142,6 +142,23 @@ class PhysicalSessionUpdaterTests(unittest.TestCase):
             with self.assertRaisesRegex(updater.SessionUpdateError, "single-line"):
                 updater.read_session_field(path, "watch_serial")
 
+    def test_rejects_incoherent_preexisting_gate_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+
+            payload = session_payload()
+            payload["e2e_passed"] = True
+            path = self.write_session(root, payload)
+            with self.assertRaisesRegex(updater.SessionUpdateError, "E2E gate flag/timestamp state is incoherent"):
+                updater.mark_gate_passed(path, "v1", "2026-10-06T09:10:00Z")
+
+            payload = session_payload()
+            payload["v1_gate_passed"] = True
+            payload["v1_verified_at_utc"] = "2026-10-06T09:10:00Z"
+            path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(updater.SessionUpdateError, "without E2E"):
+                updater.mark_gate_passed(path, "e2e", "2026-10-06T09:05:00Z")
+
     def test_rejects_unknown_gate_and_invalid_session_gate_types(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
