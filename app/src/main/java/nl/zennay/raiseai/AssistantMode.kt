@@ -27,11 +27,14 @@ object AssistantModeStore {
             else -> AssistantMode.GEMINI
         }
 
-    fun get(context: Context): AssistantMode {
-        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_ASSISTANT_MODE, null)
+    internal fun resolveStored(readStored: () -> String?): AssistantMode =
+        resolve(runCatching(readStored).getOrNull())
 
-        return resolve(stored)
+    fun get(context: Context): AssistantMode {
+        val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return resolveStored {
+            preferences.getString(KEY_ASSISTANT_MODE, null)
+        }
     }
 
     fun set(context: Context, mode: AssistantMode) {
