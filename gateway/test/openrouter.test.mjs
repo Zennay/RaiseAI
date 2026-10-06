@@ -22,7 +22,7 @@ function fakeResponse(answer, calls, model = "z-ai/glm-5.3-flash") {
       async json() {
         return {
           model,
-          choices: [{ message: { content: answer } }]
+          choices: [{ message: { role: "assistant", content: answer } }]
         };
       }
     };
@@ -154,7 +154,7 @@ test("OpenRouter response model provenance is normalized or falls back when omit
     fetchImpl: async () =>
       httpResponse(200, {
         model: "  z-ai/glm-5.3-flash  ",
-        choices: [{ message: { content: "ok" } }]
+        choices: [{ message: { role: "assistant", content: "ok" } }]
       })
   });
 
@@ -165,7 +165,7 @@ test("OpenRouter response model provenance is normalized or falls back when omit
     apiKey: "test-key",
     fetchImpl: async () =>
       httpResponse(200, {
-        choices: [{ message: { content: "ok" } }]
+        choices: [{ message: { role: "assistant", content: "ok" } }]
       })
   });
 
@@ -204,6 +204,36 @@ test("malformed OpenRouter choices envelopes fail closed", async () => {
   }
 });
 
+test("OpenRouter output must come from an assistant message", async () => {
+  for (const message of [
+    { content: "missing role" },
+    { role: "user", content: "echoed user input" },
+    { role: "system", content: "system text" },
+    { role: "", content: "empty role" },
+    { role: 42, content: "wrong role type" }
+  ]) {
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      retryDelayMs: 0,
+      sleepImpl: async () => {},
+      fetchImpl: async () =>
+        httpResponse(200, {
+          model: "z-ai/glm-5.3-flash",
+          choices: [{ message }]
+        })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_empty_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
+
 test("successful OpenRouter responses require the JSON media type", async () => {
   for (const contentType of [null, "", "text/plain", "text/html"]) {
     let calls = 0;
@@ -217,7 +247,7 @@ test("successful OpenRouter responses require the JSON media type", async () => 
           200,
           {
             model: "z-ai/glm-5.3-flash",
-            choices: [{ message: { content: "must not pass" } }]
+            choices: [{ message: { role: "assistant", content: "must not pass" } }]
           },
           contentType
         );
@@ -244,7 +274,7 @@ test("OpenRouter accepts application/json case-insensitively with parameters", a
         200,
         {
           model: "z-ai/glm-5.3-flash",
-          choices: [{ message: { content: "ok" } }]
+          choices: [{ message: { role: "assistant", content: "ok" } }]
         },
         "Application/JSON; charset=UTF-8"
       )
@@ -263,7 +293,7 @@ test("OpenRouter response model must belong to the requested model set", async (
     fetchImpl: async () =>
       httpResponse(200, {
         model: "unexpected/provider-model",
-        choices: [{ message: { content: "untrusted" } }]
+        choices: [{ message: { role: "assistant", content: "untrusted" } }]
       })
   });
 
@@ -284,7 +314,7 @@ test("OpenRouter accepts a configured fallback model as response provenance", as
     fetchImpl: async () =>
       httpResponse(200, {
         model: "google/gemini-3.8-flash",
-        choices: [{ message: { content: "fallback ok" } }]
+        choices: [{ message: { role: "assistant", content: "fallback ok" } }]
       })
   });
 
@@ -304,7 +334,7 @@ test("malformed OpenRouter response model fails closed", async () => {
         calls += 1;
         return httpResponse(200, {
           model,
-          choices: [{ message: { content: "ok" } }]
+          choices: [{ message: { role: "assistant", content: "ok" } }]
         });
       }
     });
@@ -332,7 +362,7 @@ test("transient OpenRouter 5xx is retried once and then succeeds", async () => {
       if (calls === 1) return httpResponse(500, { error: "temporary" });
       return httpResponse(200, {
         model: "z-ai/glm-5.3-flash",
-        choices: [{ message: { content: "gereed" } }]
+        choices: [{ message: { role: "assistant", content: "gereed" } }]
       });
     }
   });
@@ -353,7 +383,7 @@ test("transient fetch failure is retried once", async () => {
       if (calls === 1) throw new Error("temporary_network_failure");
       return httpResponse(200, {
         model: "z-ai/glm-5.3-flash",
-        choices: [{ message: { content: "ok" } }]
+        choices: [{ message: { role: "assistant", content: "ok" } }]
       });
     }
   });
