@@ -101,6 +101,79 @@ test("generic continuation recognizer is strict", () => {
   assert.equal(isGenericContinuation("Ga door met FTMO en test de pipeline", ["ftmo"]), false);
 });
 
+test("current allocated zCloud worker names resolve to the underlying project", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, {
+          projects: {
+            "ftmo::w1": {
+              project_id: "ftmo::w1",
+              base_project_id: "ftmo",
+              worker_slot: 1,
+              worker_count: 2,
+              name: "Portfolio Worker 2/7 · FTMO",
+              active: true
+            },
+            "ftmo::w2": {
+              project_id: "ftmo::w2",
+              base_project_id: "ftmo",
+              worker_slot: 2,
+              worker_count: 2,
+              name: "Portfolio Worker 5/7 · FTMO",
+              active: true
+            }
+          }
+        });
+      }
+      return response(200, commandAck(35));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, true);
+  assert.equal(result.answer, "FTMO heeft een nieuwe push gekregen in zCloud.");
+  assert.equal(calls.length, 2);
+});
+
+test("allocated worker names with contradictory project suffixes fail closed", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      return response(200, {
+        projects: {
+          "ftmo::w1": {
+            project_id: "ftmo::w1",
+            base_project_id: "ftmo",
+            worker_slot: 1,
+            worker_count: 2,
+            name: "Portfolio Worker 2/7 · FTMO",
+            active: true
+          },
+          "ftmo::w2": {
+            project_id: "ftmo::w2",
+            base_project_id: "ftmo",
+            worker_slot: 2,
+            worker_count: 2,
+            name: "Portfolio Worker 5/7 · HaxLab",
+            active: true
+          }
+        }
+      });
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_targets_invalid");
+  assert.equal(calls.length, 1);
+});
+
 test("active project receives push", async () => {
   const calls = [];
   const execute = createZCloudExecutor({
