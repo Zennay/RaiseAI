@@ -11,6 +11,16 @@ function normalizeModelName(value) {
   return model;
 }
 
+function responseModelMatchesRequest(responseModel, requestedModel) {
+  if (responseModel === requestedModel) return true;
+
+  const snapshotPrefix = requestedModel + "-";
+  if (!responseModel.startsWith(snapshotPrefix)) return false;
+
+  const snapshotSuffix = responseModel.slice(snapshotPrefix.length);
+  return /^\d{4}-\d{2}-\d{2}$/u.test(snapshotSuffix);
+}
+
 function upstreamFailure(message, cause) {
   const error = new Error(message, { cause });
   error.statusCode = 502;
@@ -151,7 +161,7 @@ export function createOpenAIExecutor({
       body?.model === undefined || body?.model === null
         ? model
         : normalizeModelName(body.model);
-    if (!responseModel) {
+    if (!responseModel || !responseModelMatchesRequest(responseModel, model)) {
       const error = new Error("openai_invalid_response");
       error.statusCode = 502;
       throw error;

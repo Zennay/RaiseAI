@@ -130,6 +130,44 @@ test("OpenAI response model provenance is normalized or falls back when omitted"
   assert.equal(omittedResult.model, "gpt-5.4-nano");
 });
 
+test("OpenAI response model must match the requested model or dated snapshot", async () => {
+  for (const responseModel of [
+    "gpt-5.4-mini",
+    "openai/gpt-5.4-nano",
+    "gpt-5.4-nano-preview",
+    "gpt-5.4-nano-2026-9-01",
+    "gpt-5.4-nano-2026-09-01-extra"
+  ]) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: responseHeaders(),
+        async json() {
+          return {
+            model: responseModel,
+            output: [{
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "must not pass" }]
+            }]
+          };
+        }
+      })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
+
 test("malformed OpenAI response model fails closed", async () => {
   for (const model of ["", "bad model", 42, {}]) {
     const execute = createOpenAIExecutor({
