@@ -386,6 +386,10 @@ async function readBoundedJsonResponse(response) {
 async function jsonFetch(fetchImpl, url, options = {}) {
   const response = await fetchImpl(url, {
     ...options,
+    // zCloud is a privileged local/control-plane dependency. Never allow an
+    // HTTP redirect to move either the target snapshot read or control command
+    // to a different origin; treat redirects as an unavailable dependency.
+    redirect: "error",
     signal: options.signal ?? AbortSignal.timeout(2_500)
   });
 
