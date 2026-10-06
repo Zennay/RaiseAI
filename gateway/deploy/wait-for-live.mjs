@@ -7,7 +7,7 @@ import fs from "node:fs";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
-import { positiveInteger } from "./readiness-config.mjs";
+import { httpsOrigin, positiveInteger } from "./readiness-config.mjs";
 import { evaluateReadinessResponse } from "./readiness-policy.mjs";
 
 const configDir =
@@ -29,11 +29,12 @@ const profile = readKeyValueFile(
   path.join(configDir, "watch-gateway.properties")
 );
 
-const baseUrl = new URL(
+const baseUrl = httpsOrigin(
   process.env.RAISE_READY_URL ??
     process.env.RAISE_SMOKE_URL ??
     profile.get("url") ??
-    ""
+    "",
+  "Raise readiness URL"
 );
 const certFile = env.get("RAISE_TLS_CERT") ?? "";
 const expectedRevision =
