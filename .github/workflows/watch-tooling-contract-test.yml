@@ -1,0 +1,65 @@
+name: Watch tooling contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "install-watch-apk.command"
+      - "upgrade-watch.command"
+      - "physical-validation.command"
+      - "pull-diagnostics.command"
+      - "pull-watch-data.command"
+      - "provision-watch-gateway.command"
+      - "tests/test_adb_device_binding.py"
+      - ".github/workflows/watch-tooling-contract-test.yml"
+  pull_request:
+    paths:
+      - "install-watch-apk.command"
+      - "upgrade-watch.command"
+      - "physical-validation.command"
+      - "pull-diagnostics.command"
+      - "pull-watch-data.command"
+      - "provision-watch-gateway.command"
+      - "tests/test_adb_device_binding.py"
+      - ".github/workflows/watch-tooling-contract-test.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-watch-tooling-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tooling-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Pin exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision="$(git rev-parse HEAD)"
+          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          test "$revision" = "$expected"
+          echo "Pinned Watch tooling revision: $revision"
+
+      - name: Shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install-watch-apk.command
+          bash -n upgrade-watch.command
+          bash -n physical-validation.command
+          bash -n pull-diagnostics.command
+          bash -n pull-watch-data.command
+          bash -n provision-watch-gateway.command
+
+      - name: Device-binding regressions
+        run: |
+          python3 -m unittest discover -s tests -p 'test_adb_device_binding.py'
