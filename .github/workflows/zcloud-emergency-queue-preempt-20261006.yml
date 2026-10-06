@@ -1,0 +1,94 @@
+name: RaiseAI hosted zCloud recovery queue preempt
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-emergency-queue-preempt-20261006.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  statuses: write
+
+concurrency:
+  group: raiseai-zcloud-emergency-queue-preempt-20261006
+  cancel-in-progress: true
+
+jobs:
+  preempt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Free VPS runner for zCloud emergency restore
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.error, urllib.request
+
+          repo=os.environ["REPO"]; token=os.environ["GH_TOKEN"]; current=int(os.environ["RUN_ID"])
+          headers={
+              "Authorization":f"Bearer {token}",
+              "Accept":"application/vnd.github+json",
+              "X-GitHub-Api-Version":"2022-11-28",
+              "User-Agent":"raiseai-zcloud-emergency-preempt/1",
+          }
+          def req(path,method="GET",payload=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              r=urllib.request.Request("https://api.github.com"+path,data=data,method=method,headers=headers)
+              with urllib.request.urlopen(r,timeout=25) as resp:
+                  raw=resp.read()
+                  return json.loads(raw) if raw else {}
+
+          protected=(
+              "zcloud-emergency-restore-20261006",
+              "zcloud-emergency-queue-preempt-20261006",
+          )
+          cancelled=[]; preserved=[]
+          for status in ("in_progress","queued"):
+              runs=(req(f"/repos/{repo}/actions/runs?status={status}&per_page=100").get("workflow_runs") or [])
+              for run in runs:
+                  rid=int(run["id"])
+                  if rid == current:
+                      continue
+                  path=str(run.get("path") or ""); name=str(run.get("name") or "")
+                  hay=(path+" "+name).lower()
+                  if any(x in hay for x in protected):
+                      preserved.append({"id":rid,"status":status,"name":name,"path":path})
+                      continue
+                  jobs=(req(f"/repos/{repo}/actions/runs/{rid}/jobs?filter=latest&per_page=100").get("jobs") or [])
+                  sh=[
+                      j for j in jobs
+                      if "self-hosted" in {str(x).lower() for x in (j.get("labels") or [])}
+                      and str(j.get("status") or "") in {"queued","in_progress"}
+                  ]
+                  if not sh:
+                      continue
+                  try:
+                      req(f"/repos/{repo}/actions/runs/{rid}/cancel",method="POST")
+                      cancelled.append({
+                          "id":rid,"status":status,"name":name,"path":path,
+                          "jobs":[{"id":j.get("id"),"name":j.get("name"),"status":j.get("status"),"labels":j.get("labels")} for j in sh],
+                      })
+                  except urllib.error.HTTPError as exc:
+                      if exc.code not in (409,422):
+                          raise
+
+          evidence={"ok":True,"cancelled":cancelled,"preserved":preserved}
+          print("RAISEAI_ZCLOUD_PREEMPT="+json.dumps(evidence,sort_keys=True))
+          payload={
+              "state":"success",
+              "context":"zcloud/raiseai-queue-preempt",
+              "description":f"preempt green; cancelled={len(cancelled)} preserved={len(preserved)}"[:140],
+              "target_url":f"{os.environ['SERVER_URL']}/{repo}/actions/runs/{current}",
+          }
+          req(f"/repos/{repo}/statuses/{os.environ['SHA']}",method="POST",payload=payload)
+          PY
