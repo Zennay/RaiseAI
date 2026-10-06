@@ -2,7 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { createHandler } from "./app.mjs";
-import { parseDeployRevision, parseServerPort, validateServerConfig } from "./server-policy.mjs";
+import { applyServerRuntimeLimits, parseDeployRevision, parseServerPort, validateServerConfig } from "./server-policy.mjs";
 import { createZCloudExecutor } from "./connectors/zcloud.mjs";
 import { createOpenRouterExecutor } from "./providers/openrouter.mjs";
 
@@ -41,9 +41,7 @@ const server = tlsCert
     }, handler)
   : http.createServer(handler);
 
-server.requestTimeout = 10_000;
-server.headersTimeout = 5_000;
-server.keepAliveTimeout = 5_000;
+applyServerRuntimeLimits(server);
 
 server.listen(port, host, () => {
   console.log(JSON.stringify({
