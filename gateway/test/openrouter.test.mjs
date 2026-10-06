@@ -161,6 +161,37 @@ test("OpenRouter response model provenance is normalized or falls back when omit
   assert.equal(omittedResult.model, "z-ai/glm-5.3-flash");
 });
 
+test("malformed OpenRouter choices envelopes fail closed", async () => {
+  const malformedBodies = [
+    null,
+    {},
+    { choices: {} },
+    { choices: { 0: { message: { content: "must not pass" } } } },
+    { choices: [null] },
+    { choices: [[]] },
+    { choices: [{ message: null }] },
+    { choices: [{ message: [] }] }
+  ];
+
+  for (const body of malformedBodies) {
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      retryDelayMs: 0,
+      sleepImpl: async () => {},
+      fetchImpl: async () => httpResponse(200, body)
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_empty_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
+
 test("OpenRouter response model must belong to the requested model set", async () => {
   const execute = createOpenRouterExecutor({
     apiKey: "test-key",
