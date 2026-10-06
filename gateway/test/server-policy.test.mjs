@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseDeployRevision, parseServerPort, validateServerConfig } from "../src/server-policy.mjs";
+import http from "node:http";
+import { applyServerRuntimeLimits, parseDeployRevision, parseServerPort, validateServerConfig } from "../src/server-policy.mjs";
 
 function valid(overrides = {}) {
   return {
@@ -11,6 +12,29 @@ function valid(overrides = {}) {
     ...overrides
   };
 }
+
+
+test("server runtime policy bounds timeouts, headers and keep-alive reuse", () => {
+  const server = http.createServer();
+
+  assert.equal(server.maxRequestsPerSocket, 0);
+  applyServerRuntimeLimits(server);
+
+  assert.equal(server.requestTimeout, 10_000);
+  assert.equal(server.headersTimeout, 5_000);
+  assert.equal(server.keepAliveTimeout, 5_000);
+  assert.equal(server.maxHeadersCount, 64);
+  assert.equal(server.maxRequestsPerSocket, 100);
+});
+
+test("server runtime policy rejects missing server objects", () => {
+  for (const server of [null, undefined, 42, "server"]) {
+    assert.throws(
+      () => applyServerRuntimeLimits(server),
+      /server must be an HTTP\(S\) server object/
+    );
+  }
+});
 
 test("plaintext listener is allowed only on loopback hosts", () => {
   for (const host of ["127.0.0.1", "127.0.0.2", "localhost", "::1"]) {
