@@ -17,6 +17,12 @@ function upstreamFailure(message, cause) {
   return error;
 }
 
+function hasJsonResponseType(response) {
+  const value = response?.headers?.get?.("content-type");
+  if (typeof value !== "string") return false;
+  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
 function outputText(response) {
   const output = Array.isArray(response?.output) ? response.output : [];
   const textChunks = [];
@@ -107,10 +113,19 @@ export function createOpenAIExecutor({
       throw upstreamFailure("openai_request_failed", cause);
     }
 
-    const body = await response.json().catch(() => ({}));
+    const jsonMediaType = hasJsonResponseType(response);
+    const body = jsonMediaType
+      ? await response.json().catch(() => ({}))
+      : {};
 
     if (!response.ok) {
       const error = new Error("openai_http_" + response.status);
+      error.statusCode = 502;
+      throw error;
+    }
+
+    if (!jsonMediaType) {
+      const error = new Error("openai_invalid_response");
       error.statusCode = 502;
       throw error;
     }
