@@ -156,3 +156,30 @@ test("listener rejects surrounding whitespace in host and TLS path config", () =
     );
   }
 });
+
+
+test("TLS paths must be absolute and free of control characters", () => {
+  for (const [tlsCert, tlsKey] of [
+    ["cert.pem", "key.pem"],
+    ["./cert.pem", "./key.pem"],
+    ["/tmp/cert.pem", "key.pem"],
+    ["cert.pem", "/tmp/key.pem"],
+    ["/tmp/cert\n.pem", "/tmp/key.pem"],
+    ["/tmp/cert.pem", "/tmp/key\t.pem"],
+    ["/tmp/cert\u0000.pem", "/tmp/key.pem"]
+  ]) {
+    assert.throws(
+      () => validateServerConfig(valid({ tlsCert, tlsKey })),
+      /must be absolute paths without control characters/,
+      JSON.stringify({ tlsCert, tlsKey })
+    );
+  }
+
+  assert.doesNotThrow(() =>
+    validateServerConfig(valid({
+      host: "0.0.0.0",
+      tlsCert: "/tmp/raise ai/cert.pem",
+      tlsKey: "/tmp/raise ai/key.pem"
+    }))
+  );
+});
