@@ -20,7 +20,7 @@ def success_payload(**overrides):
         "input_length_chars": 18,
         "latency_ms": 742,
         "route": "quick_ai",
-        "status": "ok",
+        "status": "answered",
         "execution_enabled": False,
         "execution_reason_present": False,
         "answer_present": True,
@@ -34,7 +34,7 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         result = validator.validate_evidence(
             success_payload(),
             expect_route="quick_ai",
-            expect_status="ok",
+            expect_status="answered",
             max_latency_ms=2_000,
             max_age_seconds=300,
             require_answer=True,
@@ -74,6 +74,22 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
     def test_rejects_unknown_route(self):
         with self.assertRaisesRegex(validator.EvidenceError, "unknown route"):
             validator.validate_evidence(success_payload(route="unknown"))
+
+    def test_rejects_unknown_success_status(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "status must be answered or routed"):
+            validator.validate_evidence(success_payload(status="ok"))
+
+    def test_rejects_answered_status_without_answer(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "same gateway outcome"):
+            validator.validate_evidence(
+                success_payload(status="answered", answer_present=False)
+            )
+
+    def test_rejects_routed_status_with_answer(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "same gateway outcome"):
+            validator.validate_evidence(
+                success_payload(status="routed", answer_present=True)
+            )
 
     def test_rejects_excessive_latency(self):
         with self.assertRaisesRegex(validator.EvidenceError, "exceeds maximum"):
