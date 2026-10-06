@@ -35,6 +35,45 @@ test("non-loopback listener is allowed when certificate and key are both configu
   );
 });
 
+test("listener host must be a canonical IP address or hostname", () => {
+  for (const host of [
+    "raise.example.com",
+    "gateway-1.internal",
+    "127.0.0.1",
+    "2001:db8::1"
+  ]) {
+    assert.doesNotThrow(() =>
+      validateServerConfig(valid({
+        host,
+        tlsCert: host === "127.0.0.1" ? "" : "/tmp/cert.pem",
+        tlsKey: host === "127.0.0.1" ? "" : "/tmp/key.pem"
+      }))
+    );
+  }
+
+  for (const host of [
+    "http://127.0.0.1",
+    "raise ai.local",
+    "raise_ai.local",
+    "-gateway.local",
+    "gateway-.local",
+    "gateway..local",
+    "[::1]",
+    "a".repeat(64) + ".example.com",
+    "a".repeat(254)
+  ]) {
+    assert.throws(
+      () => validateServerConfig(valid({
+        host,
+        tlsCert: "/tmp/cert.pem",
+        tlsKey: "/tmp/key.pem"
+      })),
+      /RAISE_HOST must be an IP address or canonical hostname/,
+      host
+    );
+  }
+});
+
 test("TLS configuration fails closed when only one side is configured", () => {
   assert.throws(
     () => validateServerConfig(valid({ tlsCert: "/tmp/cert.pem" })),
