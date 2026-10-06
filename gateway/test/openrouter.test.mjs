@@ -150,13 +150,29 @@ test("invalid OpenRouter model config fails closed before provider calls", async
   const cases = [
     { fastModel: "" },
     { fastModel: "bad model" },
+    { fastModel: "m".repeat(257) },
     { deepModel: "\t" },
+    { deepModel: "m".repeat(257) },
     { fallbackModels: 42 },
     { fallbackModels: true },
     { fallbackModels: {} },
     { fallbackModels: null },
     { fallbackModels: ["google/gemini-3.8-flash", 42] },
-    { fallbackModels: ["bad fallback"] }
+    { fallbackModels: ["bad fallback"] },
+    { fallbackModels: ["m".repeat(257)] },
+    {
+      fallbackModels: Array.from(
+        { length: 9 },
+        (_, index) => `provider/model-${index}`
+      )
+    },
+    {
+      fallbackModels: Array.from(
+        { length: 9 },
+        (_, index) => `provider/model-${index}`
+      ).join(",")
+    },
+    { fallbackModels: "x".repeat(2_057) }
   ];
 
   for (const options of cases) {
@@ -177,6 +193,39 @@ test("invalid OpenRouter model config fails closed before provider calls", async
     assert.equal(result.reason, "openrouter_model_config_invalid");
     assert.equal(called, false);
   }
+});
+
+test("OpenRouter model configuration accepts the exact safe boundaries", async () => {
+  const primary = "m".repeat(256);
+  const fallbacks = Array.from(
+    { length: 8 },
+    (_, index) => `p${index}/${"m".repeat(253)}`
+  );
+  assert.ok(fallbacks.every(model => model.length === 256));
+
+  let requestBody = null;
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fastModel: primary,
+    fallbackModels: fallbacks.join(","),
+    fetchImpl: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return httpResponse(200, {
+        model: primary,
+        choices: [{
+          finish_reason: "stop",
+          message: { role: "assistant", content: "boundary ok" }
+        }]
+      });
+    }
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+
+  assert.equal(result.enabled, true);
+  assert.equal(result.model, primary);
+  assert.equal(result.answer, "boundary ok");
+  assert.deepEqual(requestBody.models, [primary, ...fallbacks]);
 });
 
 test("OpenRouter response model provenance is normalized or falls back when omitted", async () => {
