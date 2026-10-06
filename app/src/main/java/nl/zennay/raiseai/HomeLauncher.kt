@@ -25,13 +25,7 @@ object HomeLauncher {
             HomeLaunchTarget.WEB_STORE to webStore
         )
 
-        val candidates = HomeLaunchPolicy.orderedAvailableTargets(
-            installedAppAvailable = installedApp != null,
-            playStoreAvailable = playStore.resolveActivity(activity.packageManager) != null,
-            webStoreAvailable = webStore.resolveActivity(activity.packageManager) != null
-        )
-
-        return candidates.any { target ->
+        return HomeLaunchPolicy.orderedTargets(installedApp != null).any { target ->
             val intent = intents[target] ?: return@any false
             runCatching {
                 activity.startActivity(intent)
