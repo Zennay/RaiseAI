@@ -1,13 +1,23 @@
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 export function positiveInteger(value, fallback) {
-  if (!Number.isSafeInteger(fallback) || fallback <= 0) {
-    throw new TypeError("fallback must be a positive safe integer");
+  if (
+    !Number.isSafeInteger(fallback) ||
+    fallback <= 0 ||
+    fallback > MAX_TIMER_DELAY_MS
+  ) {
+    throw new TypeError("fallback must be a positive timer-safe integer");
   }
 
   const text = String(value ?? "").trim();
   if (!/^\d+$/.test(text)) return fallback;
 
   const parsed = Number(text);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isSafeInteger(parsed) &&
+    parsed > 0 &&
+    parsed <= MAX_TIMER_DELAY_MS
+    ? parsed
+    : fallback;
 }
 
 export function httpsOrigin(value, label = "gateway URL") {
