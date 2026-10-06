@@ -17,6 +17,36 @@ async function withServer(fn, options = {}) {
   }
 }
 
+async function rawPost(base, headers, chunks = []) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN,
+        ...headers
+      }
+    }, res => {
+      const responseChunks = [];
+      res.on("data", chunk => responseChunks.push(chunk));
+      res.on("end", () => {
+        try {
+          resolve({
+            status: res.statusCode,
+            body: JSON.parse(Buffer.concat(responseChunks).toString("utf8"))
+          });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+
+    req.on("error", reject);
+    for (const chunk of chunks) req.write(chunk);
+    req.end();
+  });
+}
+
 test("rate limiter caps active client buckets and resets them on minute rollover", () => {
   const limiter = createRateLimiter({ requestsPerMinute: 2, maxBuckets: 3 });
 
@@ -629,6 +659,72 @@ test("valid upstream 4xx and 5xx error statuses remain failures", async () => {
       }
     });
   }
+});
+
+test("oversized declared bodies fail before the gateway waits for body bytes", async () => {
+  let executeCalls = 0;
+
+  await withServer(async base => {
+    const response = await rawPost(base, {
+      "content-length": String(16 * 1024 + 1)
+    });
+
+    assert.equal(response.status, 413);
+    assert.equal(response.body.error, "payload_too_large");
+    assert.equal("execution" in response.body, false);
+  }, {
+    execute: async () => {
+      executeCalls += 1;
+      return { enabled: true, answer: "must not run" };
+    }
+  });
+
+  assert.equal(executeCalls, 0);
+});
+
+test("exactly 16 KiB is accepted by the body-size preflight", async () => {
+  const prefix = '{"text":"';
+  const suffix = '"}';
+  const body = prefix + "a".repeat(16 * 1024 - prefix.length - suffix.length) + suffix;
+  assert.equal(Buffer.byteLength(body), 16 * 1024);
+
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body
+    });
+
+    assert.equal(res.status, 413);
+    const responseBody = await res.json();
+    assert.equal(responseBody.error, "text_too_long");
+  });
+});
+
+test("chunked bodies still enforce the streamed 16 KiB limit", async () => {
+  let executeCalls = 0;
+
+  await withServer(async base => {
+    const response = await rawPost(
+      base,
+      { "transfer-encoding": "chunked" },
+      [Buffer.alloc(16 * 1024 + 1, 0x61)]
+    );
+
+    assert.equal(response.status, 413);
+    assert.equal(response.body.error, "payload_too_large");
+    assert.equal("execution" in response.body, false);
+  }, {
+    execute: async () => {
+      executeCalls += 1;
+      return { enabled: true, answer: "must not run" };
+    }
+  });
+
+  assert.equal(executeCalls, 0);
 });
 
 test("invalid JSON keeps its explicit public 400 contract", async () => {

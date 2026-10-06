@@ -36,6 +36,12 @@ function hasJsonContentType(req) {
   return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
 }
 
+function hasOversizedDeclaredBody(req) {
+  const value = req.headers["content-length"];
+  if (typeof value !== "string" || !/^\d+$/u.test(value)) return false;
+  return BigInt(value) > BigInt(MAX_BODY);
+}
+
 function isCanonicalExecutionToken(value) {
   return (
     typeof value === "string" &&
@@ -228,6 +234,10 @@ export function createHandler({
 
     if (!hasJsonContentType(req)) {
       return json(res, 415, { error: "unsupported_media_type", requestId });
+    }
+
+    if (hasOversizedDeclaredBody(req)) {
+      return json(res, 413, { error: "payload_too_large", requestId });
     }
 
     const ip = req.socket.remoteAddress ?? "unknown";
