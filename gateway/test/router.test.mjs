@@ -142,7 +142,11 @@ test("negated home prompts never actuate devices", () => {
     "Zet de lamp niet uit",
     "Zet de verwarming niet aan",
     "Stop de speaker niet",
-    "Doe de tv niet uit"
+    "Doe de tv niet uit",
+    "Zet geen lampen uit",
+    "Zet geen verwarming aan",
+    "Zet de lampen nooit aan",
+    "Stop de speaker nooit"
   ]) {
     assert.notEqual(classifyIntent(text).route, "smart_home", text);
   }
