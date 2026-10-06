@@ -78,6 +78,13 @@ function normalizeExecutionResult(result) {
   };
 }
 
+function safeErrorStatus(error) {
+  const status = error?.statusCode;
+  return Number.isInteger(status) && status >= 400 && status <= 599
+    ? status
+    : 500;
+}
+
 async function readJson(req) {
   let size = 0;
   const chunks = [];
@@ -202,7 +209,7 @@ export function createHandler({
           ? error.message
           : "internal_error";
 
-      return json(res, error.statusCode ?? 500, {
+      return json(res, safeErrorStatus(error), {
         error: publicError,
         requestId
       });
