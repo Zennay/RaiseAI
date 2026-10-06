@@ -97,11 +97,11 @@ json_get() {
   python3 tools/update-physical-session.py "$file" --get "$key"
 }
 
-json_set() {
+mark_session_gate_passed() {
   local file="$1"
-  local key="$2"
-  local value="$3"
-  python3 tools/update-physical-session.py "$file" --set "$key" "$value"
+  local gate="$2"
+  local verified_at_utc="$3"
+  python3 tools/update-physical-session.py "$file" --mark-passed "$gate" "$verified_at_utc"
 }
 
 publish_json_result() {
@@ -366,8 +366,7 @@ verify_e2e() {
       --expect-app-version "$version" \
       --expect-source-revision "$revision"
 
-  json_set "$session/session.json" e2e_passed true
-  json_set "$session/session.json" e2e_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  mark_session_gate_passed "$session/session.json" e2e "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo
   echo "E2E PASS — exact Watch build ${version} @ ${revision}"
   echo "Next: collect at least 30 mouth raises and 100 representative non-trigger trials."
@@ -406,8 +405,7 @@ verify_v1() {
       --expect-source-revision "$revision" \
       --require-v1-gate
 
-  json_set "$session/session.json" v1_gate_passed true
-  json_set "$session/session.json" v1_verified_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  mark_session_gate_passed "$session/session.json" v1 "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo
   echo "V1 RELIABILITY PASS"
   echo "Evidence directory: $session"
