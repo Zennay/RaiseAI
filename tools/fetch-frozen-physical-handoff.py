@@ -16,7 +16,7 @@ import tempfile
 import urllib.request
 import zipfile
 from collections import Counter
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 REPOSITORY = "Zennay/RaiseAI"
 RELEASE_TAG = "physical-handoff-v1.5.2-8f719bb"
@@ -54,8 +54,16 @@ def _member_is_symlink(info: zipfile.ZipInfo) -> bool:
 
 
 def _validate_member_path(name: str) -> None:
-    candidate = Path(name)
-    if candidate.is_absolute() or ".." in candidate.parts:
+    if "\\" in name:
+        raise HandoffError(f"Unsafe archive member path: {name}")
+
+    candidate = PurePosixPath(name)
+    rendered = name[:-1] if name.endswith("/") else name
+    if (
+        candidate.is_absolute()
+        or ".." in candidate.parts
+        or rendered != candidate.as_posix()
+    ):
         raise HandoffError(f"Unsafe archive member path: {name}")
 
 
