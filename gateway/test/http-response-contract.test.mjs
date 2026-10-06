@@ -30,6 +30,7 @@ async function readJsonBytes(res) {
 function assertJsonResponseHeaders(res, bytes) {
   assert.equal(res.headers.get("content-type"), "application/json; charset=utf-8");
   assert.equal(res.headers.get("cache-control"), "no-store");
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
   assert.equal(Number(res.headers.get("content-length")), bytes.length);
 }
 
