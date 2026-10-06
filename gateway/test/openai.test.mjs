@@ -162,3 +162,23 @@ test("malformed successful OpenAI response shapes fail as upstream 502 errors", 
     );
   }
 });
+
+
+test("OpenAI transport failure is classified as upstream 502", async () => {
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => {
+      throw new Error("socket reset");
+    }
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openai_request_failed");
+      assert.equal(error.statusCode, 502);
+      assert.equal(error.cause?.message, "socket reset");
+      return true;
+    }
+  );
+});

@@ -4,6 +4,12 @@ function hasUsableApiKey(value) {
   return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
 }
 
+function upstreamFailure(message, cause) {
+  const error = new Error(message, { cause });
+  error.statusCode = 502;
+  return error;
+}
+
 function parseFallbackModels(value) {
   return String(value ?? "")
     .split(",")
@@ -168,10 +174,17 @@ export function createOpenRouterExecutor({
           continue;
         }
 
-        throw error;
+        if (
+          error?.statusCode === 502 &&
+          String(error?.message ?? "").startsWith("openrouter_")
+        ) {
+          throw error;
+        }
+
+        throw upstreamFailure("openrouter_request_failed", error);
       }
     }
 
-    throw lastError ?? new Error("openrouter_request_failed");
+    throw upstreamFailure("openrouter_request_failed", lastError);
   };
 }
