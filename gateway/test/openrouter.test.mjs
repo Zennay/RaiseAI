@@ -211,6 +211,12 @@ test("malformed OpenRouter choices envelopes fail closed", async () => {
     { choices: {} },
     { choices: { 0: { message: { content: "must not pass" } } } },
     { choices: [null] },
+    {
+      choices: [
+        { message: { role: "assistant", content: "first" } },
+        { message: { role: "assistant", content: "second" } }
+      ]
+    },
     { choices: [[]] },
     { choices: [{ message: null }] },
     { choices: [{ message: [] }] }
