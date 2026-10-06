@@ -56,7 +56,12 @@ class GestureMonitorService : Service(), SensorEventListener {
         super.onCreate()
         startAsForeground()
 
+        sessionGuard = AssistantSessionGuard(this)
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        stateSinceElapsedMs = SystemClock.elapsedRealtime()
         mouthPose = CalibrationStore.loadPose(this)
+
         if (mouthPose == null) {
             CalibrationStore.setMonitoringEnabled(this, false)
             Log.e(TAG, "No valid mouth calibration found; stopping monitor")
@@ -64,12 +69,8 @@ class GestureMonitorService : Service(), SensorEventListener {
             return
         }
 
-        sessionGuard = AssistantSessionGuard(this)
-        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        stateSinceElapsedMs = SystemClock.elapsedRealtime()
-
         if (accelerometer == null) {
+            CalibrationStore.setMonitoringEnabled(this, false)
             Log.e(TAG, "No accelerometer found; stopping service")
             stopSelf()
             return
