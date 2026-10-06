@@ -150,9 +150,8 @@ if (
     or parsed_url.path not in ("", "/")
     or parsed_url.query
     or parsed_url.fragment
-    or parsed_port is None
 ):
-    raise SystemExit("Gateway profile is invalid: expected HTTPS origin with explicit port")
+    raise SystemExit("Gateway profile is invalid: expected HTTPS origin")
 
 token = values["token"]
 if len(token) < 32 or any(char.isspace() for char in token):
