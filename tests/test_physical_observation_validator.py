@@ -145,6 +145,32 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
         self.assertNotIn("screen_off_behavior", payload)
         self.assertNotIn("background_behavior", payload)
 
+    def test_cli_output_file_is_secret_safe_and_refuses_overwrite(self):
+        secret = "screen-off note that must stay local"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            result = root / "quality-result.json"
+            session.write_text(json.dumps(session_payload()), encoding="utf-8")
+            observations.write_text(
+                json.dumps(observation_payload(screen_off_behavior=secret)),
+                encoding="utf-8",
+            )
+            first_output = io.StringIO()
+            with contextlib.redirect_stdout(first_output):
+                first = validator.main([str(session), str(observations), "--output", str(result)])
+            self.assertEqual(first, 0)
+            persisted = result.read_text(encoding="utf-8")
+            self.assertNotIn(secret, persisted)
+            self.assertTrue(json.loads(persisted)["quality_evidence_complete"])
+
+            second_output = io.StringIO()
+            with contextlib.redirect_stdout(second_output):
+                second = validator.main([str(session), str(observations), "--output", str(result)])
+            self.assertEqual(second, 1)
+            self.assertIn("refusing to overwrite", second_output.getvalue())
+
     def test_cli_failure_does_not_echo_sensitive_observation_values(self):
         secret = "private spoken content must never be echoed"
         with tempfile.TemporaryDirectory() as tmp:
