@@ -69,7 +69,7 @@ class GestureMonitorService : Service(), SensorEventListener {
         }
 
         CalibrationStore.setMonitoringEnabled(this, true)
-        applyPowerState(force = true)
+        if (!applyPowerState(force = true)) return
 
         handler.postDelayed(powerStateRunnable, POWER_STATE_CHECK_MS)
         handler.postDelayed(statsFlushRunnable, STATS_FLUSH_MS)
@@ -82,8 +82,7 @@ class GestureMonitorService : Service(), SensorEventListener {
             return START_NOT_STICKY
         }
         mouthPose = CalibrationStore.loadPose(this)
-        applyPowerState()
-        return START_STICKY
+        return if (applyPowerState()) START_STICKY else START_NOT_STICKY
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -135,25 +134,30 @@ class GestureMonitorService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun applyPowerState(force: Boolean = false) {
+    private fun applyPowerState(force: Boolean = false): Boolean {
         val shouldPauseForSleep = CalibrationStore.isSleepDndPauseEnabled(this) &&
             SleepModePolicy.isSleepOrDndActive(this)
 
-        if (!force && shouldPauseForSleep == sleepPaused) return
+        if (!force && shouldPauseForSleep == sleepPaused) return true
         transitionRuntimeState(shouldPauseForSleep)
         sleepPaused = shouldPauseForSleep
 
         if (sleepPaused) {
             unregisterAccelerometer()
             updateNotification("Paused for Sleep / Do Not Disturb")
-        } else if (registerAccelerometer()) {
-            updateNotification("Raise your watch to your mouth for Raise AI")
-        } else {
-            CalibrationStore.setMonitoringEnabled(this, false)
-            updateNotification("Monitoring stopped · accelerometer registration failed")
-            Log.e(TAG, "Accelerometer registration failed; stopping monitor")
-            stopSelf()
+            return true
         }
+
+        if (registerAccelerometer()) {
+            updateNotification("Raise your watch to your mouth for Raise AI")
+            return true
+        }
+
+        CalibrationStore.setMonitoringEnabled(this, false)
+        updateNotification("Monitoring stopped · accelerometer registration failed")
+        Log.e(TAG, "Accelerometer registration failed; stopping monitor")
+        stopSelf()
+        return false
     }
 
     private fun registerAccelerometer(): Boolean {
