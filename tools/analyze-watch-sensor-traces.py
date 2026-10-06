@@ -143,7 +143,7 @@ def summarize_sessions(
     for session_id, rows in sorted(grouped.items()):
         label = rows[0].label
         elapsed = [row.elapsed_ms for row in rows]
-        monotonic = all(current >= previous for previous, current in zip(elapsed, elapsed[1:]))
+        monotonic = all(current > previous for previous, current in zip(elapsed, elapsed[1:]))
         duration_ms = max(elapsed) - min(elapsed) if elapsed else 0
         qualifying = monotonic and len(rows) >= min_samples and duration_ms >= min_duration_ms
         summaries.append(
