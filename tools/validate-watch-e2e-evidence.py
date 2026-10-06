@@ -57,6 +57,10 @@ def _parse_timestamp(value: Any) -> dt.datetime:
     return parsed.astimezone(dt.timezone.utc)
 
 
+def _format_utc(value: dt.datetime) -> str:
+    return value.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def validate_evidence(
     payload: Any,
     *,
@@ -70,7 +74,10 @@ def validate_evidence(
     now_utc: dt.datetime | None = None,
 ) -> dict[str, Any]:
     _require(isinstance(payload, dict), "evidence root must be a JSON object")
-    _require(payload.get("schema_version") == 2, "schema_version must equal 2")
+    _require(
+        type(payload.get("schema_version")) is int and payload["schema_version"] == 2,
+        "schema_version must equal 2",
+    )
 
     outcome = payload.get("outcome")
     _require(outcome in {"success", "failure"}, "outcome must be success or failure")
@@ -167,7 +174,7 @@ def validate_evidence(
         "input_length_chars": input_length,
         "answer_present": payload["answer_present"],
         "execution_enabled": payload["execution_enabled"],
-        "recorded_at_utc": payload["recorded_at_utc"],
+        "recorded_at_utc": _format_utc(recorded_at),
         "app_version": app_version,
         "source_revision": source_revision,
     }
