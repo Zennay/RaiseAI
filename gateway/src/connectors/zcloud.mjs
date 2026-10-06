@@ -153,9 +153,11 @@ function groupTargets(payload) {
     }
     if (
       typeof target.active !== "boolean" ||
+      typeof target.assignment_ready !== "boolean" ||
       typeof target.desired_state !== "string" ||
       !VALID_DESIRED_STATES.has(target.desired_state) ||
-      (target.desired_state === "paused" && target.active)
+      (target.desired_state === "paused" && target.active) ||
+      (target.active && !target.assignment_ready)
     ) {
       throw new Error("zcloud_targets_invalid");
     }
