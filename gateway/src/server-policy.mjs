@@ -18,6 +18,21 @@ function isValidHost(host) {
   );
 }
 
+export function parseDeployRevision(value, fallback = "unknown") {
+  if (value === undefined) return fallback;
+
+  if (
+    typeof value !== "string" ||
+    (value !== "unknown" && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(value))
+  ) {
+    throw new Error(
+      "RAISE_DEPLOY_REVISION must be unknown or a canonical 40/64-character lowercase Git revision"
+    );
+  }
+
+  return value;
+}
+
 export function parseServerPort(value, fallback = 8787) {
   if (value === undefined) return fallback;
 
