@@ -124,7 +124,7 @@ def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
         "valid": True,
         "quality_evidence_complete": True,
         "recorded_at_utc": observations["recorded_at_utc"],
-        "watch_serial": watch_serial,
+        "watch_identity_match": True,
         "app_version": app_version,
         "source_revision": source_revision,
         "apk_sha256": apk_sha256,
