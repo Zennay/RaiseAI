@@ -12,7 +12,8 @@ function upstreamFailure(message, cause) {
 
 function outputText(response) {
   const output = Array.isArray(response?.output) ? response.output : [];
-  const chunks = [];
+  const textChunks = [];
+  const refusalChunks = [];
 
   for (const item of output) {
     const content = Array.isArray(item?.content) ? item.content : [];
@@ -20,12 +21,18 @@ function outputText(response) {
     for (const part of content) {
       if (part?.type === "output_text" && typeof part.text === "string") {
         const text = part.text.trim();
-        if (text) chunks.push(text);
+        if (text) textChunks.push(text);
+      }
+
+      if (part?.type === "refusal" && typeof part.refusal === "string") {
+        const refusal = part.refusal.trim();
+        if (refusal) refusalChunks.push(refusal);
       }
     }
   }
 
-  return chunks.length ? chunks.join("\n") : null;
+  if (textChunks.length) return textChunks.join("\n");
+  return refusalChunks.length ? refusalChunks.join("\n") : null;
 }
 
 export function createOpenAIExecutor({
