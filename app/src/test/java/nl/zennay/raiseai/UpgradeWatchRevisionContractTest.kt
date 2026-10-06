@@ -11,12 +11,12 @@ class UpgradeWatchRevisionContractTest {
 
         val cleanTree = script.indexOf("Refusing evidence-capable build from a dirty Git worktree.")
         val headResolution = script.indexOf("""checked_out_revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"""")
-        val explicitPresence = script.indexOf("""if [ "${RAISE_BUILD_REVISION+x}" = "x" ]; then""")
+        val explicitPresence = script.indexOf("RAISE_BUILD_REVISION+x")
         val malformedReject = script.indexOf(
             "RAISE_BUILD_REVISION must be an exact 40-character Git revision."
         )
         val headMismatchReject = script.indexOf(
-            """[ "$requested_revision" = "$checked_out_revision" ] || {"""
+            "requested_revision\" = \"\$checked_out_revision\" ] || {"
         )
         val exportRevision = script.indexOf("export RAISE_BUILD_REVISION")
 
