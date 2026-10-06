@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         result = validate_observations(session, observations)
         if args.output is not None:
             _require(not args.output.exists(), f"refusing to overwrite existing quality result: {args.output}")
-            args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+            args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError, ObservationError) as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
         return 1
