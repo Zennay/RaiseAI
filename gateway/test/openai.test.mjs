@@ -11,6 +11,8 @@ function fakeResponse(answer, calls) {
       async json() {
         return {
           output: [{
+            type: "message",
+            role: "assistant",
             content: [{ type: "output_text", text: answer }]
           }]
         };
@@ -149,6 +151,7 @@ test("OpenAI response preserves every non-empty output_text block", async () => 
             },
             {
               type: "message",
+              role: "assistant",
               content: [
                 { type: "output_text", text: "Eerste regel." },
                 { type: "refusal", refusal: "ignored non-text part" },
@@ -157,6 +160,7 @@ test("OpenAI response preserves every non-empty output_text block", async () => 
             },
             {
               type: "message",
+              role: "assistant",
               content: [
                 { type: "output_text", text: "   " },
                 { type: "output_text", text: "Derde regel." }
@@ -183,6 +187,7 @@ test("OpenAI refusal content is returned when no normal output_text exists", asy
         return {
           output: [{
             type: "message",
+            role: "assistant",
             content: [
               { type: "refusal", refusal: "Ik kan daar niet mee helpen." },
               { type: "refusal", refusal: "Ik kan wel een veilig alternatief geven." }
@@ -213,6 +218,7 @@ test("normal OpenAI output_text takes precedence over refusal content", async ()
         return {
           output: [{
             type: "message",
+            role: "assistant",
             content: [
               { type: "refusal", refusal: "Fallback refusal" },
               { type: "output_text", text: "Normaal antwoord." }
@@ -226,6 +232,54 @@ test("normal OpenAI output_text takes precedence over refusal content", async ()
   const result = await execute({ route: "quick_ai" }, "test mixed response");
 
   assert.equal(result.answer, "Normaal antwoord.");
+});
+
+test("OpenAI output text is accepted only from assistant message items", async () => {
+  const invalidBodies = [
+    {
+      output: [{
+        type: "reasoning",
+        role: "assistant",
+        content: [{ type: "output_text", text: "must not pass" }]
+      }]
+    },
+    {
+      output: [{
+        type: "message",
+        role: "user",
+        content: [{ type: "output_text", text: "must not pass" }]
+      }]
+    },
+    {
+      output: [{
+        type: "function_call",
+        role: "assistant",
+        content: [{ type: "output_text", text: "must not pass" }]
+      }]
+    }
+  ];
+
+  for (const body of invalidBodies) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return body;
+        }
+      })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_empty_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
 });
 
 test("malformed successful OpenAI response shapes fail as upstream 502 errors", async () => {
