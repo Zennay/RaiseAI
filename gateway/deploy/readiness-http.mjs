@@ -10,6 +10,29 @@ export async function readReadinessJson(
     throw new TypeError("readiness maxBytes must be a positive safe integer");
   }
 
+  const contentLength = readable?.headers?.["content-length"];
+  let declaredBytes = null;
+
+  if (contentLength !== undefined && contentLength !== null) {
+    if (
+      typeof contentLength !== "string" ||
+      !/^\d+$/u.test(contentLength.trim())
+    ) {
+      return {
+        json: null,
+        bodyError: "health_content_length_invalid"
+      };
+    }
+
+    declaredBytes = Number(contentLength.trim());
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes > maxBytes) {
+      return {
+        json: null,
+        bodyError: "health_body_too_large"
+      };
+    }
+  }
+
   let totalBytes = 0;
   const chunks = [];
 
@@ -23,6 +46,13 @@ export async function readReadinessJson(
       };
     }
     chunks.push(buffer);
+  }
+
+  if (declaredBytes !== null && totalBytes !== declaredBytes) {
+    return {
+      json: null,
+      bodyError: "health_content_length_mismatch"
+    };
   }
 
   try {
