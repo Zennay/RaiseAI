@@ -682,6 +682,28 @@ test("oversized declared bodies fail before the gateway waits for body bytes", a
   assert.equal(executeCalls, 0);
 });
 
+test("exactly 16 KiB is accepted by the body-size preflight", async () => {
+  const prefix = '{"text":"';
+  const suffix = '"}';
+  const body = prefix + "a".repeat(16 * 1024 - prefix.length - suffix.length) + suffix;
+  assert.equal(Buffer.byteLength(body), 16 * 1024);
+
+  await withServer(async base => {
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body
+    });
+
+    assert.equal(res.status, 413);
+    const responseBody = await res.json();
+    assert.equal(responseBody.error, "text_too_long");
+  });
+});
+
 test("chunked bodies still enforce the streamed 16 KiB limit", async () => {
   let executeCalls = 0;
 
