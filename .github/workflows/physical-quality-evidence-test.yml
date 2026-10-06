@@ -5,6 +5,8 @@ on:
     branches:
       - main
     paths:
+      - "physical-validation.command"
+      - "PHYSICAL-ACCEPTANCE.md"
       - "tools/validate-physical-observations.py"
       - "tools/create-physical-observation-template.py"
       - "tests/test_physical_observation_validator.py"
