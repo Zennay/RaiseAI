@@ -135,6 +135,25 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 observation_payload(recorded_at_utc="2026-10-06T04:59:59Z"),
             )
 
+
+    def test_accepts_recorded_timestamp_at_clock_skew_boundary(self):
+        now = validator.dt.datetime(2026, 10, 6, 5, 45, 0, tzinfo=validator.dt.timezone.utc)
+        result = validator.validate_observations(
+            session_payload(),
+            observation_payload(recorded_at_utc="2026-10-06T05:50:00Z"),
+            now_utc=now,
+        )
+        self.assertTrue(result["valid"])
+
+    def test_rejects_recorded_timestamp_more_than_five_minutes_in_future(self):
+        now = validator.dt.datetime(2026, 10, 6, 5, 45, 0, tzinfo=validator.dt.timezone.utc)
+        with self.assertRaisesRegex(validator.ObservationError, "more than 5 minutes in the future"):
+            validator.validate_observations(
+                session_payload(),
+                observation_payload(recorded_at_utc="2026-10-06T05:50:00.001000Z"),
+                now_utc=now,
+            )
+
     def test_canonicalizes_recorded_timestamp_to_utc(self):
         result = validator.validate_observations(
             session_payload(),
