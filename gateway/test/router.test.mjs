@@ -75,6 +75,24 @@ test("first-person informational project prompts never dispatch work", () => {
   assert.equal(classifyIntent("Ik wil HaxLab testen").route, "zcloud_task");
 });
 
+test("negated project prompts never dispatch zCloud work", () => {
+  for (const text of [
+    "Test HaxLab niet",
+    "Ga niet door met zCloud",
+    "Werk niet verder aan Supa",
+    "Push Raise AI nooit",
+    "Deploy geen uLab",
+    "Ga door zonder LightUp te testen",
+    "Ik wil HaxLab niet testen"
+  ]) {
+    assert.notEqual(classifyIntent(text).route, "zcloud_task", text);
+  }
+
+  assert.equal(classifyIntent("Test HaxLab").route, "zcloud_task");
+  assert.equal(classifyIntent("Ga door met zCloud").route, "zcloud_task");
+  assert.equal(classifyIntent("Werk verder aan Supa").route, "zcloud_task");
+});
+
 test("routes home device commands directly", () => {
   assert.equal(classifyIntent("Zet de lampen in de woonkamer uit").route, "smart_home");
   assert.equal(classifyIntent("Zet de thermostaat op 20 graden").route, "smart_home");
