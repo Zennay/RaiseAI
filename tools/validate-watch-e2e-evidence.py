@@ -166,10 +166,14 @@ def validate_evidence(
     route = payload["route"]
     status = payload["status"]
     _require(isinstance(route, str) and route in KNOWN_ROUTES, f"unknown route: {route!r}")
-    _require(isinstance(status, str) and status and status != "unknown", "status must be a known non-empty value")
+    _require(status in {"answered", "routed"}, "status must be answered or routed")
     _require(input_length > 0, "successful evidence must record a non-empty input")
     for key in ("execution_enabled", "execution_reason_present", "answer_present"):
         _require(type(payload[key]) is bool, f"{key} must be boolean")
+    _require(
+        (status == "answered") == payload["answer_present"],
+        "status and answer_present must describe the same gateway outcome",
+    )
 
     if expect_route is not None:
         _require(route == expect_route, f"route {route!r} does not match expected {expect_route!r}")
