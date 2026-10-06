@@ -14,18 +14,7 @@ function push(errors, condition, message) {
 }
 
 function isHex(value, length) {
-  return new RegExp(`^[0-9a-f]{${length}}#!/usr/bin/env node
-import fs from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
-const SUCCESS = "success";
-
-function text(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-, "i").test(text(value));
+  return new RegExp("^[0-9a-f]{" + length + "}$", "i").test(text(value));
 }
 
 function isPositiveInteger(value) {
