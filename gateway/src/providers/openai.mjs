@@ -1,9 +1,13 @@
 const API_URL = "https://api.openai.com/v1/responses";
 
 function outputText(response) {
-  for (const item of response.output ?? []) {
-    for (const part of item.content ?? []) {
-      if (part.type === "output_text" && typeof part.text === "string") {
+  const output = Array.isArray(response?.output) ? response.output : [];
+
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+
+    for (const part of content) {
+      if (part?.type === "output_text" && typeof part.text === "string") {
         const text = part.text.trim();
         if (text) return text;
       }
