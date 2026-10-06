@@ -315,7 +315,12 @@ async function cancelResponseBody(response) {
 async function readBoundedJsonResponse(response) {
   const contentLength = response?.headers?.get?.("content-length");
   let declaredBytes = null;
-  if (typeof contentLength === "string" && contentLength.trim()) {
+  if (contentLength !== null && contentLength !== undefined) {
+    if (typeof contentLength !== "string") {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+
     const normalized = contentLength.trim();
     if (!/^\d+$/u.test(normalized)) {
       await cancelResponseBody(response);
