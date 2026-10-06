@@ -85,6 +85,22 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
             with self.assertRaisesRegex(analyzer.TraceError, "unexpected columns"):
                 analyzer.read_samples(path)
 
+    def test_read_samples_rejects_nan_sensor_value(self):
+        content = "label,session_id,elapsed_ms,x,y,z\nmouth_raise,1,0,nan,0.2,9.7\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "traces.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(analyzer.TraceError, "x must be a finite number"):
+                analyzer.read_samples(path)
+
+    def test_read_samples_rejects_infinite_sensor_value(self):
+        content = "label,session_id,elapsed_ms,x,y,z\nmouth_raise,1,0,0.1,inf,9.7\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "traces.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(analyzer.TraceError, "y must be a finite number"):
+                analyzer.read_samples(path)
+
 
 if __name__ == "__main__":
     unittest.main()
