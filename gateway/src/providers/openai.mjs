@@ -147,10 +147,20 @@ export function createOpenAIExecutor({
       throw error;
     }
 
+    const responseModel =
+      body?.model === undefined || body?.model === null
+        ? model
+        : normalizeModelName(body.model);
+    if (!responseModel) {
+      const error = new Error("openai_invalid_response");
+      error.statusCode = 502;
+      throw error;
+    }
+
     return {
       enabled: true,
       provider: "openai",
-      model,
+      model: responseModel,
       answer
     };
   };
