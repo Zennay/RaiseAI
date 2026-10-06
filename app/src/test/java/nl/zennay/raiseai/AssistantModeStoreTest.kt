@@ -15,6 +15,14 @@ class AssistantModeStoreTest {
     }
 
     @Test
+    fun preferenceReadFailureFailsClosedToGemini() {
+        assertEquals(
+            AssistantMode.GEMINI,
+            AssistantModeStore.resolveSafely { throw IllegalStateException("corrupt preference") }
+        )
+    }
+
+    @Test
     fun explicitGeminiPreferenceUsesGemini() {
         assertEquals(AssistantMode.GEMINI, AssistantModeStore.resolve(AssistantMode.GEMINI.storedValue))
     }
