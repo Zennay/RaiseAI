@@ -22,6 +22,7 @@ on:
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "provision-watch-gateway.command"
+      - "watch-preflight.command"
       - "tests/test_adb_device_binding.py"
       - ".github/workflows/watch-tooling-contract-test.yml"
 
