@@ -162,6 +162,59 @@ test("malformed target state fails closed before runner control", async () => {
   assert.equal(calls.length, 1);
 });
 
+test("inconsistent worker identities for one zCloud project fail closed", async () => {
+  const invalidSnapshots = [
+    {
+      projects: {
+        "ftmo::w1": {
+          base_project_id: " ftmo",
+          name: "FTMO · worker 1/2",
+          active: true
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w1": {
+          base_project_id: "ftmo",
+          name: "FTMO · worker 1/2",
+          active: true
+        },
+        "ftmo::w2": {
+          base_project_id: "ftmo",
+          name: "HaxLab · worker 2/2",
+          active: false
+        }
+      }
+    },
+    {
+      projects: {
+        "ftmo::w1": {
+          base_project_id: "ftmo",
+          name: " · worker 1/1",
+          active: true
+        }
+      }
+    }
+  ];
+
+  for (const snapshot of invalidSnapshots) {
+    const calls = [];
+    const execute = createZCloudExecutor({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        return response(200, snapshot);
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_targets_invalid");
+    assert.equal(calls.length, 1);
+  }
+});
+
 test("ambiguous project aliases never dispatch a command", async () => {
   const calls = [];
   const execute = createZCloudExecutor({
