@@ -73,6 +73,8 @@ test("zCloud connector base URL must be a clean HTTP(S) origin", async () => {
     " http://127.0.0.1:8765",
     "http://127.0.0.1:8765 ",
     "ftp://127.0.0.1:8765",
+    "http://10.0.0.5:8765",
+    "http://zcloud.internal:8765",
     "http://user:pass@127.0.0.1:8765",
     "http://127.0.0.1:8765/api",
     "http://127.0.0.1:8765?mode=test",
@@ -84,6 +86,13 @@ test("zCloud connector base URL must be a clean HTTP(S) origin", async () => {
       invalid
     );
   }
+
+  assert.doesNotThrow(() =>
+    createZCloudExecutor({ baseUrl: "https://zcloud.internal:8765" })
+  );
+  assert.doesNotThrow(() =>
+    createZCloudExecutor({ baseUrl: "http://[::1]:8765" })
+  );
 
   const calls = [];
   const execute = createZCloudExecutor({
