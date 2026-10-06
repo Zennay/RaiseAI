@@ -1,4 +1,5 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const REQUEST_BUDGET_MS = 7_000;
 
 function hasUsableApiKey(value) {
   return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
@@ -179,6 +180,9 @@ export function createOpenRouterExecutor({
     }
 
     let lastError = null;
+    // The Watch client gives the gateway 8 seconds to answer. Reuse one
+    // deadline across retries so provider work cannot outlive that caller.
+    const requestSignal = AbortSignal.timeout(REQUEST_BUDGET_MS);
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
@@ -190,7 +194,7 @@ export function createOpenRouterExecutor({
             "x-title": "Raise AI"
           },
           body: JSON.stringify(request),
-          signal: AbortSignal.timeout(9_000)
+          signal: requestSignal
         });
 
         const jsonMediaType = hasJsonResponseType(response);
