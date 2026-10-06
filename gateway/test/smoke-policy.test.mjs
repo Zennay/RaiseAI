@@ -60,6 +60,42 @@ test("strict zCloud mode fails when dependency is unavailable", () => {
   assert.equal(result.reason, "zcloud_unavailable");
 });
 
+test("zCloud HTTP failures never pass as degraded dependency evidence", () => {
+  for (const status of [400, 401, 404, 429, 500, 503]) {
+    assert.deepEqual(
+      evaluateZCloudProbe({
+        status,
+        json: {
+          route: "zcloud_task",
+          execution: {
+            provider: "zcloud",
+            reason: "zcloud_unavailable"
+          }
+        }
+      }),
+      {
+        ok: false,
+        degraded: false,
+        reason: `zcloud_http_${status}`
+      }
+    );
+  }
+});
+
+test("missing zCloud HTTP status fails closed", () => {
+  assert.deepEqual(
+    evaluateZCloudProbe({
+      status: undefined,
+      json: null
+    }),
+    {
+      ok: false,
+      degraded: false,
+      reason: "zcloud_http_unknown"
+    }
+  );
+});
+
 test("unexpected route never passes", () => {
   const result = evaluateZCloudProbe({
     status: 200,
