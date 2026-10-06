@@ -639,6 +639,54 @@ exit 2
         self.assertEqual(payload["apk_sha256"], expected_apk_sha)
         self.assertEqual(payload["installed_apk_sha256"], expected_apk_sha)
 
+    def test_prepare_refuses_existing_same_second_session_directory(self):
+        fake_date = self.bin / "date"
+        fake_date.write_text(
+            "#!/bin/bash\n"
+            "if [ \"$*\" = \"-u +%Y%m%dT%H%M%SZ\" ]; then\n"
+            "  echo 20261006T074500Z\n"
+            "elif [ \"$*\" = \"-u +%Y-%m-%dT%H:%M:%SZ\" ]; then\n"
+            "  echo 2026-10-06T07:45:00Z\n"
+            "else\n"
+            "  exit 97\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        fake_date.chmod(0o755)
+
+        revision = subprocess.check_output(
+            ["git", "-C", self.repo, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        session = self.evidence / f"20261006T074500Z-v1.5.2-{revision[:12]}"
+        session.mkdir(parents=True)
+        sentinel = session / "existing-evidence.txt"
+        sentinel.write_text("preserve-me\n", encoding="utf-8")
+
+        provision_log = self.root / "provision-collision"
+        env = os.environ.copy()
+        env["PATH"] = f"{self.bin}:{env['PATH']}"
+        env["RAISE_EVIDENCE_ROOT"] = str(self.evidence)
+        env["RAISE_PREBUILT_APK"] = str(self.apk)
+        env["RAISE_EXPECT_APK_SHA256"] = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        env["PROVISION_SERIAL_LOG"] = str(provision_log)
+        env.pop("ANDROID_SERIAL", None)
+
+        result = subprocess.run(
+            ["bash", str(self.repo / "physical-validation.command"), "prepare", str(self.profile)],
+            cwd=self.repo,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing to reuse existing physical validation session", result.stdout)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve-me\n")
+        self.assertFalse((session / "session.json").exists())
+        self.assertFalse(provision_log.exists())
+
     def test_prepare_rejects_installed_prebuilt_apk_byte_mismatch(self):
         provision_log = self.root / "provision-serial-mismatch"
         env = os.environ.copy()
