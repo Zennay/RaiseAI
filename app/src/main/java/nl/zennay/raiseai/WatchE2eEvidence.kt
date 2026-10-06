@@ -1,6 +1,7 @@
 package nl.zennay.raiseai
 
 import android.content.Context
+import android.util.AtomicFile
 import org.json.JSONObject
 import java.io.File
 import java.time.Instant
@@ -77,18 +78,17 @@ object WatchE2eEvidence {
     }
 
     private fun write(context: Context, payload: JSONObject) {
-        val destination = File(context.filesDir, FILE_NAME)
-        val temporary = File(context.filesDir, "$FILE_NAME.tmp")
-        val serialized = payload.toString() + "\n"
+        val atomicFile = AtomicFile(File(context.filesDir, FILE_NAME))
+        val serialized = (payload.toString() + "\n").toByteArray(Charsets.UTF_8)
 
         synchronized(this) {
-            temporary.writeText(serialized, Charsets.UTF_8)
-            if (destination.exists()) {
-                destination.delete()
-            }
-            if (!temporary.renameTo(destination)) {
-                destination.writeText(serialized, Charsets.UTF_8)
-                temporary.delete()
+            val output = atomicFile.startWrite()
+            try {
+                output.write(serialized)
+                atomicFile.finishWrite(output)
+            } catch (error: Throwable) {
+                atomicFile.failWrite(output)
+                throw error
             }
         }
     }
