@@ -26,6 +26,30 @@ class MouthPoseCalibrationQualityTest {
     }
 
     @Test
+    fun acceptsExactlyTheMinimumStableSampleCount() {
+        val result = MouthPoseCalibrationQuality.evaluate(
+            List(MouthPoseCalibrationQuality.MIN_SAMPLES) {
+                floatArrayOf(0.5f, 9.2f, 3.1f)
+            }
+        )
+
+        assertTrue(result.accepted)
+        assertNotNull(result.pose)
+    }
+
+    @Test
+    fun rejectsMalformedSensorVector() {
+        val samples = MutableList(MouthPoseCalibrationQuality.MIN_SAMPLES) {
+            floatArrayOf(0f, 9.81f, 0f)
+        }
+        samples[2] = floatArrayOf(9.81f, 0f)
+
+        val result = MouthPoseCalibrationQuality.evaluate(samples)
+
+        assertEquals(CalibrationFailure.INVALID_SAMPLE, result.failure)
+    }
+
+    @Test
     fun rejectsTooFewSamples() {
         val result = MouthPoseCalibrationQuality.evaluate(
             List(MouthPoseCalibrationQuality.MIN_SAMPLES - 1) {
