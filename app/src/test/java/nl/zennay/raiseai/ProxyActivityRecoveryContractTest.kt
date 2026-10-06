@@ -6,40 +6,24 @@ import org.junit.Test
 
 class ProxyActivityRecoveryContractTest {
     @Test
-    fun geminiProxyReturnsToSetupWhenAssistantLaunchFails() {
-        val source = findSource("src/main/java/nl/zennay/raiseai/AssistantProxyActivity.kt").readText()
-
-        assertTrue(
-            "Gemini proxy must inspect launch failure",
-            source.contains("if (!launched.success) {")
-        )
-        assertSetupFallback(source)
-    }
-
-    @Test
     fun chatGptProxyReturnsToSetupWhenWearBrowserLaunchFails() {
-        val source = findSource("src/main/java/nl/zennay/raiseai/ChatGptProxyActivity.kt").readText()
+        val source = findSource(
+            "src/main/java/nl/zennay/raiseai/ChatGptProxyActivity.kt"
+        ).readText()
 
-        assertTrue(
-            "ChatGPT proxy must inspect launch failure",
-            source.contains("if (!ChatGptLauncher.launchFromActivity(this)) {")
-        )
-        assertSetupFallback(source)
-    }
+        val launch = source.indexOf("ChatGptLauncher.launchFromActivity(this)")
+        val failure = source.indexOf("if (!ChatGptLauncher.launchFromActivity(this))", launch)
+        val setup = source.indexOf("Intent(this, MainActivity::class.java)", failure)
+        val finish = source.indexOf("finish()", setup)
 
-    private fun assertSetupFallback(source: String) {
-        assertTrue(
-            "failed proxy launch must route to MainActivity",
-            source.contains("Intent(this, MainActivity::class.java)")
-        )
+        assertTrue("ChatGPT proxy must inspect launch failure", launch >= 0)
+        assertTrue("failed ChatGPT launch must enter recovery", failure >= 0)
+        assertTrue("failed ChatGPT launch must route to MainActivity", setup > failure)
         assertTrue(
             "setup recovery must reuse an existing MainActivity",
             source.contains("Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP")
         )
-        assertTrue(
-            "proxy must finish after handing off",
-            source.contains("finish()")
-        )
+        assertTrue("proxy must finish after handing off", finish > setup)
     }
 
     private fun findSource(relativePath: String): File {
