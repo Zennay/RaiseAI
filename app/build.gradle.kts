@@ -2,12 +2,20 @@ import java.util.zip.ZipFile
 
 private val sourceRevisionPattern = Regex("^[0-9a-fA-F]{40}$")
 
+fun normalizeSourceRevisionOverride(raw: String?): String? {
+    if (raw == null) return null
+    val normalized = raw.trim()
+    return if (normalized.matches(sourceRevisionPattern)) {
+        normalized.lowercase()
+    } else {
+        "unknown"
+    }
+}
+
 fun resolveSourceRevision(projectDir: java.io.File): String {
     return try {
-        val override = System.getenv("RAISE_BUILD_REVISION")
-            ?.trim()
-            ?.takeIf { it.matches(sourceRevisionPattern) }
-        if (override != null) return override.lowercase()
+        val override = normalizeSourceRevisionOverride(System.getenv("RAISE_BUILD_REVISION"))
+        if (override != null) return override
 
         val statusProcess = ProcessBuilder("git", "status", "--porcelain", "--untracked-files=normal")
             .directory(projectDir)
@@ -93,6 +101,29 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
+val verifySourceRevisionOverridePolicy = tasks.register("verifySourceRevisionOverridePolicy") {
+    group = "verification"
+    description = "Locks fail-closed handling for explicit source-revision build overrides."
+
+    doLast {
+        check(normalizeSourceRevisionOverride(null) == null) {
+            "An absent source-revision override must continue to use repository provenance."
+        }
+        check(normalizeSourceRevisionOverride("A".repeat(40)) == "a".repeat(40)) {
+            "A valid explicit source revision must be normalized to lowercase."
+        }
+        check(normalizeSourceRevisionOverride("  " + "B".repeat(40) + "  ") == "b".repeat(40)) {
+            "Surrounding whitespace around a valid source revision must be ignored."
+        }
+        check(normalizeSourceRevisionOverride("") == "unknown") {
+            "An explicitly empty source-revision override must fail closed."
+        }
+        check(normalizeSourceRevisionOverride("not-a-revision") == "unknown") {
+            "A malformed source-revision override must fail closed."
+        }
+    }
+}
+
 tasks.register("verifyEvidenceBuildIdentity") {
     group = "verification"
     description = "Fails unless the evidence-capable build is clean and pinned to the exact checked-out source revision."
@@ -157,6 +188,9 @@ tasks.register("verifyWatchAbi") {
 }
 
 tasks.configureEach {
+    if (name == "preBuild") {
+        dependsOn(verifySourceRevisionOverridePolicy)
+    }
     if (name == "assembleDebug") {
         finalizedBy("verifyWatchAbi")
     }
