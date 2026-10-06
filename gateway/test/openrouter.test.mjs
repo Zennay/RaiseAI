@@ -234,6 +234,50 @@ test("OpenRouter output must come from an assistant message", async () => {
   }
 });
 
+test("explicitly incomplete OpenRouter completions fail closed", async () => {
+  for (const finishReason of ["length", "content_filter", "tool_calls", "", 42, {}]) {
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      retryDelayMs: 0,
+      sleepImpl: async () => {},
+      fetchImpl: async () =>
+        httpResponse(200, {
+          model: "z-ai/glm-5.3-flash",
+          choices: [{
+            finish_reason: finishReason,
+            message: { role: "assistant", content: "partial answer" }
+          }]
+        })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_incomplete_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      }
+    );
+  }
+});
+
+test("OpenRouter accepts an explicit stop finish reason", async () => {
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      httpResponse(200, {
+        model: "z-ai/glm-5.3-flash",
+        choices: [{
+          finish_reason: "stop",
+          message: { role: "assistant", content: "complete answer" }
+        }]
+      })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(result.answer, "complete answer");
+});
+
 test("successful OpenRouter responses require the JSON media type", async () => {
   for (const contentType of [null, "", "text/plain", "text/html"]) {
     let calls = 0;
