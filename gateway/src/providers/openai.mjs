@@ -6,6 +6,7 @@ function hasUsableApiKey(value) {
 
 function outputText(response) {
   const output = Array.isArray(response?.output) ? response.output : [];
+  const chunks = [];
 
   for (const item of output) {
     const content = Array.isArray(item?.content) ? item.content : [];
@@ -13,11 +14,12 @@ function outputText(response) {
     for (const part of content) {
       if (part?.type === "output_text" && typeof part.text === "string") {
         const text = part.text.trim();
-        if (text) return text;
+        if (text) chunks.push(text);
       }
     }
   }
-  return null;
+
+  return chunks.length ? chunks.join("\n") : null;
 }
 
 export function createOpenAIExecutor({
