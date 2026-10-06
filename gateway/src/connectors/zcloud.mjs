@@ -2,6 +2,8 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 const VALID_DESIRED_STATES = new Set(["running", "paused", "draining"]);
 const PROJECT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
+const MAX_TARGETS = 256;
+const MAX_TARGET_NAME_LENGTH = 256;
 
 function normalize(value) {
   return String(value ?? "")
@@ -104,8 +106,13 @@ function groupTargets(payload) {
   }
 
   const groups = new Map();
+  let targetCount = 0;
 
   for (const [workerKey, target] of Object.entries(payload.projects)) {
+    targetCount += 1;
+    if (targetCount > MAX_TARGETS) {
+      throw new Error("zcloud_targets_invalid");
+    }
     if (target === null || typeof target !== "object" || Array.isArray(target)) {
       throw new Error("zcloud_targets_invalid");
     }
@@ -136,6 +143,7 @@ function groupTargets(payload) {
       target.name !== null &&
       (
         typeof target.name !== "string" ||
+        target.name.length > MAX_TARGET_NAME_LENGTH ||
         target.name !== target.name.trim() ||
         CONTROL_CHARS.test(target.name)
       )
