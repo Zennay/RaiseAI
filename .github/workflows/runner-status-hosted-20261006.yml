@@ -1,0 +1,31 @@
+name: Hosted RaiseAI runner status diagnostic
+
+on:
+  push:
+    branches:
+      - ops/runner-status-hosted-20261006-1607
+    paths:
+      - ".github/workflows/runner-status-hosted-20261006.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read GitHub runner and Watch queue state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "== repository runners =="
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runners"             --jq '[.runners[] | {id,name,status,busy,labels:[.labels[].name]}]'
+          echo "== in-progress workflows =="
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=in_progress&per_page=100"             --jq '[.workflow_runs[] | {id,name,head_branch,head_sha,event,status,run_started_at}]'
+          echo "== queued Watch workflows =="
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=queued&per_page=100"             --jq '[.workflow_runs[] | select(.name=="Raise Watch app CI") | {id,head_branch,head_sha,status,created_at}]'
+          echo "RAISEAI_HOSTED_RUNNER_STATUS_DIAGNOSTIC_GREEN=1"
