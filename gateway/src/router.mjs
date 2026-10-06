@@ -6,6 +6,7 @@ const HOME = /\b(google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermos
 const HOME_ACTION = /\b(aan|uit|zet|dim|verhoog|verlaag|speel|pauzeer|stop)\b/i;
 const HOME_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
 const HOME_STATE_STATEMENT = /\b(?:is|zijn|staat|staan|blijft|blijven)\b[^.!?]*\b(?:aan|uit)\b/i;
+const HOME_QUERY_REQUEST = /^\s*(?:kun|kan)\s+je(?:\s+me)?\s+(?:zeggen|controleren|checken)\s+(?:of|wat|hoe|waarom|wanneer|waar)\b/i;
 const HOME_NEGATION = /\b(niet|geen|nooit|zonder)\b/i;
 const CURRENT = /\b(vandaag|nu|actueel|laatste|nieuwste|recent|weer|temperatuur|nieuws|verkeer|koers|prijs|stand|uitslag)\b/i;
 const DEEP = /\b(analyseer|vergelijk|architectuur|debug|onderzoek|strategie|trade-?off|optimaliseer|ontwerp|implementeer|waarom|stappenplan|code|programmeer)\b/i;
@@ -34,6 +35,7 @@ export function classifyIntent(rawText) {
     HOME_ACTION.test(text) &&
     !HOME_QUESTION.test(text) &&
     !HOME_STATE_STATEMENT.test(text) &&
+    !HOME_QUERY_REQUEST.test(text) &&
     !HOME_NEGATION.test(text) &&
     !EXPLANATION.test(text)
   ) {
