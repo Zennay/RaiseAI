@@ -556,6 +556,21 @@ if [ "${1:-}" = "-s" ]; then
     "shell getprop ro.product.device")
       if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "freshbl"; else echo "phone"; fi
       ;;
+    "shell pm path com.google.android.wearable.assistant")
+      [ "$serial" = "watch-b" ] && echo "package:/system/app/Gemini/Gemini.apk"
+      ;;
+    "shell pm path nl.zennay.raiseai")
+      [ "$serial" = "watch-b" ] && echo "package:/data/app/raise/base.apk"
+      ;;
+    "shell appops get nl.zennay.raiseai SYSTEM_ALERT_WINDOW")
+      echo "SYSTEM_ALERT_WINDOW: allow"
+      ;;
+    "shell appops get nl.zennay.raiseai GET_USAGE_STATS")
+      echo "GET_USAGE_STATS: allow"
+      ;;
+    "shell am start -a android.intent.action.ASSIST -p com.google.android.wearable.assistant")
+      echo "Starting: Intent"
+      ;;
     *)
       echo "unexpected adb invocation: $serial $args" >&2
       exit 2
@@ -573,6 +588,24 @@ exit 2
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_preflight_accepts_explicit_bound_watch(self):
+        env = os.environ.copy()
+        env["ANDROID_SDK_ROOT"] = str(self.sdk)
+        env["ANDROID_SERIAL"] = "watch-b"
+        result = subprocess.run(
+            ["bash", str(ROOT / "watch-preflight.command")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Watch: watch-b", result.stdout)
+        self.assertIn("Google/Gemini Wear assistant installed", result.stdout)
+        self.assertIn("Raise AI installed", result.stdout)
+        self.assertIn("Expected: Gemini opens and immediately listens.", result.stdout)
 
     def test_preflight_rejects_bound_phone(self):
         env = os.environ.copy()
