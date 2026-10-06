@@ -350,7 +350,15 @@ test("authenticated JSON endpoints reject unsupported media types before executi
   let executeCalls = 0;
 
   await withServer(async base => {
-    for (const contentType of ["text/plain", "application/x-www-form-urlencoded"]) {
+    for (const contentType of [
+      "text/plain",
+      "application/x-www-form-urlencoded",
+      "application/json; charset=iso-8859-1",
+      "application/json; charset=utf-16",
+      'application/json; charset="iso-8859-1"',
+      "application/json; charset=utf-8; profile=test",
+      "application/json;"
+    ]) {
       const res = await fetch(base + "/v1/assistant", {
         method: "POST",
         headers: {
@@ -374,20 +382,26 @@ test("authenticated JSON endpoints reject unsupported media types before executi
   assert.equal(executeCalls, 0);
 });
 
-test("application/json media type is case-insensitive and permits parameters", async () => {
+test("application/json media type is case-insensitive and permits only UTF-8 charset", async () => {
   await withServer(async base => {
-    const res = await fetch(base + "/v1/assistant", {
-      method: "POST",
-      headers: {
-        "content-type": "Application/JSON; charset=UTF-8",
-        authorization: "Bearer " + TOKEN
-      },
-      body: JSON.stringify({ text: "Leg kubernetes pods simpel uit" })
-    });
+    for (const contentType of [
+      "application/json",
+      "Application/JSON; charset=UTF-8",
+      'application/json; charset="utf-8"'
+    ]) {
+      const res = await fetch(base + "/v1/assistant", {
+        method: "POST",
+        headers: {
+          "content-type": contentType,
+          authorization: "Bearer " + TOKEN
+        },
+        body: JSON.stringify({ text: "Leg kubernetes pods simpel uit" })
+      });
 
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    assert.equal(body.route, "quick_ai");
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.route, "quick_ai");
+    }
   });
 });
 
