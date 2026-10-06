@@ -410,6 +410,37 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertFalse(self.fetch_marker.exists())
         self.assertFalse(self.log.exists())
 
+    def test_explicit_sdk_adb_wins_over_path_adb(self):
+        sdk_root = self.root / "explicit-sdk"
+        sdk_adb = sdk_root / "platform-tools" / "adb"
+        sdk_adb.parent.mkdir(parents=True)
+        shutil.copy2(self.bin / "adb", sdk_adb)
+        sdk_adb.chmod(0o755)
+
+        bad_adb_marker = self.root / "path-adb-used"
+        (self.bin / "adb").write_text(
+            "#!/bin/bash\n"
+            "printf 'used\\n' > \"$BAD_ADB_MARKER\"\n"
+            "exit 99\n",
+            encoding="utf-8",
+        )
+        (self.bin / "adb").chmod(0o755)
+
+        result = self.run_launcher(
+            {
+                "ANDROID_SDK_ROOT": str(sdk_root),
+                "BAD_ADB_MARKER": str(bad_adb_marker),
+            },
+            args=["--preflight-only", str(self.profile)],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(bad_adb_marker.exists(), result.stdout)
+        self.assertTrue(self.fetch_marker.exists())
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("verify:"))
+
     def test_rejects_no_active_adb_device_before_fetch(self):
         result = self.run_launcher({"FAKE_NO_DEVICES": "1"})
 
