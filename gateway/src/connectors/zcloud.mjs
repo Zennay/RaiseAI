@@ -64,14 +64,19 @@ function groupTargets(payload) {
 
   const groups = new Map();
 
-  for (const target of Object.values(payload.projects)) {
+  for (const [workerKey, target] of Object.entries(payload.projects)) {
     if (target === null || typeof target !== "object" || Array.isArray(target)) {
       throw new Error("zcloud_targets_invalid");
     }
     if (
       typeof target.base_project_id !== "string" ||
       !target.base_project_id ||
-      target.base_project_id.trim() !== target.base_project_id
+      target.base_project_id.trim() !== target.base_project_id ||
+      typeof target.project_id !== "string" ||
+      target.project_id !== workerKey ||
+      !Number.isSafeInteger(target.worker_slot) ||
+      target.worker_slot < 1 ||
+      workerKey !== target.base_project_id + "::w" + target.worker_slot
     ) {
       throw new Error("zcloud_targets_invalid");
     }
