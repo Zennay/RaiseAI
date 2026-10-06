@@ -172,7 +172,11 @@ prepare_session() {
 
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   session="$EVIDENCE_ROOT/${stamp}-v${version}-${revision:0:12}"
-  mkdir -p "$session"
+  if ! mkdir "$session"; then
+    echo "Refusing to reuse existing physical validation session: $session"
+    echo "Start a fresh prepare so evidence cannot be mixed or overwritten."
+    exit 1
+  fi
   installed_watch_serial_file="$session/installed-watch-serial"
   installed_apk_sha_file="$session/installed-apk-sha256"
   rm -f "$installed_watch_serial_file" "$installed_apk_sha_file"
