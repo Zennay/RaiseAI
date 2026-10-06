@@ -101,6 +101,25 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
         self.assertEqual(payload["source_revision"], REVISION)
         self.assertEqual(payload["apk_sha256"], APK)
 
+
+    def test_accepts_recorded_timestamp_at_clock_skew_boundary(self):
+        now = generator.dt.datetime(2026, 10, 6, 5, 45, 0, tzinfo=generator.dt.timezone.utc)
+        payload = generator.build_template(
+            session_payload(),
+            recorded_at_utc="2026-10-06T05:50:00Z",
+            now_utc=now,
+        )
+        self.assertEqual(payload["recorded_at_utc"], "2026-10-06T05:50:00Z")
+
+    def test_rejects_recorded_timestamp_more_than_five_minutes_in_future(self):
+        now = generator.dt.datetime(2026, 10, 6, 5, 45, 0, tzinfo=generator.dt.timezone.utc)
+        with self.assertRaisesRegex(generator.TemplateError, "more than 5 minutes in the future"):
+            generator.build_template(
+                session_payload(),
+                recorded_at_utc="2026-10-06T05:50:00.001000Z",
+                now_utc=now,
+            )
+
     def test_normalizes_recorded_timestamp_to_utc(self):
         payload = generator.build_template(
             session_payload(),
