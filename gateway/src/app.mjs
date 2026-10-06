@@ -32,6 +32,14 @@ function hasJsonContentType(req) {
   return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
 }
 
+function isCanonicalExecutionToken(value) {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    !/[\s\u0000-\u001f\u007f]/u.test(value)
+  );
+}
+
 function normalizeExecutionResult(result) {
   if (result === null || result === undefined) {
     return {
@@ -55,12 +63,26 @@ function normalizeExecutionResult(result) {
     throw err;
   }
 
-  for (const field of ["reason", "provider", "model", "answer"]) {
-    if (result[field] !== undefined && result[field] !== null && typeof result[field] !== "string") {
+  for (const field of ["reason", "provider", "model"]) {
+    if (
+      result[field] !== undefined &&
+      result[field] !== null &&
+      !isCanonicalExecutionToken(result[field])
+    ) {
       const err = new Error("invalid_execution_result");
       err.statusCode = 502;
       throw err;
     }
+  }
+
+  if (
+    result.answer !== undefined &&
+    result.answer !== null &&
+    typeof result.answer !== "string"
+  ) {
+    const err = new Error("invalid_execution_result");
+    err.statusCode = 502;
+    throw err;
   }
 
   if (typeof result.answer === "string" && !result.answer.trim()) {
