@@ -36,6 +36,11 @@ class SleepModePolicyTest {
     }
 
     @Test
+    fun missingFilterFailsClosedToPaused() {
+        assertTrue(SleepModePolicy.shouldPause(null))
+    }
+
+    @Test
     fun futureUnsupportedFilterFailsClosedToPaused() {
         assertTrue(SleepModePolicy.shouldPause(Int.MAX_VALUE))
     }
