@@ -13,7 +13,7 @@ import android.content.Context
  * to disable Sleep/DND pause when Android cannot report a trustworthy state.
  */
 object SleepModePolicy {
-    internal fun shouldPause(interruptionFilter: Int): Boolean =
+    internal fun shouldPause(interruptionFilter: Int?): Boolean =
         when (interruptionFilter) {
             NotificationManager.INTERRUPTION_FILTER_ALL -> false
             NotificationManager.INTERRUPTION_FILTER_PRIORITY,
@@ -23,15 +23,10 @@ object SleepModePolicy {
         }
 
     fun isSleepOrDndActive(context: Context): Boolean {
-        val manager = runCatching {
-            context.getSystemService(NotificationManager::class.java)
-        }.getOrNull() ?: return true
-
         val interruptionFilter = runCatching {
-            manager.currentInterruptionFilter
-        }.getOrElse {
-            return true
-        }
+            context.getSystemService(NotificationManager::class.java)
+                ?.currentInterruptionFilter
+        }.getOrNull()
 
         return shouldPause(interruptionFilter)
     }
