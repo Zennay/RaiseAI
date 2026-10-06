@@ -66,7 +66,7 @@ object SensorTrialRecorder {
     fun progress(context: Context): SensorTrialProgress {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return SensorTrialProgress()
-        return file.useLines(::summarizeRows)
+        return file.useLines { lines -> summarizeRows(lines) }
     }
 
     internal fun summarizeRows(lines: Sequence<String>): SensorTrialProgress {
