@@ -172,19 +172,22 @@ test("successful HTTP status requires canonical zCloud command acknowledgement",
   }
 });
 
-test("blank zCloud rejection errors fall back to a non-empty safe message", async () => {
-  const execute = createZCloudExecutor({
-    fetchImpl: async url => {
-      if (url.endsWith("/api/runner-targets")) {
-        return response(200, targets({ active: true }));
+test("zCloud rejection details stay secret-safe", async () => {
+  for (const error of ["   ", "token=super-secret", "/srv/zcloud/private.sqlite"]) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async url => {
+        if (url.endsWith("/api/runner-targets")) {
+          return response(200, targets({ active: true }));
+        }
+        return response(409, { error });
       }
-      return response(409, { error: "   " });
-    }
-  });
+    });
 
-  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
 
-  assert.equal(result.enabled, false);
-  assert.equal(result.reason, "zcloud_command_rejected");
-  assert.equal(result.answer, "zCloud heeft de opdracht niet geaccepteerd.");
+    assert.equal(result.enabled, false);
+    assert.equal(result.reason, "zcloud_command_rejected");
+    assert.equal(result.answer, "zCloud heeft de opdracht niet geaccepteerd.");
+    if (error.trim()) assert.equal(result.answer.includes(error.trim()), false);
+  }
 });
