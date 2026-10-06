@@ -38,6 +38,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
+    private val recognitionSessions = VoiceRecognitionSessionGate()
     private val retryListeningRunnable = Runnable {
         if (!submitted && !isFinishing && !isDestroyed) {
             startListening()
@@ -129,9 +130,10 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             return
         }
 
+        val recognitionGeneration = recognitionSessions.beginSession()
         recognizer?.destroy()
         recognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
-            it.setRecognitionListener(this)
+            it.setRecognitionListener(scopedRecognitionListener(recognitionGeneration))
         }
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -152,6 +154,53 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         setState("listening", "Ik luister")
         recognizer?.startListening(intent)
     }
+
+    private fun scopedRecognitionListener(generation: Long): RecognitionListener =
+        object : RecognitionListener {
+            private fun withCurrentSession(block: () -> Unit) {
+                if (
+                    recognitionSessions.accepts(generation) &&
+                    !submitted &&
+                    !isFinishing &&
+                    !isDestroyed
+                ) {
+                    block()
+                }
+            }
+
+            override fun onReadyForSpeech(params: Bundle?) =
+                withCurrentSession { this@NativeVoiceActivity.onReadyForSpeech(params) }
+
+            override fun onBeginningOfSpeech() =
+                withCurrentSession { this@NativeVoiceActivity.onBeginningOfSpeech() }
+
+            override fun onRmsChanged(rmsdB: Float) =
+                withCurrentSession { this@NativeVoiceActivity.onRmsChanged(rmsdB) }
+
+            override fun onBufferReceived(buffer: ByteArray?) =
+                withCurrentSession { this@NativeVoiceActivity.onBufferReceived(buffer) }
+
+            override fun onEndOfSpeech() =
+                withCurrentSession { this@NativeVoiceActivity.onEndOfSpeech() }
+
+            override fun onError(error: Int) =
+                withCurrentSession {
+                    recognitionSessions.invalidate(generation)
+                    this@NativeVoiceActivity.onError(error)
+                }
+
+            override fun onResults(results: Bundle?) =
+                withCurrentSession {
+                    recognitionSessions.invalidate(generation)
+                    this@NativeVoiceActivity.onResults(results)
+                }
+
+            override fun onPartialResults(partialResults: Bundle?) =
+                withCurrentSession { this@NativeVoiceActivity.onPartialResults(partialResults) }
+
+            override fun onEvent(eventType: Int, params: Bundle?) =
+                withCurrentSession { this@NativeVoiceActivity.onEvent(eventType, params) }
+        }
 
     override fun onReadyForSpeech(params: Bundle?) {
         setState("listening", "Ik luister")
@@ -340,6 +389,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        recognitionSessions.invalidateAll()
         mainHandler.removeCallbacksAndMessages(null)
         orbAnimator?.cancel()
         recognizer?.cancel()
