@@ -7,13 +7,9 @@ internal enum class HomeLaunchTarget {
 }
 
 internal object HomeLaunchPolicy {
-    fun orderedAvailableTargets(
-        installedAppAvailable: Boolean,
-        playStoreAvailable: Boolean,
-        webStoreAvailable: Boolean
-    ): List<HomeLaunchTarget> = buildList {
+    fun orderedTargets(installedAppAvailable: Boolean): List<HomeLaunchTarget> = buildList {
         if (installedAppAvailable) add(HomeLaunchTarget.INSTALLED_APP)
-        if (playStoreAvailable) add(HomeLaunchTarget.PLAY_STORE)
-        if (webStoreAvailable) add(HomeLaunchTarget.WEB_STORE)
+        add(HomeLaunchTarget.PLAY_STORE)
+        add(HomeLaunchTarget.WEB_STORE)
     }
 }
