@@ -269,6 +269,18 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 "spki_sha256=" + ("a" * 64) + "\n",
                 "duplicate token property",
             ),
+            "spaced-key": (
+                " url=https://raise.example.invalid\n"
+                "token=" + ("x" * 40) + "\n"
+                "spki_sha256=" + ("a" * 64) + "\n",
+                "url property must use canonical key=value syntax",
+            ),
+            "spaced-value": (
+                "url=https://raise.example.invalid \n"
+                "token=" + ("x" * 40) + "\n"
+                "spki_sha256=" + ("a" * 64) + "\n",
+                "url property must use canonical key=value syntax",
+            ),
         }
 
         for name, (payload, expected_error) in cases.items():
