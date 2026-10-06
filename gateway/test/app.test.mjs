@@ -369,3 +369,35 @@ test("invalid JSON keeps its explicit public 400 contract", async () => {
     assert.equal(body.error, "invalid_json");
   });
 });
+
+test("invalid UTF-8 JSON bytes fail closed before execution", async () => {
+  let executeCalls = 0;
+
+  await withServer(async base => {
+    const invalidUtf8Body = Buffer.concat([
+      Buffer.from('{"text":"hello '),
+      Buffer.from([0xc3, 0x28]),
+      Buffer.from('"}')
+    ]);
+
+    const res = await fetch(base + "/v1/assistant", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + TOKEN
+      },
+      body: invalidUtf8Body
+    });
+
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error, "invalid_json");
+  }, {
+    execute: async () => {
+      executeCalls += 1;
+      return { enabled: true, answer: "must not run" };
+    }
+  });
+
+  assert.equal(executeCalls, 0);
+});
