@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+FUTURE_CLOCK_SKEW = dt.timedelta(minutes=5)
+
 OBSERVATION_KEYS = {
     "schema_version",
     "recorded_at_utc",
@@ -69,7 +71,12 @@ def _require_sha(value: Any, field: str, length: int) -> str:
     return normalized
 
 
-def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
+def validate_observations(
+    session: Any,
+    observations: Any,
+    *,
+    now_utc: dt.datetime | None = None,
+) -> dict[str, Any]:
     _require(isinstance(session, dict), "session root must be a JSON object")
     _require(isinstance(observations, dict), "observations root must be a JSON object")
     _require(
@@ -108,6 +115,15 @@ def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
     recorded_at = _parse_timestamp(observations["recorded_at_utc"], "recorded_at_utc")
     started_at = _parse_timestamp(session["started_at_utc"], "session started_at_utc")
     _require(recorded_at >= started_at, "observations were recorded before the physical session started")
+    if now_utc is None:
+        now = dt.datetime.now(dt.timezone.utc)
+    else:
+        _require(now_utc.tzinfo is not None, "now_utc must include a timezone")
+        now = now_utc.astimezone(dt.timezone.utc)
+    _require(
+        recorded_at <= now + FUTURE_CLOCK_SKEW,
+        "recorded_at_utc is more than 5 minutes in the future",
+    )
 
     for key in ("screen_off_tested", "background_tested", "ux_failures_reviewed"):
         _require(type(observations[key]) is bool, f"{key} must be boolean")
