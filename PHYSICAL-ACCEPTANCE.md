@@ -175,9 +175,16 @@ Record failures as failures. Do not discard missed raises or false triggers mere
 
 ## 7. Record explicit physical quality observations
 
-Issue #34 requires the observed screen-off/background behavior and visible UX failures to be explicit rather than inferred from a passing E2E or reliability score. Before closing the physical gate, create `operator-observations.json` inside the same evidence session directory.
+Issue #34 requires the observed screen-off/background behavior and visible UX failures to be explicit rather than inferred from a passing E2E or reliability score. Before closing the physical gate, create `operator-observations.json` inside the same evidence session directory. Prefer generating the fail-closed template directly from the session identity:
 
-Use the exact identity from that session's `session.json`:
+```bash
+python3 tools/create-physical-observation-template.py \\
+  ~/.raiseai/evidence/<session>/session.json
+```
+
+The generator copies the exact Watch/app/source/APK identity and refuses to overwrite an existing observation file. Its three review booleans are deliberately `false` and its behavior fields are blank, so the template cannot pass validation until the real physical checks are completed.
+
+The resulting file has this shape:
 
 ```json
 {
