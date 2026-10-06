@@ -105,7 +105,7 @@ object SensorTrialRecorder {
 
             if (sessionId == null || sessionId <= 0L ||
                 durationMs == null || sampleCount == null || triggered == null ||
-                maxSimilarity == null || !maxSimilarity.isFinite() ||
+                maxSimilarity == null || !maxSimilarity.isFinite() || maxSimilarity !in -1f..1f ||
                 appVersion.isBlank() ||
                 !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
                 detectorConfig.isBlank() || detectorConfig == "missing"
