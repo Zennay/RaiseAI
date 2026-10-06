@@ -127,4 +127,32 @@ class RaiseGestureDetectorTest {
         assertTrue(triggered)
     }
 
+
+    @Test
+    fun movementWithoutMouthPoseCannotPrimeLaterTrigger() {
+        val detector = RaiseGestureDetector().apply {
+            similarityThreshold = 0.94f
+            movementThreshold = 0.7f
+            approachStartSimilarityThreshold = 0.94f
+            minimumApproachRise = 0.02f
+            requiredMovementHits = 2
+            holdMs = 100L
+        }
+        val mouth = MouthPose(0f, 0f, 1f)
+
+        for (t in 0L..400L step 50L) {
+            detector.onAccelerometer(9.81f, 0f, 0f, t, null)
+        }
+        detector.onAccelerometer(7f, 0f, 7f, 450L, null)
+        detector.onAccelerometer(4f, 0f, 10f, 500L, null)
+
+        var triggered = false
+        for (t in 550L..900L step 50L) {
+            triggered = triggered ||
+                detector.onAccelerometer(0f, 0f, 9.81f, t, mouth).triggered
+        }
+
+        assertFalse(triggered)
+    }
+
 }
