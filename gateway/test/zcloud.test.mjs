@@ -849,6 +849,63 @@ test("successful zCloud target snapshots require JSON response media type", asyn
   assert.equal(result.reason, "zcloud_targets_invalid");
 });
 
+test("zCloud JSON response media type only accepts bare JSON or UTF-8 charset", async () => {
+  for (const contentType of [
+    "application/json",
+    "application/json; charset=utf-8",
+    "Application/JSON; Charset=UTF-8",
+    'application/json; charset="UTF-8"'
+  ]) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async url => {
+        if (url.endsWith("/api/runner-targets")) {
+          return response(200, targets({ active: true }), contentType);
+        }
+        return response(200, commandAck(83), contentType);
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+    assert.equal(result.enabled, true, contentType);
+    assert.equal(result.commandId, 83, contentType);
+  }
+
+  for (const contentType of [
+    "application/json;",
+    "application/json; charset=iso-8859-1",
+    "application/json; charset=utf-8; profile=test",
+    "application/json; profile=test",
+    "application/json; charset=utf-8; charset=utf-8"
+  ]) {
+    const targetExecute = createZCloudExecutor({
+      fetchImpl: async () => response(200, targets({ active: true }), contentType)
+    });
+
+    const targetResult = await targetExecute(
+      { route: "zcloud_task" },
+      "Ga door met FTMO"
+    );
+    assert.equal(targetResult.enabled, false, contentType);
+    assert.equal(targetResult.reason, "zcloud_targets_invalid", contentType);
+
+    const ackExecute = createZCloudExecutor({
+      fetchImpl: async url => {
+        if (url.endsWith("/api/runner-targets")) {
+          return response(200, targets({ active: true }));
+        }
+        return response(200, commandAck(84), contentType);
+      }
+    });
+
+    const ackResult = await ackExecute(
+      { route: "zcloud_task" },
+      "Ga door met FTMO"
+    );
+    assert.equal(ackResult.enabled, false, contentType);
+    assert.equal(ackResult.reason, "zcloud_invalid_ack", contentType);
+  }
+});
+
 test("successful zCloud command acknowledgements require JSON response media type", async () => {
   const execute = createZCloudExecutor({
     fetchImpl: async url => {
