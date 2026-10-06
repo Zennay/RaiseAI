@@ -1,5 +1,5 @@
 const PROJECTS = /\b(ftmo|haxlab|ulab|zcloud|raise\s*ai|supa|flowly)\b/i;
-const EXECUTION = /\b(ga\s+door|werk\s+verder|fix|repareer|voer\s+uit|uitvoeren|deploy|build|bouw|commit|push|test|implementeer|update|maak|onderzoek\s+en)\b/i;
+const EXECUTION = /\b(ga\s+door|werk\s+verder|fix|repareer|voer\s+uit|uitvoeren|deploy|build(?:en)?|bouw|commit|push|test(?:en)?|implementeer|update|maak|onderzoek\s+en)\b/i;
 const PROJECT_QUESTION = /^\s*(wie|wat|waar|wanneer|waarom|hoe|hoeveel|welk|welke|is|zijn|staat|staan)\b/i;
 const HOME = /\b(google\s+home|home\s+assistant|lamp(?:en)?|licht(?:en)?|thermostaat|verwarming|speaker|tv|televisie|woonkamer|slaapkamer|keuken)\b/i;
 const HOME_ACTION = /\b(aan|uit|zet|dim|verhoog|verlaag|speel|pauzeer|stop)\b/i;
