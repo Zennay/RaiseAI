@@ -38,7 +38,7 @@ function writeExecutable(file, content) {
   fs.writeFileSync(file, content, { mode: 0o755 });
 }
 
-function runInstallerWithStubbedRuntime(host) {
+function runInstallerWithStubbedRuntime(host, { configDir } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-installer-san-"));
   const home = path.join(root, "home");
   const bin = path.join(root, "bin");
@@ -97,15 +97,26 @@ esac
         OPENSSL_LOG: opensslLog,
         RAISE_DEPLOY_REVISION: "a".repeat(40),
         RAISE_PUBLIC_HOST: host,
-        RAISE_PUBLIC_PORT: "8787"
+        RAISE_PUBLIC_PORT: "8787",
+        ...(configDir ? { RAISE_CONFIG_DIR: configDir } : {})
       }
     });
+    const effectiveConfigDir =
+      configDir ?? path.join(home, ".config", "raiseai");
     return {
       status: result.status,
       stderr: result.stderr,
       opensslLog: fs.existsSync(opensslLog)
         ? fs.readFileSync(opensslLog, "utf8")
-        : ""
+        : "",
+      configDir: effectiveConfigDir,
+      envCreated: fs.existsSync(path.join(effectiveConfigDir, "gateway.env")),
+      profileCreated: fs.existsSync(
+        path.join(effectiveConfigDir, "watch-gateway.properties")
+      ),
+      defaultConfigCreated: fs.existsSync(
+        path.join(home, ".config", "raiseai", "gateway.env")
+      )
     };
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -120,6 +131,21 @@ test("installer uses a certificate SAN matching the public host identity", () =>
     const result = runInstallerWithStubbedRuntime(host);
     assert.equal(result.status, 0, result.stderr);
     assert.ok(result.opensslLog.includes(expectedSan), result.opensslLog);
+  }
+});
+
+test("installer honors RAISE_CONFIG_DIR across generated deployment state", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-custom-config-"));
+  try {
+    const configDir = path.join(root, "raise-config");
+    const result = runInstallerWithStubbedRuntime("raise.example", { configDir });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.configDir, configDir);
+    assert.equal(result.envCreated, true);
+    assert.equal(result.profileCreated, true);
+    assert.equal(result.defaultConfigCreated, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
