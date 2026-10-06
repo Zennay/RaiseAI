@@ -1,9 +1,21 @@
 import net from "node:net";
 
 function isLoopbackHost(host) {
-  const normalized = host.trim().toLowerCase();
+  const normalized = host.toLowerCase();
   if (normalized === "localhost" || normalized === "::1") return true;
   return net.isIP(normalized) === 4 && normalized.startsWith("127.");
+}
+
+function isValidHost(host) {
+  if (net.isIP(host)) return true;
+  if (host.length > 253) return false;
+
+  const labels = host.toLowerCase().split(".");
+  return labels.every(label =>
+    label.length >= 1 &&
+    label.length <= 63 &&
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(label)
+  );
 }
 
 export function parseServerPort(value, fallback = 8787) {
@@ -28,6 +40,10 @@ export function validateServerConfig({ host, port, tlsCert, tlsKey }) {
 
   if (host !== host.trim()) {
     throw new Error("RAISE_HOST must not contain surrounding whitespace");
+  }
+
+  if (!isValidHost(host)) {
+    throw new Error("RAISE_HOST must be an IP address or canonical hostname");
   }
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
