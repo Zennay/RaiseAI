@@ -51,7 +51,7 @@ jobs:
         run: |
           python3 -m py_compile \
             tools/validate-physical-observations.py \
-            tools/create-physical-observation-template.py
+            tools/create-physical-observation-template.py \\\n            tools/update-physical-session.py
 
       - name: Physical quality evidence regressions
         run: |
