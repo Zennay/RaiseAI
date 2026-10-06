@@ -193,6 +193,16 @@ export function createHandler({
         : null;
 
       const execution = normalizeExecutionResult(connectorResult);
+      const aiRoute =
+        decision.route === "quick_ai" ||
+        decision.route === "deep_ai" ||
+        decision.route === "current_info";
+
+      if (aiRoute && execution.enabled && execution.answer === null) {
+        const err = new Error("invalid_execution_result");
+        err.statusCode = 502;
+        throw err;
+      }
 
       return json(res, 200, {
         requestId,
