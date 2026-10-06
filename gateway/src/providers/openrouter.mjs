@@ -17,8 +17,25 @@ function parseFallbackModels(value) {
     .filter(Boolean);
 }
 
-function uniqueModels(models) {
-  return [...new Set(models.filter(Boolean))];
+function normalizeModelName(value) {
+  if (typeof value !== "string") return null;
+  const model = value.trim();
+  if (!model || /\s/u.test(model)) return null;
+  return model;
+}
+
+function normalizeFallbackModels(models) {
+  const normalized = [];
+
+  for (const value of models) {
+    if (typeof value !== "string") return null;
+    const model = value.trim();
+    if (!model) continue;
+    if (/\s/u.test(model)) return null;
+    normalized.push(model);
+  }
+
+  return [...new Set(normalized)];
 }
 
 function outputText(response) {
@@ -93,8 +110,19 @@ export function createOpenRouterExecutor({
       };
     }
 
-    const primaryModel = decision.route === "deep_ai" ? deepModel : fastModel;
-    const models = uniqueModels([primaryModel, ...fallbacks]);
+    const primaryModel = normalizeModelName(
+      decision.route === "deep_ai" ? deepModel : fastModel
+    );
+    const normalizedFallbacks = normalizeFallbackModels(fallbacks);
+
+    if (!primaryModel || !normalizedFallbacks) {
+      return {
+        enabled: false,
+        reason: "openrouter_model_config_invalid"
+      };
+    }
+
+    const models = [...new Set([primaryModel, ...normalizedFallbacks])];
 
     const request = {
       models,
