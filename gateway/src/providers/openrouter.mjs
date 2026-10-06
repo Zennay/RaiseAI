@@ -50,7 +50,14 @@ function normalizeFallbackModels(models) {
 function hasJsonResponseType(response) {
   const value = response?.headers?.get?.("content-type");
   if (typeof value !== "string") return false;
-  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+
+  const parts = value.split(";");
+  const mediaType = parts.shift()?.trim().toLowerCase();
+  if (mediaType !== "application/json") return false;
+  if (parts.length === 0) return true;
+  if (parts.length !== 1) return false;
+
+  return /^charset\s*=\s*(?:utf-8|"utf-8")$/iu.test(parts[0].trim());
 }
 
 function outputText(response) {
