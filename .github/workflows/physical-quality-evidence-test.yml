@@ -11,6 +11,8 @@ on:
       - "tools/create-physical-observation-template.py"
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
+      - "tests/test_quality_workflow_action_pinning.py"
+      - ".github/workflows/watch-app-test.yml"
       - ".github/workflows/physical-quality-evidence-test.yml"
   pull_request:
     paths:
@@ -20,6 +22,8 @@ on:
       - "tools/create-physical-observation-template.py"
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
+      - "tests/test_quality_workflow_action_pinning.py"
+      - ".github/workflows/watch-app-test.yml"
       - ".github/workflows/physical-quality-evidence-test.yml"
 
 permissions:
