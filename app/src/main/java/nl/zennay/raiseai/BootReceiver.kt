@@ -9,12 +9,17 @@ import android.util.Log
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
+        if (!BootRecoveryPolicy.isRecoveryAction(action)) return
 
         val monitoringResult = runCatching {
             CalibrationStore.isMonitoringEnabled(context)
         }
         if (monitoringResult.isFailure) {
-            Log.w(TAG, "Could not read monitoring state after ${action ?: "unknown broadcast"}", monitoringResult.exceptionOrNull())
+            Log.w(
+                TAG,
+                "Could not read monitoring state after $action",
+                monitoringResult.exceptionOrNull()
+            )
             return
         }
 
@@ -25,7 +30,11 @@ class BootReceiver : BroadcastReceiver() {
             CalibrationStore.loadPose(context) != null
         }
         if (calibrationResult.isFailure) {
-            Log.w(TAG, "Could not read calibration state after ${action ?: "unknown broadcast"}", calibrationResult.exceptionOrNull())
+            Log.w(
+                TAG,
+                "Could not read calibration state after $action",
+                calibrationResult.exceptionOrNull()
+            )
             return
         }
 
