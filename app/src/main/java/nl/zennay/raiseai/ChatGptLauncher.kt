@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
 import android.util.Log
 
 /** Opens the user's real ChatGPT web session in the bundled Wear browser. */
@@ -25,7 +24,7 @@ object ChatGptLauncher {
     }
 
     fun launchFromService(context: Context): Boolean {
-        if (!Settings.canDrawOverlays(context)) {
+        if (!BackgroundLaunchGrant.isGranted(context)) {
             CalibrationStore.recordAssistantLaunch(context, "CHATGPT_BLOCKED_NO_BACKGROUND_GRANT")
             Log.w(TAG, "Background launch grant missing; run installer again")
             return false
