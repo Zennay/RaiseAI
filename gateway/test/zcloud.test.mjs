@@ -78,7 +78,8 @@ function targets({ active = true } = {}) {
         worker_count: 1,
         name: "HaxLab · worker 1/1",
         desired_state: "running",
-        active: true
+        active: true,
+        assignment_ready: true
       }
     }
   };
@@ -154,7 +155,8 @@ test("current allocated zCloud worker names resolve to the underlying project", 
               worker_count: 2,
               name: "Portfolio Worker 2/7 · FTMO",
               desired_state: "running",
-              active: true
+              active: true,
+              assignment_ready: true
             },
             "ftmo::w2": {
               project_id: "ftmo::w2",
@@ -163,7 +165,8 @@ test("current allocated zCloud worker names resolve to the underlying project", 
               worker_count: 2,
               name: "Portfolio Worker 5/7 · FTMO",
               desired_state: "running",
-              active: true
+              active: true,
+              assignment_ready: true
             }
           }
         });
@@ -193,7 +196,8 @@ test("allocated worker names with contradictory project suffixes fail closed", a
             worker_count: 2,
             name: "Portfolio Worker 2/7 · FTMO",
             desired_state: "running",
-            active: true
+            active: true,
+            assignment_ready: true
           },
           "ftmo::w2": {
             project_id: "ftmo::w2",
@@ -202,7 +206,8 @@ test("allocated worker names with contradictory project suffixes fail closed", a
             worker_count: 2,
             name: "Portfolio Worker 5/7 · HaxLab",
             desired_state: "running",
-            active: true
+            active: true,
+            assignment_ready: true
           }
         }
       });
@@ -234,7 +239,8 @@ test("zCloud display identity cannot alias a different base project", async () =
               worker_count: 1,
               name,
               desired_state: "running",
-              active: true
+              active: true,
+              assignment_ready: true
             }
           }
         });
@@ -288,7 +294,8 @@ test("canonical zCloud display identities remain valid control aliases", async (
                 worker_count: 1,
                 name: item.name,
                 desired_state: "running",
-                active: true
+                active: true,
+                assignment_ready: true
               }
             }
           });
@@ -324,7 +331,8 @@ test("current portfolio projects accept canonical werk-verder-aan continuation",
               worker_count: 1,
               name: "LightUp · worker 1/1",
               desired_state: "running",
-              active: true
+              active: true,
+              assignment_ready: true
             }
           }
         });
@@ -430,7 +438,8 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_count: 2,
           name: "FTMO · worker 1/2",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     },
@@ -443,7 +452,8 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_count: 2,
           name: "FTMO · worker 1/2",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         },
         "ftmo::w2": {
           project_id: "ftmo::w2",
@@ -452,7 +462,8 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_count: 2,
           name: "HaxLab · worker 2/2",
           desired_state: "running",
-          active: false
+          active: false,
+          assignment_ready: false
         }
       }
     },
@@ -465,7 +476,8 @@ test("inconsistent worker identities for one zCloud project fail closed", async 
           worker_count: 1,
           name: " · worker 1/1",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     }
@@ -499,7 +511,8 @@ test("zCloud target identities reject non-canonical IDs and unsafe display names
         worker_count: 1,
         name: "FTMO · worker 1/1",
         desired_state: "running",
-        active: true
+        active: true,
+        assignment_ready: true
       }
     },
     {
@@ -511,7 +524,8 @@ test("zCloud target identities reject non-canonical IDs and unsafe display names
         worker_count: 1,
         name: "FTMO · worker 1/1",
         desired_state: "running",
-        active: true
+        active: true,
+        assignment_ready: true
       }
     },
     {
@@ -523,7 +537,8 @@ test("zCloud target identities reject non-canonical IDs and unsafe display names
         worker_count: 1,
         name: " FTMO · worker 1/1",
         desired_state: "running",
-        active: true
+        active: true,
+        assignment_ready: true
       }
     },
     {
@@ -535,7 +550,8 @@ test("zCloud target identities reject non-canonical IDs and unsafe display names
         worker_count: 1,
         name: "FTMO\nspoofed",
         desired_state: "running",
-        active: true
+        active: true,
+        assignment_ready: true
       }
     }
   ];
@@ -563,7 +579,8 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_count: 1,
           name: "FTMO · worker 1/1",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     },
@@ -576,7 +593,8 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_count: 1,
           name: "FTMO · worker 1/1",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     },
@@ -589,7 +607,8 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_count: 1,
           name: "FTMO · worker 1/1",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     },
@@ -602,7 +621,8 @@ test("zCloud target key, project_id, base_project_id and worker_slot must agree"
           worker_count: 1,
           name: "FTMO · worker 1/1",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     }
@@ -635,7 +655,8 @@ test("invalid zCloud desired-state snapshots fail closed", async () => {
           worker_slot: 1,
           worker_count: 1,
           name: "FTMO · worker 1/1",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     },
@@ -648,7 +669,8 @@ test("invalid zCloud desired-state snapshots fail closed", async () => {
           worker_count: 1,
           name: "FTMO · worker 1/1",
           desired_state: "sleeping",
-          active: false
+          active: false,
+          assignment_ready: false
         }
       }
     },
@@ -661,7 +683,8 @@ test("invalid zCloud desired-state snapshots fail closed", async () => {
           worker_count: 1,
           name: "FTMO · worker 1/1",
           desired_state: "paused",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     }
@@ -699,7 +722,8 @@ test("paused inactive zCloud worker remains a valid start target", async () => {
               worker_count: 1,
               name: "FTMO · worker 1/1",
               desired_state: "paused",
-              active: false
+              active: false,
+              assignment_ready: false
             }
           }
         });
@@ -729,7 +753,8 @@ test("zCloud target snapshots bound project cardinality", async () => {
       worker_count: 1,
       name: "Project " + index + " · worker 1/1",
       desired_state: "running",
-      active: true
+      active: true,
+      assignment_ready: true
     };
   }
 
@@ -764,7 +789,8 @@ test("zCloud target display names have a bounded canonical length", async () => 
                 worker_count: 1,
                 name: "F".repeat(length),
                 desired_state: "running",
-                active: true
+                active: true,
+                assignment_ready: true
               }
             }
           });
@@ -794,7 +820,8 @@ test("zCloud target display names have a bounded canonical length", async () => 
               worker_count: 1,
               name: "FTMO · worker 1/1",
               desired_state: "running",
-              active: true
+              active: true,
+              assignment_ready: true
             }
           }
         });
@@ -821,7 +848,8 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_count: 2,
           name: "FTMO · worker 1/2",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     },
@@ -834,7 +862,8 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_count: 2,
           name: "FTMO · worker 1/2",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         },
         "ftmo::w2": {
           project_id: "ftmo::w2",
@@ -843,7 +872,8 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_count: 3,
           name: "FTMO · worker 2/3",
           desired_state: "running",
-          active: false
+          active: false,
+          assignment_ready: false
         }
       }
     },
@@ -856,7 +886,8 @@ test("incomplete or inconsistent worker-count snapshots fail closed", async () =
           worker_count: 1,
           name: "FTMO · worker 2/1",
           desired_state: "running",
-          active: true
+          active: true,
+          assignment_ready: true
         }
       }
     }
@@ -893,7 +924,8 @@ test("sparse large worker counts fail closed without range enumeration", async (
             worker_count: 1_000_000,
             name: "FTMO · worker 1/1000000",
             desired_state: "running",
-            active: true
+            active: true,
+            assignment_ready: true
           }
         }
       });
@@ -921,7 +953,8 @@ test("ambiguous project aliases never dispatch a command", async () => {
             worker_count: 1,
             name: "zCloud · worker 1/1",
             desired_state: "running",
-            active: true
+            active: true,
+            assignment_ready: true
           },
           "zcloud::w1": {
             project_id: "zcloud::w1",
@@ -930,7 +963,8 @@ test("ambiguous project aliases never dispatch a command", async () => {
             worker_count: 1,
             name: "zCloud · worker 1/1",
             desired_state: "running",
-            active: false
+            active: false,
+            assignment_ready: false
           }
         }
       });
@@ -1117,7 +1151,8 @@ test("zCloud target display names reject invisible Unicode controls", async () =
               worker_count: 1,
               name,
               desired_state: "running",
-              active: true
+              active: true,
+              assignment_ready: true
             }
           }
         })
@@ -1264,4 +1299,69 @@ test("zCloud rejects malformed declared Content-Length values", async () => {
     assert.equal(result.enabled, false, JSON.stringify(declaredLength));
     assert.equal(result.reason, "zcloud_targets_invalid", JSON.stringify(declaredLength));
   }
+});
+
+
+test("active zCloud workers require assignment-ready provenance", async () => {
+  for (const assignmentReady of [false, "true", null, undefined]) {
+    const target = {
+      project_id: "ftmo::w1",
+      base_project_id: "ftmo",
+      worker_slot: 1,
+      worker_count: 1,
+      name: "FTMO · worker 1/1",
+      desired_state: "running",
+      active: true
+    };
+    if (assignmentReady !== undefined) {
+      target.assignment_ready = assignmentReady;
+    }
+
+    let calls = 0;
+    const execute = createZCloudExecutor({
+      fetchImpl: async () => {
+        calls += 1;
+        return response(200, { projects: { "ftmo::w1": target } });
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+    assert.equal(result.enabled, false, String(assignmentReady));
+    assert.equal(result.reason, "zcloud_targets_invalid", String(assignmentReady));
+    assert.equal(calls, 1, String(assignmentReady));
+  }
+});
+
+test("paused assignment-ready zCloud worker remains a valid start target", async () => {
+  const calls = [];
+  const execute = createZCloudExecutor({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, {
+          projects: {
+            "ftmo::w1": {
+              project_id: "ftmo::w1",
+              base_project_id: "ftmo",
+              worker_slot: 1,
+              worker_count: 1,
+              name: "FTMO · worker 1/1",
+              desired_state: "paused",
+              active: false,
+              assignment_ready: true
+            }
+          }
+        });
+      }
+      return response(200, commandAck(94));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+  assert.equal(result.enabled, true);
+  assert.equal(result.commandId, 94);
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    project_id: "ftmo",
+    action: "start"
+  });
 });
