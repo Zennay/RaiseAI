@@ -6,18 +6,35 @@ import {
 } from "../src/connectors/zcloud.mjs";
 
 function response(status, body, contentType = "application/json; charset=utf-8") {
-  return {
-    ok: status >= 200 && status < 300,
+  const headers = {};
+  if (contentType !== null && contentType !== undefined) {
+    headers["content-type"] = contentType;
+  }
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+function responseWithText(status, bodyText, {
+  contentType = "application/json; charset=utf-8",
+  headers = {}
+} = {}) {
+  return new Response(bodyText, {
     status,
     headers: {
-      get(name) {
-        return String(name).toLowerCase() === "content-type" ? contentType : null;
-      }
-    },
-    async json() {
-      return body;
+      "content-type": contentType,
+      ...headers
     }
-  };
+  });
+}
+
+function targetBodyTextAtBytes(targetBytes) {
+  const encoder = new TextEncoder();
+  const payload = { ...targets(), padding: "" };
+  const baseline = encoder.encode(JSON.stringify(payload)).byteLength;
+  assert.ok(targetBytes >= baseline);
+  payload.padding = "x".repeat(targetBytes - baseline);
+  const text = JSON.stringify(payload);
+  assert.equal(encoder.encode(text).byteLength, targetBytes);
+  return text;
 }
 
 function commandAck(commandId, overrides = {}) {
@@ -1110,4 +1127,93 @@ test("zCloud target display names reject invisible Unicode controls", async () =
     assert.equal(result.enabled, false, JSON.stringify(name));
     assert.equal(result.reason, "zcloud_targets_invalid", JSON.stringify(name));
   }
+});
+
+
+test("zCloud target response body is accepted at 64 KiB and rejected above it", async () => {
+  for (const [bytes, expectedEnabled, expectedReason] of [
+    [64 * 1024, true, "zcloud_command_queued"],
+    [64 * 1024 + 1, false, "zcloud_targets_invalid"]
+  ]) {
+    const execute = createZCloudExecutor({
+      fetchImpl: async url => {
+        if (url.endsWith("/api/runner-targets")) {
+          return responseWithText(200, targetBodyTextAtBytes(bytes));
+        }
+        return response(200, commandAck(91));
+      }
+    });
+
+    const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+    assert.equal(result.enabled, expectedEnabled, String(bytes));
+    assert.equal(result.reason, expectedReason, String(bytes));
+  }
+});
+
+test("zCloud rejects oversized declared target bodies before reading them", async () => {
+  let readerUsed = false;
+  let cancelled = false;
+  const execute = createZCloudExecutor({
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          const key = String(name).toLowerCase();
+          if (key === "content-type") return "application/json";
+          if (key === "content-length") return String(64 * 1024 + 1);
+          return null;
+        }
+      },
+      body: {
+        getReader() {
+          readerUsed = true;
+          throw new Error("oversized body must not be read");
+        },
+        async cancel() {
+          cancelled = true;
+        }
+      }
+    })
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_targets_invalid");
+  assert.equal(readerUsed, false);
+  assert.equal(cancelled, true);
+});
+
+test("zCloud rejects invalid UTF-8 in successful JSON responses", async () => {
+  const execute = createZCloudExecutor({
+    fetchImpl: async () =>
+      new Response(Uint8Array.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xff, 0x7d]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_targets_invalid");
+});
+
+test("zCloud command acknowledgement body is bounded before trust", async () => {
+  const encoder = new TextEncoder();
+  const ack = { ...commandAck(92), padding: "" };
+  const baseline = encoder.encode(JSON.stringify(ack)).byteLength;
+  ack.padding = "x".repeat(64 * 1024 + 1 - baseline);
+
+  const execute = createZCloudExecutor({
+    fetchImpl: async url => {
+      if (url.endsWith("/api/runner-targets")) {
+        return response(200, targets({ active: true }));
+      }
+      return responseWithText(200, JSON.stringify(ack));
+    }
+  });
+
+  const result = await execute({ route: "zcloud_task" }, "Ga door met FTMO");
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "zcloud_invalid_ack");
 });
