@@ -5,6 +5,7 @@ import java.io.File
 
 object SensorTraceRecorder {
     private const val FILE_NAME = "sensor-traces.csv"
+    private const val CSV_HEADER = "label,session_id,elapsed_ms,x,y,z\n"
 
     @Synchronized
     fun append(
@@ -17,8 +18,8 @@ object SensorTraceRecorder {
         z: Float
     ) {
         val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) {
-            file.writeText("label,session_id,elapsed_ms,x,y,z\n")
+        if (!file.exists() || file.length() == 0L) {
+            file.writeText(CSV_HEADER)
         }
         file.appendText(
             "$label,$sessionId,$elapsedMs,$x,$y,$z\n"
