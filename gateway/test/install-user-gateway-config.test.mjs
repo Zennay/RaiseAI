@@ -48,7 +48,7 @@ function runInstallerWithStubbedRuntime(host) {
 
   writeExecutable(
     path.join(bin, "openssl"),
-    \`#!/usr/bin/env bash
+    `#!/usr/bin/env bash
 set -euo pipefail
 case "\${1:-}" in
   rand)
@@ -82,7 +82,7 @@ case "\${1:-}" in
     exit 2
     ;;
 esac
-\`
+`
   );
   writeExecutable(path.join(bin, "systemctl"), "#!/usr/bin/env bash\\nexit 0\\n");
   writeExecutable(path.join(bin, "node"), "#!/usr/bin/env bash\\nexit 0\\n");
@@ -119,7 +119,7 @@ test("installer uses a certificate SAN matching the public host identity", () =>
   ]) {
     const result = runInstallerWithStubbedRuntime(host);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.opensslLog, new RegExp(expectedSan.replaceAll(".", "\\\\.")));
+    assert.ok(result.opensslLog.includes(expectedSan), result.opensslLog);
   }
 });
 
