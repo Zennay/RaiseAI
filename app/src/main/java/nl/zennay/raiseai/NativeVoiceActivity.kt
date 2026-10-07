@@ -114,8 +114,15 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             isAllCaps = false
             visibility = View.GONE
             setOnClickListener {
-                AssistantLauncher.launchFromActivity(this@NativeVoiceActivity)
-                finish()
+                val result = AssistantLauncher.launchFromActivity(this@NativeVoiceActivity)
+                when (NativeFallbackLaunchPolicy.actionFor(result.success)) {
+                    NativeFallbackLaunchAction.FINISH_NATIVE_VOICE -> finish()
+                    NativeFallbackLaunchAction.KEEP_RECOVERY_UI -> {
+                        showError("Gemini kon niet worden geopend")
+                        detailText.text =
+                            "Raise AI blijft open. Controleer Gemini/Google setup en probeer opnieuw."
+                    }
+                }
             }
         }
         column.addView(fallbackButton, fullWidth())
