@@ -22,11 +22,11 @@ object WearBridge {
             val json = message as? JSONObject ?: return
             when (json.optString("type")) {
                 "state" -> {
-                    val state = json.optString("state")
-                    if (state in setOf("loading","ready","starting","listening","finalizing","sending","speaking","disconnected")) {
-                        currentState = state
-                        Log.d(TAG, "Wear state -> " + state)
-                    }
+                    val state = WearBridgeStatePolicy.normalizeInboundState(
+                        json.optString("state")
+                    )
+                    currentState = state
+                    Log.d(TAG, "Wear state -> " + state)
                 }
                 "assistantReply" -> {
                     val reply = json.optString("text").trim()
