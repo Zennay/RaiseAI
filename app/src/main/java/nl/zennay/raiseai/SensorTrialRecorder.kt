@@ -47,16 +47,18 @@ object SensorTrialRecorder {
         sourceRevision: String,
         detectorConfig: String
     ) {
-        val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists() || file.length() == 0L) {
-            file.writeText(SensorTrialCsvPolicy.HEADER + "\n")
-        } else if (file.useLines { it.firstOrNull() }?.let(SensorTrialCsvPolicy::hasCanonicalHeader) != true) {
-            return
-        }
-
         val rawRow =
             "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity,$appVersion,$sourceRevision,$detectorConfig"
         val parsed = SensorTrialCsvPolicy.parseRow(rawRow) ?: return
+
+        val file = File(context.filesDir, FILE_NAME)
+        if (!file.exists() || file.length() == 0L) {
+            file.writeText(SensorTrialCsvPolicy.HEADER + "\n")
+        } else {
+            val existingLines = file.readLines()
+            if (!SensorTrialCsvPolicy.canAppend(existingLines, parsed)) return
+        }
+
         file.appendText(
             "${parsed.label},${parsed.sessionId},${parsed.durationMs},${parsed.sampleCount}," +
                 "${parsed.detectorTriggered},${parsed.maxSimilarity},${parsed.appVersion}," +
