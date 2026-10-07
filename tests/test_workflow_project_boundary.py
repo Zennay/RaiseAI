@@ -8,6 +8,7 @@ from tests.test_workflow_privilege_boundary import workflow_security_metadata
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+BOUNDARY_WORKFLOW = WORKFLOWS / "workflow-project-boundary.yml"
 
 LEGACY_FOREIGN_WORKFLOWS = {
     "cancel-stale-zcloud-recovery-hosted.yml",
@@ -137,6 +138,23 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
                 with self.subTest(text=text):
                     self.assertEqual(pull_request_events(path), set())
 
+
+    def test_semantic_trigger_detection_fails_closed_on_invalid_on_surface(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "invalid-on.yml"
+            path.write_text("on:\n  - {pull_request: {}}\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "workflow security"):
+                pull_request_events(path)
+
+    def test_boundary_workflow_pins_semantic_parser_runtime(self):
+        workflow = BOUNDARY_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("Verify Ruby/Psych runtime", workflow)
+        self.assertIn('expected = ["3.2.3", "5.0.1"]', workflow)
+        self.assertIn('ruby --disable-gems -e \'require "psych";', workflow)
+        self.assertIn(
+            "python3 -m unittest tests.test_workflow_project_boundary",
+            workflow,
+        )
 
     def test_no_new_foreign_project_workflows_are_added_to_raiseai(self):
         current = {path.name for path in foreign_workflows()}
