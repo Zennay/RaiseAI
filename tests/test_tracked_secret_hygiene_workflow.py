@@ -27,10 +27,9 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         self.assertNotIn("schedule:", self.text)
 
     def test_runner_and_permissions_are_exact(self):
-        self.assertEqual(
-            self.text.count("    runs-on: [self-hosted, vps-bb300bba]"),
-            1,
-        )
+        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
+        self.assertNotIn("self-hosted", self.text)
+        self.assertNotIn('test "$(hostname)" = "vps-bb300bba"', self.text)
         self.assertEqual(self.text.count("    timeout-minutes: 5"), 1)
         self.assertRegex(
             self.text,
@@ -55,10 +54,6 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         self.assertEqual(self.text.count(f"          ref: {expression}"), 1)
         self.assertEqual(self.text.count(f"          EXPECTED_SHA: {expression}"), 1)
         self.assertEqual(self.text.count("          persist-credentials: false"), 1)
-        self.assertEqual(
-            self.text.count('          test "$(hostname)" = "vps-bb300bba"'),
-            1,
-        )
 
     def test_runtime_and_test_command_are_pinned(self):
         for line in (
@@ -76,7 +71,7 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         runtime = (
             '          python3 -c \'import platform, sys; '
             'assert platform.python_implementation() == "CPython"; '
-            'assert sys.version_info[:2] == (3, 14), sys.version\''
+            'assert sys.version_info[:2] == (3, 12), sys.version\''
         )
         self.assertEqual(self.text.count(runtime), 1)
 
