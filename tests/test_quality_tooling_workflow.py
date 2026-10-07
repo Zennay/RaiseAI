@@ -346,7 +346,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         for key in ("on", "permissions", "concurrency", "jobs"):
             with self.subTest(scope="top-level", key=key):
                 matches = re.findall(
-                    rf"(?m)^{re.escape(key)}:\\s*$",
+                    rf"(?m)^{re.escape(key)}:\s*$",
                     self.text,
                 )
                 self.assertEqual(
@@ -355,8 +355,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                     f"top-level {key!r} mapping must appear exactly once",
                 )
 
-        jobs_block = self.text.split("\\njobs:\\n", 1)[1]
-        job_names = re.findall(r"(?m)^  ([A-Za-z0-9_-]+):\\s*$", jobs_block)
+        jobs_block = self.text.split("\njobs:\n", 1)[1]
+        job_names = re.findall(r"(?m)^  ([A-Za-z0-9_-]+):\s*$", jobs_block)
         self.assertEqual(
             job_names,
             ["python-quality"],
@@ -366,7 +366,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         for key in ("runs-on", "timeout-minutes", "env", "steps"):
             with self.subTest(scope="python-quality", key=key):
                 matches = re.findall(
-                    rf"(?m)^    {re.escape(key)}:[^\\n]*$",
+                    rf"(?m)^    {re.escape(key)}:[^\n]*$",
                     jobs_block,
                 )
                 self.assertEqual(
@@ -412,7 +412,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 matches = [
                     line
                     for line in self.text.splitlines()
-                    if re.match(rf"^\\s+{re.escape(key)}:", line)
+                    if re.match(rf"^\s+{re.escape(key)}:", line)
                 ]
                 self.assertEqual(
                     matches,
@@ -436,7 +436,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 matches = [
                     line
                     for line in self.text.splitlines()
-                    if re.match(rf"^\\s+{re.escape(key)}:", line)
+                    if re.match(rf"^\s+{re.escape(key)}:", line)
                 ]
                 self.assertEqual(
                     matches,
