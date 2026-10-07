@@ -1,5 +1,5 @@
-import re
 from pathlib import Path
+import re
 import unittest
 
 
@@ -18,7 +18,7 @@ class GradleBootstrapIntegrityTest(unittest.TestCase):
         self.assertIsNotNone(match, "gradlew must pin a full lowercase SHA-256 digest")
 
     def test_verifies_download_before_install(self):
-        digest = self.script.index('actual_sha256="$(sha256sum "$ZIP.part"')
+        digest = self.script.index('actual_sha256="$(sha256_file "$ZIP.part")"')
         compare = self.script.index('if [ "$actual_sha256" != "$GRADLE_BIN_SHA256" ]')
         install = self.script.index('mv "$ZIP.part" "$ZIP"')
         unzip = self.script.index('unzip -q "$ZIP" -d "$TOOLS"')
@@ -26,13 +26,59 @@ class GradleBootstrapIntegrityTest(unittest.TestCase):
         self.assertLess(compare, install)
         self.assertLess(install, unzip)
 
-    def test_never_falls_back_to_unpinned_system_gradle(self):
+    def test_never_falls_back_to_unpinned_system_or_neighbor_gradle(self):
         self.assertNotIn("command -v gradle", self.script)
         self.assertNotRegex(
             self.script,
             r"(?m)^\s*exec\s+gradle(?:\s|$)",
             "gradlew must not bypass the pinned distribution with runner PATH state",
         )
+        self.assertNotIn("../RaiseAI-Watch7", self.script)
+        self.assertNotIn("../RaiseAI-Watch7 1", self.script)
+
+    def test_cached_distribution_is_bound_to_verified_archive(self):
+        archive_gate = self.script.index(
+            "if archive_is_verified && distribution_matches_archive; then"
+        )
+        cached_exec = self.script.index('exec "$DIST/bin/gradle" "$@"', archive_gate)
+        self.assertLess(archive_gate, cached_exec)
+
+        for marker in (
+            '[ ! -L "$ZIP" ] || return 1',
+            '[ "$(sha256_file "$ZIP")" = "$GRADLE_BIN_SHA256" ]',
+            '[ ! -L "$DIST" ] || return 1',
+            '[ ! -L "$path" ] || return 1',
+            'cmp -s <(unzip -p "$ZIP" "$entry") "$path" || return 1',
+            'actual_count="$(find "$DIST" -type f -print | wc -l | tr -d \'[:space:]\')"',
+            '[ "$actual_count" = "$expected_count" ] || return 1',
+            'find "$DIST" ! -type d ! -type f -print -quit',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.script)
+
+    def test_corrupt_cached_install_is_restored_from_verified_archive(self):
+        cache_gate = self.script.index(
+            "if archive_is_verified && distribution_matches_archive; then"
+        )
+        restore_gate = self.script.index("if archive_is_verified; then", cache_gate)
+        removal = self.script.index('rm -rf "$DIST"', restore_gate)
+        extraction = self.script.index('unzip -q "$ZIP" -d "$TOOLS"', removal)
+        post_install_gate = self.script.index(
+            "if ! distribution_matches_archive; then", extraction
+        )
+        final_exec = self.script.index('exec "$DIST/bin/gradle" "$@"', post_install_gate)
+
+        self.assertLess(cache_gate, restore_gate)
+        self.assertLess(restore_gate, removal)
+        self.assertLess(removal, extraction)
+        self.assertLess(extraction, post_install_gate)
+        self.assertLess(post_install_gate, final_exec)
+
+    def test_symlinked_tools_root_fails_closed(self):
+        guard = 'if [ -L "$TOOLS" ]; then'
+        mkdir = 'mkdir -p "$TOOLS"'
+        self.assertEqual(self.script.count(guard), 1)
+        self.assertLess(self.script.index(guard), self.script.index(mkdir))
 
     def test_checksum_mismatch_deletes_partial_download_and_fails_closed(self):
         mismatch = self.script.index('if [ "$actual_sha256" != "$GRADLE_BIN_SHA256" ]')
