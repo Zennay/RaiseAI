@@ -27,6 +27,10 @@ jobs:
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/raise-release-doc-pyc
       TZ: UTC
     steps:
       - name: Checkout exact tested revision
@@ -41,6 +45,12 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
       - name: Run release documentation identity contract
         shell: bash
         run: |
