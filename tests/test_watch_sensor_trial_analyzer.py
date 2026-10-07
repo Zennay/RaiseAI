@@ -1,5 +1,8 @@
 import importlib.util
+import os
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -181,6 +184,23 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
             path.write_text(content, encoding="utf-8")
             with self.assertRaisesRegex(analyzer.TrialError, "duplicate session_id"):
                 analyzer.read_trials(path)
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking file opens unavailable",
+    )
+    def test_cli_rejects_fifo_trial_without_blocking_for_writer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "sensor-trials.csv"
+            os.mkfifo(path)
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), str(path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertIn("trial CSV must be a regular file", result.stdout)
 
 
 if __name__ == "__main__":
