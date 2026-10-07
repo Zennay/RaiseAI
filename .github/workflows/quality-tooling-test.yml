@@ -7,13 +7,7 @@ on:
     paths:
       - "*.command"
       - "*.py"
-      - "tools/analyze-watch-sensor-traces.py"
-      - "tools/analyze-watch-sensor-trials.py"
-      - "tools/create-physical-observation-template.py"
-      - "tools/fetch-frozen-physical-handoff.py"
-      - "tools/validate-physical-observations.py"
-      - "tools/validate-watch-e2e-evidence.py"
-      - "tools/verify-watch-apk-identity.py"
+      - "tools/*.py"
       - "tests/test_adb_device_binding.py"
       - "tests/test_frozen_acceptance_launcher.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
@@ -30,13 +24,7 @@ on:
     paths:
       - "*.command"
       - "*.py"
-      - "tools/analyze-watch-sensor-traces.py"
-      - "tools/analyze-watch-sensor-trials.py"
-      - "tools/create-physical-observation-template.py"
-      - "tools/fetch-frozen-physical-handoff.py"
-      - "tools/validate-physical-observations.py"
-      - "tools/validate-watch-e2e-evidence.py"
-      - "tools/verify-watch-apk-identity.py"
+      - "tools/*.py"
       - "tests/test_adb_device_binding.py"
       - "tests/test_frozen_acceptance_launcher.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
@@ -100,7 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile *.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/create-physical-observation-template.py tools/fetch-frozen-physical-handoff.py tools/validate-physical-observations.py tools/validate-watch-e2e-evidence.py tools/verify-watch-apk-identity.py
+          python3 -m py_compile *.py tools/*.py
 
       - name: Quality tooling regressions
         shell: bash
