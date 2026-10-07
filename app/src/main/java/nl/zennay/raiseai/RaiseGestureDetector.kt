@@ -59,11 +59,13 @@ class RaiseGestureDetector {
 
     fun onAccelerometer(x: Float, y: Float, z: Float, timeMs: Long, mouthPose: MouthPose?): DetectionDebug {
         val currentSimilarity = if (hasSimilarity) lastSimilarity else 0f
+        val invalidPose = mouthPose != null &&
+            (!mouthPose.x.isFinite() || !mouthPose.y.isFinite() || !mouthPose.z.isFinite())
         val invalidSample =
             !x.isFinite() || !y.isFinite() || !z.isFinite() ||
             timeMs < 0L ||
             (lastEventTimeMs != Long.MIN_VALUE && timeMs < lastEventTimeMs)
-        if (invalidSample) {
+        if (invalidPose || invalidSample) {
             return DetectionDebug(false, currentSimilarity, 0f, armed)
         }
 
