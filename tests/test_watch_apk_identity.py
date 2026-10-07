@@ -3,6 +3,7 @@ import importlib.util
 import pathlib
 import tempfile
 import unittest
+import warnings
 import zipfile
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "verify-watch-apk-identity.py"
@@ -72,6 +73,22 @@ class WatchApkIdentityTests(unittest.TestCase):
             path = pathlib.Path(tmp) / "RaiseAI.apk"
             path.write_text("not an apk", encoding="utf-8")
             with self.assertRaisesRegex(verifier.ApkIdentityError, "valid ZIP"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    def test_rejects_duplicate_zip_members(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("classes.dex", b"first-" + REVISION.encode("ascii"))
+                    archive.writestr("classes.dex", b"second-" + REVISION.encode("ascii"))
+                    archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "duplicate ZIP members"):
                 verifier.verify_apk(
                     path,
                     expected_source_revision=REVISION,
