@@ -7,9 +7,22 @@ ENV_FILE="$CONFIG_DIR/gateway.env"
 CERT_FILE="$CONFIG_DIR/tls/gateway-cert.pem"
 EXPECTED_REVISION="${RAISE_DEPLOY_REVISION:-}"
 
+resolve_dependency() {
+  local name="$1" resolved
+  resolved="$(command -v "$name" || true)"
+  if [ -z "$resolved" ] || [[ "$resolved" != /* ]] || [ ! -x "$resolved" ]; then
+    echo "Raise idempotency verification requires an absolute executable $name binary" >&2
+    return 1
+  fi
+  printf '%s\n' "$resolved"
+}
+
+OPENSSL_BIN="$(resolve_dependency openssl)" || exit 1
+AWK_BIN="$(resolve_dependency awk)" || exit 1
+
 read_env_value() {
   local key="$1" value
-  if ! value="$(awk -F= -v key="$key" '
+  if ! value="$("$AWK_BIN" -F= -v key="$key" '
     $1 == key {
       count += 1
       sub(/^[^=]*=/, "")
@@ -29,10 +42,10 @@ read_env_value() {
 }
 
 spki_sha256() {
-  openssl x509 -in "$1" -pubkey -noout |
-    openssl pkey -pubin -outform DER 2>/dev/null |
-    openssl dgst -sha256 |
-    awk '{print $2}'
+  "$OPENSSL_BIN" x509 -in "$1" -pubkey -noout |
+    "$OPENSSL_BIN" pkey -pubin -outform DER 2>/dev/null |
+    "$OPENSSL_BIN" dgst -sha256 |
+    "$AWK_BIN" '{print $2}'
 }
 
 if [ ! -s "$ENV_FILE" ] || [ ! -s "$CERT_FILE" ]; then
