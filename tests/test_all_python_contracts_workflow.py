@@ -81,6 +81,34 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
             "aggregate lane must discover tests rather than enumerate a brittle subset",
         )
 
+    def test_execution_controls_are_fail_closed_and_bounded(self):
+        self.assertNotRegex(
+            self.text,
+            r"(?m)^\s+if:\s*",
+            "aggregate contract jobs and steps must not be conditionally skipped",
+        )
+        self.assertNotRegex(
+            self.text,
+            r"(?m)^\s+continue-on-error:\s*",
+            "aggregate contract failures must fail the workflow",
+        )
+        self.assertEqual(
+            self.text.count("    timeout-minutes: 10"),
+            1,
+            "aggregate contract job must keep a bounded runtime",
+        )
+        self.assertEqual(
+            self.text.count(
+                "  group: raise-all-python-contracts-${{ github.event.pull_request.number || github.ref }}"
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.text.count("  cancel-in-progress: true"),
+            1,
+            "superseded aggregate contract runs must be cancelled",
+        )
+
     def test_all_run_steps_are_strict_bash_and_worktree_is_clean(self):
         lines = self.text.splitlines()
         step_starts = [
