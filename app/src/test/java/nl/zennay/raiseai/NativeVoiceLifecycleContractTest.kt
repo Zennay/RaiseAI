@@ -71,17 +71,22 @@ class NativeVoiceLifecycleContractTest {
         val source = findSource(
             "src/main/java/nl/zennay/raiseai/NativeVoiceActivity.kt"
         ).readText()
+        val submitStart = source.indexOf("private fun submit(text: String)")
+        val postGateStart = source.indexOf("private fun postToUiIfActive", submitStart)
+        assertTrue("gateway submit path must exist", submitStart >= 0)
+        assertTrue("UI delivery gate must follow gateway submit path", postGateStart > submitStart)
 
+        val gatewaySource = source.substring(submitStart, postGateStart)
         assertOutcomeWriteIsLifecycleGated(
-            source = source,
+            source = gatewaySource,
             blockStart = ".onSuccess { response ->",
             blockEnd = ".onFailure { error ->",
             evidenceWrite = "WatchE2eEvidence.recordSuccess("
         )
         assertOutcomeWriteIsLifecycleGated(
-            source = source,
+            source = gatewaySource,
             blockStart = ".onFailure { error ->",
-            blockEnd = "private fun postToUiIfActive",
+            blockEnd = "        }\n    }",
             evidenceWrite = "WatchE2eEvidence.recordFailure("
         )
     }
@@ -110,7 +115,7 @@ class NativeVoiceLifecycleContractTest {
     }
 
     private fun findSource(relativePath: String): File {
-        var current = File(System.getProperty("user.dir")).canonicalFile
+        var current = File(requireNotNull(System.getProperty("user.dir"))).canonicalFile
         repeat(6) {
             listOf(
                 File(current, relativePath),
