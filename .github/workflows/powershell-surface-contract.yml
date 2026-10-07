@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v pwsh >/dev/null
-          pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
+          test "$(pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()')" = "7.6.6"
 
       - name: Validate tracked PowerShell surface
         shell: bash
