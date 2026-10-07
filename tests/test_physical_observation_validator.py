@@ -1,4 +1,5 @@
 import contextlib
+import datetime as dt
 import importlib.util
 import io
 import json
@@ -218,6 +219,33 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             validator.validate_observations(
                 session_payload(),
                 observation_payload(recorded_at_utc="2026-10-06T04:59:59Z"),
+            )
+
+    def test_accepts_observation_at_future_clock_skew_limit(self):
+        result = validator.validate_observations(
+            session_payload(started_at_utc="2026-10-06T05:00:00Z"),
+            observation_payload(recorded_at_utc="2026-10-06T05:02:00Z"),
+            now_utc=dt.datetime(2026, 10, 6, 5, 1, 0, tzinfo=dt.timezone.utc),
+        )
+        self.assertTrue(result["valid"])
+
+    def test_rejects_observation_beyond_future_clock_skew(self):
+        with self.assertRaisesRegex(
+            validator.ObservationError,
+            "recorded_at_utc is more than 60s in the future",
+        ):
+            validator.validate_observations(
+                session_payload(started_at_utc="2026-10-06T05:00:00Z"),
+                observation_payload(recorded_at_utc="2026-10-06T05:02:01Z"),
+                now_utc=dt.datetime(2026, 10, 6, 5, 1, 0, tzinfo=dt.timezone.utc),
+            )
+
+    def test_rejects_naive_validation_clock(self):
+        with self.assertRaisesRegex(validator.ObservationError, "now_utc must include a timezone"):
+            validator.validate_observations(
+                session_payload(),
+                observation_payload(),
+                now_utc=dt.datetime(2026, 10, 6, 6, 0, 0),
             )
 
     def test_canonicalizes_recorded_timestamp_to_utc(self):
