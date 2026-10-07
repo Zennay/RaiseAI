@@ -86,6 +86,7 @@ end
 
 writes = []
 secret_expressions = []
+inherited_secrets = []
 walk = nil
 walk = lambda do |node|
   if node.is_a?(Psych::Nodes::Scalar)
@@ -97,6 +98,11 @@ walk = lambda do |node|
 
   if node.is_a?(Psych::Nodes::Mapping)
     node.children.each_slice(2) do |key_node, value_node|
+      if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "secrets"
+        if value_node.is_a?(Psych::Nodes::Scalar) && value_node.value == "inherit"
+          inherited_secrets << "inherit"
+        end
+      end
       if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "permissions"
         case value_node
         when Psych::Nodes::Scalar
@@ -127,6 +133,7 @@ STDOUT.write(
       "events" => events.uniq.sort,
       "writes" => writes,
       "secret_expressions" => secret_expressions,
+      "inherited_secrets" => inherited_secrets,
       "environments" => environments,
     }
   )
@@ -189,6 +196,11 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                     metadata["writes"],
                     [],
                     f"{relative}: pull_request workflows must not receive write token permissions",
+                )
+                self.assertEqual(
+                    metadata["inherited_secrets"],
+                    [],
+                    f"{relative}: pull_request workflows must not inherit repository secrets into reusable workflows",
                 )
                 self.assertEqual(
                     metadata["environments"],
@@ -290,6 +302,31 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                 with self.subTest(name=name):
                     self.assertEqual(
                         len(workflow_security_metadata(path)["secret_expressions"]),
+                        expected_counts[name],
+                    )
+
+    def test_secret_inheritance_scan_is_semantic(self):
+        fixtures = {
+            "block.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    secrets: inherit\n",
+            "quoted.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    'secrets': 'inherit'\n",
+            "flow.yml": "on: pull_request\njobs: {call: {uses: ./.github/workflows/reuse.yml, secrets: inherit}}\n",
+            "mapped.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    secrets: {TOKEN: public-placeholder}\n",
+        }
+        expected_counts = {
+            "block.yml": 1,
+            "quoted.yml": 1,
+            "flow.yml": 1,
+            "mapped.yml": 0,
+        }
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, source in fixtures.items():
+                path = root / name
+                path.write_text(source, encoding="utf-8")
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        len(workflow_security_metadata(path)["inherited_secrets"]),
                         expected_counts[name],
                     )
 
