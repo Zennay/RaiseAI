@@ -99,6 +99,25 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
         )
         self.assertNotIn("persist-credentials:", self.text)
 
+    def test_every_github_http_call_is_time_bounded(self):
+        self.assertEqual(self.text.count('      CURL_CONNECT_TIMEOUT_SECONDS: "10"'), 1)
+        self.assertEqual(self.text.count('      CURL_MAX_TIME_SECONDS: "120"'), 1)
+        curl_calls = self.text.count("curl --connect-timeout")
+        self.assertEqual(curl_calls, 6, "every GitHub HTTP call must use the bounded curl contract")
+        self.assertEqual(
+            self.text.count('--connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS"'),
+            curl_calls,
+        )
+        self.assertEqual(
+            self.text.count('--max-time "$CURL_MAX_TIME_SECONDS"'),
+            curl_calls,
+        )
+        self.assertNotRegex(
+            self.text,
+            r"(?m)curl --(?!connect-timeout)",
+            "no preservation curl call may bypass the per-request deadline",
+        )
+
     def test_release_creation_stays_bound_to_frozen_source(self):
         self.assertIn('"target_commitish": os.environ["SOURCE_REVISION"]', self.text)
         self.assertIn('"tag_name": os.environ["RELEASE_TAG"]', self.text)
