@@ -77,11 +77,21 @@ class RaiseGestureDetector {
 
     fun onAccelerometer(x: Float, y: Float, z: Float, timeMs: Long, mouthPose: MouthPose?): DetectionDebug {
         val invalidVector = !x.isFinite() || !y.isFinite() || !z.isFinite()
-        val invalidMouthPose = mouthPose != null &&
-            (!mouthPose.x.isFinite() || !mouthPose.y.isFinite() || !mouthPose.z.isFinite())
+        val mouthPoseLength = mouthPose?.let { pose ->
+            sqrt(pose.x * pose.x + pose.y * pose.y + pose.z * pose.z)
+        }
+        val invalidMouthPose = mouthPoseLength != null &&
+            (!mouthPoseLength.isFinite() || mouthPoseLength < 0.001f)
         if (invalidVector || invalidMouthPose || timeMs < 0L) {
             resetTemporalEvidence()
             return rejectedSample()
+        }
+
+        val normalizedMouthPose = if (normalizedMouthPose == null) {
+            null
+        } else {
+            val length = mouthPoseLength!!
+            MouthPose(mouthPose.x / length, mouthPose.y / length, mouthPose.z / length)
         }
 
         val previousSampleTimeMs = lastSampleTimeMs
@@ -99,15 +109,15 @@ class RaiseGestureDetector {
             gravityZ = z
             initialized = true
 
-            if (mouthPose == null) {
+            if (normalizedMouthPose == null) {
                 return DetectionDebug(false, 0f, 0f, armed)
             }
 
             val length = sqrt(x * x + y * y + z * z).coerceAtLeast(0.001f)
             val initialSimilarity =
-                (x / length) * mouthPose.x +
-                (y / length) * mouthPose.y +
-                (z / length) * mouthPose.z
+                (x / length) * normalizedMouthPose.x +
+                (y / length) * normalizedMouthPose.y +
+                (z / length) * normalizedMouthPose.z
             lastSimilarity = initialSimilarity
             hasSimilarity = true
             return DetectionDebug(false, initialSimilarity, 0f, armed)
@@ -132,15 +142,15 @@ class RaiseGestureDetector {
             movingUntilMs = timeMs + movementWindowMs
         }
 
-        if (mouthPose == null) {
+        if (normalizedMouthPose == null) {
             poseStartedMs = 0L
             return DetectionDebug(false, 0f, dynamic, armed)
         }
 
         val length = sqrt(gravityX * gravityX + gravityY * gravityY + gravityZ * gravityZ).coerceAtLeast(0.001f)
-        val similarity = (gravityX / length) * mouthPose.x +
-            (gravityY / length) * mouthPose.y +
-            (gravityZ / length) * mouthPose.z
+        val similarity = (gravityX / length) * normalizedMouthPose.x +
+            (gravityY / length) * normalizedMouthPose.y +
+            (gravityZ / length) * normalizedMouthPose.z
 
         if (!armed) {
             if (similarity < rearmSimilarityThreshold) {
