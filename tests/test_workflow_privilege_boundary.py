@@ -5,11 +5,11 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
-PULL_REQUEST_RE = re.compile(r"(?m)^  pull_request:\\s*(?:\\{\\})?\\s*(?:#.*)?$")
+PULL_REQUEST_RE = re.compile(r"(?m)^  pull_request:\s*(?:\{\})?\s*(?:#.*)?$")
 PULL_REQUEST_TARGET_RE = re.compile(
-    r"(?m)^  pull_request_target:\\s*(?:\\{\\})?\\s*(?:#.*)?$"
+    r"(?m)^  pull_request_target:\s*(?:\{\})?\s*(?:#.*)?$"
 )
-SECRET_REF_RE = re.compile(r"\\$\\{\\{\\s*secrets\\.")
+SECRET_REF_RE = re.compile(r"\$\{\{\s*secrets\.")
 
 
 def workflow_paths() -> list[Path]:
@@ -25,7 +25,7 @@ def write_permissions(text: str) -> list[str]:
     writes: list[str] = []
     lines = text.splitlines()
     for index, line in enumerate(lines):
-        match = re.fullmatch(r"( *)permissions:\\s*", line)
+        match = re.fullmatch(r"( *)permissions:\s*", line)
         if not match:
             continue
 
@@ -39,7 +39,7 @@ def write_permissions(text: str) -> list[str]:
                 break
 
             permission = re.fullmatch(
-                rf" {{{parent_indent + 2}}}([A-Za-z0-9_-]+):\\s*write\\s*(?:#.*)?",
+                rf" {{{parent_indent + 2}}}([A-Za-z0-9_-]+):\s*write\s*(?:#.*)?",
                 child,
             )
             if permission:
