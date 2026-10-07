@@ -162,6 +162,49 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             with self.subTest(module=module):
                 self.assertIn(module, self.text)
 
+    def test_all_run_steps_use_bash_strict_mode(self):
+        lines = self.text.splitlines()
+        run_indices = [
+            index
+            for index, line in enumerate(lines)
+            if re.match(r"^        run:", line)
+        ]
+        self.assertTrue(run_indices, "quality workflow must contain run steps")
+        self.assertNotIn("continue-on-error: true", self.text)
+
+        step_starts = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("      - name:")
+        ]
+        for run_index in run_indices:
+            with self.subTest(run_line=run_index + 1):
+                step_start = max(
+                    index for index in step_starts if index < run_index
+                )
+                following_steps = [
+                    index for index in step_starts if index > step_start
+                ]
+                step_end = min(following_steps) if following_steps else len(lines)
+                step = lines[step_start:step_end]
+
+                self.assertEqual(
+                    lines[run_index],
+                    "        run: |",
+                    "run steps must use block form so strict mode can be first",
+                )
+                self.assertIn(
+                    "        shell: bash",
+                    step,
+                    "every run step must explicitly use Bash",
+                )
+                self.assertLess(run_index + 1, len(lines))
+                self.assertEqual(
+                    lines[run_index + 1],
+                    "          set -euo pipefail",
+                    "every run step must fail closed before executing commands",
+                )
+
     def test_job_is_read_only_and_bounded(self):
         self.assertIn("permissions:\n  contents: read", self.text)
         self.assertRegex(self.text, r"timeout-minutes:\s*[1-9][0-9]*")
