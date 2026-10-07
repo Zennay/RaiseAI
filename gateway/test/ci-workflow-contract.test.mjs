@@ -216,10 +216,14 @@ test("gateway deploy exceptional execution controls stay narrow", () => {
     "Upload deploy evidence artifact",
     "Gate workflow on deploy evidence contract",
   ]) {
-    const escaped = name.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+    const marker = `      - name: ${name}`;
+    const start = DEPLOY_WORKFLOW.indexOf(marker);
+    assert.notEqual(start, -1, `missing deploy step: ${name}`);
+    const next = DEPLOY_WORKFLOW.indexOf("\n      - name:", start + marker.length);
+    const step = DEPLOY_WORKFLOW.slice(start, next === -1 ? undefined : next);
     assert.match(
-      DEPLOY_WORKFLOW,
-      new RegExp(`- name: ${escaped}\\n\\s+if: always\\(\\)`),
+      step,
+      /^        if: always\(\)$/m,
       `${name} must remain explicitly always-run`,
     );
   }
