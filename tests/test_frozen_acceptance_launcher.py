@@ -269,6 +269,13 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 "spki_sha256=" + ("a" * 64) + "\n",
                 "duplicate token property",
             ),
+            "unexpected-property": (
+                "url=https://raise.example.invalid\n"
+                "token=" + ("x" * 40) + "\n"
+                "spki_sha256=" + ("a" * 64) + "\n"
+                "future_mode=enabled\n",
+                "unexpected property: future_mode",
+            ),
             "spaced-key": (
                 " url=https://raise.example.invalid\n"
                 "token=" + ("x" * 40) + "\n"
