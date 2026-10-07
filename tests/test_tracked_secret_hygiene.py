@@ -19,7 +19,9 @@ FORBIDDEN_BASENAMES = {
     "id_rsa",
     "id_dsa",
     "id_ecdsa",
+    "id_ecdsa_sk",
     "id_ed25519",
+    "id_ed25519_sk",
 }
 FORBIDDEN_SUFFIXES = {
     ".jks",
@@ -30,6 +32,7 @@ FORBIDDEN_SUFFIXES = {
     ".pfx",
     ".pem",
     ".key",
+    ".ppk",
 }
 ALLOWED_ENV_TEMPLATES = {".env.example", ".env.sample"}
 
@@ -232,10 +235,13 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             "nested/release.pfx",
             "nested/release.pem",
             "nested/release.key",
+            "nested/release.ppk",
             "nested/id_rsa",
             "nested/id_dsa",
             "nested/id_ecdsa",
+            "nested/id_ecdsa_sk",
             "nested/id_ed25519",
+            "nested/id_ed25519_sk",
         )
         for path in forbidden_examples:
             with self.subTest(path=path):
@@ -271,10 +277,13 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             "*.pfx",
             "*.pem",
             "*.key",
+            "*.ppk",
             "id_rsa",
             "id_dsa",
             "id_ecdsa",
+            "id_ecdsa_sk",
             "id_ed25519",
+            "id_ed25519_sk",
         )
         for pattern in required:
             with self.subTest(pattern=pattern):
