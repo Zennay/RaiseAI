@@ -20,7 +20,10 @@ import fs from "node:fs";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
-import { httpsOrigin } from "./readiness-config.mjs";
+import {
+  canonicalDeployRevision,
+  httpsOrigin
+} from "./readiness-config.mjs";
 import { evaluateZCloudProbe, hasJsonMediaType } from "./smoke-policy.mjs";
 import {
   armSmokeRequestDeadline,
@@ -48,14 +51,15 @@ const baseUrl = httpsOrigin(
   "Raise smoke URL"
 );
 const certFile = env.get("RAISE_TLS_CERT") ?? "";
-const expectedRevision =
-  process.env.RAISE_EXPECTED_REVISION ?? env.get("RAISE_DEPLOY_REVISION") ?? "";
+const expectedRevision = canonicalDeployRevision(
+  process.env.RAISE_EXPECTED_REVISION ?? env.get("RAISE_DEPLOY_REVISION") ?? "",
+  "Raise smoke expected revision"
+);
 const requireZCloud = process.env.RAISE_REQUIRE_ZCLOUD === "1";
 const openRouterConfigured = Boolean(env.get("OPENROUTER_API_KEY"));
 
 if (token.length < 32) throw new Error("gateway token missing or too short");
 if (!certFile) throw new Error("RAISE_TLS_CERT not configured");
-if (!expectedRevision) throw new Error("expected deploy revision missing");
 
 const ca = fs.readFileSync(certFile);
 
