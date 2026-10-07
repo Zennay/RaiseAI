@@ -15,6 +15,7 @@ from pathlib import Path
 
 
 DEX_SCAN_CHUNK_BYTES = 64 * 1024
+EXECUTABLE_DEX_NAME = re.compile(r"^classes(?:[2-9]|[1-9][0-9]+)?[.]dex$")
 
 
 class ApkIdentityError(ValueError):
@@ -103,7 +104,7 @@ def verify_apk(
             apk_file.seek(0)
             with zipfile.ZipFile(apk_file) as archive:
                 names = archive.namelist()
-                dex_files = sorted(name for name in names if name.endswith(".dex"))
+                dex_files = sorted(name for name in names if EXECUTABLE_DEX_NAME.fullmatch(name))
                 if not dex_files:
                     raise ApkIdentityError("APK contains no DEX files")
 
