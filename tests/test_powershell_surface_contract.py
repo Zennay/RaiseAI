@@ -1,3 +1,4 @@
+import os
 import pathlib
 import re
 import subprocess
@@ -24,13 +25,14 @@ def parse_powershell(path):
     script = (
         '$tokens = $null; $errors = $null; '
         '[void][System.Management.Automation.Language.Parser]::ParseFile('
-        '$args[0], [ref]$tokens, [ref]$errors); '
+        '$env:RAISE_PS_FILE, [ref]$tokens, [ref]$errors); '
         'if ($errors.Count -ne 0) { '
         '$errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 }'
     )
     return subprocess.run(
-        ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, str(path)],
+        ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
         cwd=ROOT,
+        env={**os.environ, "RAISE_PS_FILE": str(path)},
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
