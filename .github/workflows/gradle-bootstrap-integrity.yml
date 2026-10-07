@@ -1,0 +1,42 @@
+name: Gradle bootstrap integrity CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "gradlew"
+      - "tests/test_gradle_bootstrap_integrity.py"
+      - ".github/workflows/gradle-bootstrap-integrity.yml"
+  pull_request:
+    paths:
+      - "gradlew"
+      - "tests/test_gradle_bootstrap_integrity.py"
+      - ".github/workflows/gradle-bootstrap-integrity.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-gradle-bootstrap-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Pin exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+
+      - name: Bootstrap syntax and integrity regressions
+        run: |
+          bash -n gradlew
+          python3 -m unittest tests.test_gradle_bootstrap_integrity
