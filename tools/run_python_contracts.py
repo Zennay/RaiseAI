@@ -66,14 +66,20 @@ def contract_module_names(paths: list[Path] | None = None) -> list[str]:
     )
 
 
-def discovered_test_modules(suite: unittest.TestSuite) -> set[str]:
-    modules: set[str] = set()
+def discovered_test_origins(suite: unittest.TestSuite) -> set[tuple[str, str]]:
+    origins: set[tuple[str, str]] = set()
     for item in suite:
         if isinstance(item, unittest.TestSuite):
-            modules.update(discovered_test_modules(item))
+            origins.update(discovered_test_origins(item))
             continue
-        modules.add(item.__class__.__module__)
-    return modules
+        class_module = item.__class__.__module__
+        method_module = ""
+        method_name = getattr(item, "_testMethodName", "")
+        if method_name:
+            method = getattr(item.__class__, method_name, None)
+            method_module = getattr(method, "__module__", "")
+        origins.add((class_module, method_module))
+    return origins
 
 
 def run_contracts() -> int:
@@ -114,8 +120,12 @@ def run_contracts() -> int:
         return 1
 
     expected_modules = contract_module_names(module_paths)
-    discovered_modules = discovered_test_modules(suite)
-    missing_modules = sorted(set(expected_modules) - discovered_modules)
+    discovered_origins = discovered_test_origins(suite)
+    missing_modules = sorted(
+        module
+        for module in expected_modules
+        if (module, module) not in discovered_origins
+    )
 
     result = unittest.TextTestRunner(
         stream=sys.stdout,
