@@ -1,6 +1,7 @@
 import datetime as dt
 import importlib.util
 import pathlib
+import tempfile
 import unittest
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "validate-watch-e2e-evidence.py"
@@ -44,6 +45,20 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         )
         self.assertTrue(result["valid"])
         self.assertEqual(result["route"], "quick_ai")
+
+    def test_load_rejects_duplicate_json_fields(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary) / "watch-e2e-evidence.json"
+            evidence.write_text('{"schema_version":2,"schema_version":2}', encoding="utf-8")
+            with self.assertRaisesRegex(validator.EvidenceError, "duplicate JSON field: schema_version"):
+                validator.load_evidence(evidence)
+
+    def test_load_rejects_oversized_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary) / "watch-e2e-evidence.json"
+            evidence.write_bytes(b" " * (validator.MAX_EVIDENCE_BYTES + 1))
+            with self.assertRaisesRegex(validator.EvidenceError, "exceeds maximum size"):
+                validator.load_evidence(evidence)
 
     def test_rejects_unexpected_field_to_keep_evidence_secret_safe(self):
         with self.assertRaisesRegex(validator.EvidenceError, "unexpected evidence fields"):
