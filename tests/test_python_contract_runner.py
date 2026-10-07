@@ -32,6 +32,14 @@ class PythonContractRunnerTests(unittest.TestCase):
                 MODULE.TESTS_DIR = previous
             return exit_code, output.getvalue()
 
+    def test_empty_suite_returns_nonzero(self):
+        exit_code, output = self.run_temporary_suite(
+            "",
+            "helper_module.py",
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("discovery found zero tests", output)
+
     def test_passing_suite_returns_zero(self):
         exit_code, output = self.run_temporary_suite(
             """
