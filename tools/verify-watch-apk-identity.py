@@ -14,6 +14,9 @@ import zipfile
 from pathlib import Path
 
 
+DEX_SCAN_CHUNK_BYTES = 64 * 1024
+
+
 class ApkIdentityError(ValueError):
     pass
 
@@ -33,6 +36,28 @@ def _sha256_open_file(apk_file) -> str:
             break
         digest.update(chunk)
     return digest.hexdigest()
+
+
+def _zip_member_contains(
+    archive: zipfile.ZipFile,
+    name: str,
+    needle: bytes,
+) -> bool:
+    """Search one ZIP member without materializing the full decompressed file."""
+    overlap = b""
+    keep = max(0, len(needle) - 1)
+
+    with archive.open(name, "r") as member:
+        while True:
+            chunk = member.read(DEX_SCAN_CHUNK_BYTES)
+            if not chunk:
+                return False
+
+            window = overlap + chunk
+            if needle in window:
+                return True
+
+            overlap = window[-keep:] if keep else b""
 
 
 def verify_apk(
@@ -84,7 +109,9 @@ def verify_apk(
 
                 needle = revision.encode("ascii")
                 revision_hits = [
-                    name for name in dex_files if needle in archive.read(name)
+                    name
+                    for name in dex_files
+                    if _zip_member_contains(archive, name, needle)
                 ]
                 if not revision_hits:
                     raise ApkIdentityError(
