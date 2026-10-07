@@ -36,7 +36,7 @@ PULL_REQUEST_FLOW_MAP_RE = re.compile(
     rf"(?m)^\s{{0,2}}{ON_KEY}\s*:\s*\{{[^}}\n]*{PULL_REQUEST_KEY}\s*:"
 )
 PULL_REQUEST_FLOW_SEQUENCE_RE = re.compile(
-    rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\[[^\]]*{PULL_REQUEST_KEY}(?:\s*,|\s*\])"
+    rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\[[^\]]*{PULL_REQUEST_KEY}(?:\s+#[^\n]*)?\s*(?:,|\])"
 )
 
 
@@ -114,6 +114,7 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             '"on": {pull_request: null, workflow_dispatch: null}\n',
             "on: [push, pull_request]\n",
             "on: [\n  push,\n  pull_request,\n]\n",
+            "on: [\\n  push,\\n  pull_request # guarded legacy trigger\\n]\\n",
             '"on": [\n  workflow_dispatch,\n  "pull_request",\n]\n',
             'on: [push, "pull_request"]\n',
             "'on': [workflow_dispatch, 'pull_request']\n",
