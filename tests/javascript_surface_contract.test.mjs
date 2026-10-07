@@ -246,6 +246,30 @@ test("every run step is explicit strict Bash", () => {
   }
 });
 
+test("workflow rejects quoted YAML mapping keys", () => {
+  const quotedMappingKey = /^ {0,10}(?:"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+')\s*:/m;
+  const fixtures = [
+    '        "continue-on-error": true',
+    "        'working-directory': /tmp",
+    '    "timeout-minutes": 30',
+    "  'pull_request_target':",
+  ];
+
+  for (const fixture of fixtures) {
+    assert.match(
+      fixture,
+      quotedMappingKey,
+      "regression fixture must exercise the quoted-key detector",
+    );
+  }
+
+  assert.doesNotMatch(
+    WORKFLOW,
+    quotedMappingKey,
+    "quoted YAML mapping keys can bypass JavaScript workflow exact-surface parsers",
+  );
+});
+
 test("workflow keeps exact top-level and job execution surfaces", () => {
   const lines = WORKFLOW.split("\n");
   const topLevel = lines
