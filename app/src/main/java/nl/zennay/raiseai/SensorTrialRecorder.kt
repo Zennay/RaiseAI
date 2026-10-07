@@ -157,11 +157,14 @@ object SensorTrialRecorder {
             }
 
             identities += "${parsed.appVersion}|${parsed.sourceRevision}|${parsed.detectorConfig}"
-            if (normalizedExpectedVersion != null && parsed.appVersion != normalizedExpectedVersion) {
+            val unexpectedVersion =
+                normalizedExpectedVersion != null && parsed.appVersion != normalizedExpectedVersion
+            val unexpectedRevision =
+                normalizedExpectedRevision != null && parsed.sourceRevision != normalizedExpectedRevision
+            if (unexpectedVersion || unexpectedRevision) {
                 unexpectedEvidenceIdentity = true
-            }
-            if (normalizedExpectedRevision != null && parsed.sourceRevision != normalizedExpectedRevision) {
-                unexpectedEvidenceIdentity = true
+                rejectedTrials++
+                return@forEach
             }
 
             if (parsed.durationMs < MIN_QUALIFYING_DURATION_MS ||
