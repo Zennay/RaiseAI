@@ -56,8 +56,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                 read_contract_text(invalid)
 
     def test_version_file_is_canonical_single_line_utf8(self):
-        raw = (ROOT / "VERSION.txt").read_bytes()
-        text = raw.decode("utf-8")
+        text = read_contract_text(ROOT / "VERSION.txt")
         self.assertIsNotNone(
             re.fullmatch(r"\d+\.\d+\.\d+\n", text),
             "VERSION.txt must contain exactly one canonical SemVer line terminated by LF",
