@@ -4,6 +4,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { TextDecoder } from "node:util";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKFLOW_PATH = resolve(
@@ -14,6 +15,7 @@ const WORKFLOW_PATH = resolve(
 );
 const WORKFLOW = readFileSync(WORKFLOW_PATH, "utf8");
 const EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
+const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
 const EXPECTED_CRITICAL = new Set([
   "app/src/main/assets/raiseai_wear/wear.js",
   "gateway/src/server.mjs",
@@ -77,6 +79,10 @@ test("every tracked JavaScript file is regular and syntax-valid", () => {
       `${relative} must not use symlink indirection`,
     );
     assert.equal(stat.isFile(), true, `${relative} must be a regular file`);
+    assert.doesNotThrow(
+      () => STRICT_UTF8.decode(readFileSync(absolute)),
+      `${relative} must be strict UTF-8 JavaScript source`,
+    );
 
     const checked = spawnSync(process.execPath, ["--check", relative], {
       cwd: ROOT,
@@ -89,6 +95,13 @@ test("every tracked JavaScript file is regular and syntax-valid", () => {
       `${relative} must pass node --check under the audited runtime`,
     );
   }
+});
+
+test("strict UTF-8 decoder rejects malformed JavaScript source bytes", () => {
+  assert.throws(
+    () => STRICT_UTF8.decode(Buffer.from([0x2f, 0x2f, 0x20, 0xff, 0x0a])),
+    /encoded data was not valid|invalid/i,
+  );
 });
 
 test("workflow triggers cover current and future JavaScript surfaces", () => {
