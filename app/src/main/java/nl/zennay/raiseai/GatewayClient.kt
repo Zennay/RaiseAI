@@ -38,7 +38,7 @@ internal object GatewayResponseBodyReader {
             while (true) {
                 val read = input.read(buffer)
                 if (read < 0) break
-                if (read == 0) continue
+                if (read == 0) throw IOException("gateway_response_read_stalled")
 
                 totalBytes += read
                 if (totalBytes > MAX_RESPONSE_BYTES) {
