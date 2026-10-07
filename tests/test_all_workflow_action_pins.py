@@ -81,6 +81,50 @@ def docker_action_image_values(path):
     ]
 
 
+
+def local_uses_error(value, root=ROOT):
+    value = unquote_scalar(value)
+    if not value.startswith("./"):
+        return None
+
+    relative = value[2:]
+    segments = relative.split("/")
+    if not relative or "\\" in relative or any(
+        segment in {"", ".", ".."} for segment in segments
+    ):
+        return f"{value} must use a canonical repository-relative local path"
+
+    target = root.joinpath(*segments)
+    if target.is_symlink():
+        return f"{value} must not resolve through a symlinked local target"
+
+    if target.is_file():
+        workflows = root / ".github" / "workflows"
+        if target.parent != workflows or target.suffix not in {".yml", ".yaml"}:
+            return (
+                f"{value} local file target must be a top-level reusable workflow "
+                "under .github/workflows"
+            )
+        return None
+
+    if target.is_dir():
+        manifests = [
+            candidate
+            for candidate in (target / "action.yml", target / "action.yaml")
+            if candidate.exists()
+        ]
+        if len(manifests) != 1:
+            return (
+                f"{value} local action directory must contain exactly one "
+                "action.yml or action.yaml manifest"
+            )
+        manifest = manifests[0]
+        if manifest.is_symlink() or not manifest.is_file():
+            return f"{value} local action manifest must be a regular file"
+        return None
+
+    return f"{value} local action target must exist in the repository"
+
 def immutable_uses_error(value):
     value = unquote_scalar(value)
 
@@ -106,6 +150,53 @@ def immutable_uses_error(value):
 
 
 class AllWorkflowActionPinsTests(unittest.TestCase):
+    def test_every_local_uses_ref_is_canonical_and_resolvable(self):
+        workflows, action_manifests = github_action_documents()
+
+        for document in [*workflows, *action_manifests]:
+            for value in yaml_scalar_values_for_key(document, "uses"):
+                if not value.startswith("./"):
+                    continue
+                with self.subTest(
+                    document=str(document.relative_to(ROOT)),
+                    uses=value,
+                ):
+                    self.assertIsNone(
+                        local_uses_error(value),
+                        f"{document.relative_to(ROOT)}: {local_uses_error(value)}",
+                    )
+
+    def test_local_uses_validator_rejects_escape_missing_and_ambiguous_targets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            workflows = root / ".github" / "workflows"
+            action = root / ".github" / "actions" / "check"
+            workflows.mkdir(parents=True)
+            action.mkdir(parents=True)
+            (workflows / "reuse.yml").write_text("name: reuse\n", encoding="utf-8")
+            (action / "action.yml").write_text("name: check\n", encoding="utf-8")
+
+            self.assertIsNone(
+                local_uses_error("./.github/workflows/reuse.yml", root=root)
+            )
+            self.assertIsNone(
+                local_uses_error("./.github/actions/check", root=root)
+            )
+
+            for value in (
+                "./../outside",
+                "./missing",
+                "./.github//actions/check",
+                "./.github/workflows/../actions/check",
+            ):
+                with self.subTest(value=value):
+                    self.assertIsNotNone(local_uses_error(value, root=root))
+
+            (action / "action.yaml").write_text("name: duplicate\n", encoding="utf-8")
+            self.assertIsNotNone(
+                local_uses_error("./.github/actions/check", root=root)
+            )
+
     def test_every_remote_uses_ref_is_immutable(self):
         workflows, action_manifests = github_action_documents()
         self.assertTrue(workflows, "repository must retain GitHub Actions workflows")
