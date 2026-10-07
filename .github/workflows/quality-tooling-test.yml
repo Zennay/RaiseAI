@@ -71,6 +71,7 @@ jobs:
     timeout-minutes: 5
     env:
       LANG: C.UTF-8
+      LC_ALL: C.UTF-8
       PYTHONHASHSEED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       TZ: UTC
@@ -112,3 +113,10 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest tests.test_adb_device_binding tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_quality_tooling_workflow tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer
+
+      - name: Verify tracked worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
