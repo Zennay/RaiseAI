@@ -1,0 +1,48 @@
+name: Windows Watch installer contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "install-watch-windows.ps1"
+      - "tests/test_windows_watch_installer_contract.py"
+      - ".github/workflows/windows-watch-installer-contract.yml"
+  pull_request:
+    paths:
+      - "install-watch-windows.ps1"
+      - "tests/test_windows_watch_installer_contract.py"
+      - ".github/workflows/windows-watch-installer-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-windows-watch-installer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Validate Windows Watch installer contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          pwsh -NoProfile -NonInteractive -Command "[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'install-watch-windows.ps1'), [ref]$null, [ref]$null) | Out-Null"
+          python3 -m unittest tests.test_windows_watch_installer_contract
