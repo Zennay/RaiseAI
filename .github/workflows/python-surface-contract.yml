@@ -59,7 +59,11 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import pathlib
+          import re
           import subprocess
+
+          UTF8_BOM = b"\xef\xbb\xbf"
+          BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
           raw = subprocess.check_output(["git", "ls-files", "-z"])
           paths = sorted(
@@ -76,11 +80,21 @@ jobs:
                   raise SystemExit(f"{path}: tracked Python files must not be symlinks")
               if not candidate.is_file():
                   raise SystemExit(f"{path}: tracked Python path must be a regular file")
+              data = candidate.read_bytes()
+              if data.startswith(UTF8_BOM):
+                  raise SystemExit(f"{path}: Python source must not start with a UTF-8 BOM")
+              if b"\x00" in data:
+                  raise SystemExit(f"{path}: Python source must not contain NUL bytes")
+              if b"\r" in data:
+                  raise SystemExit(f"{path}: Python source must use LF-only line endings")
               try:
-                  source = candidate.read_bytes().decode("utf-8")
-                  compile(source, path, "exec", dont_inherit=True)
+                  source = data.decode("utf-8", errors="strict")
               except UnicodeDecodeError as exc:
                   raise SystemExit(f"{path}: Python source must be strict UTF-8: {exc}") from None
+              if BIDI_CONTROL_RE.search(source):
+                  raise SystemExit(f"{path}: Python source must not contain bidirectional control characters")
+              try:
+                  compile(source, path, "exec", dont_inherit=True)
               except (SyntaxError, ValueError) as exc:
                   raise SystemExit(f"{path}: invalid Python syntax: {exc.__class__.__name__}") from None
 
