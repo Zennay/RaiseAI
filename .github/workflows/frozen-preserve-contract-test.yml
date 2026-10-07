@@ -52,3 +52,10 @@ jobs:
           set -euo pipefail
           python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
           python3 -m unittest tests.test_preserve_frozen_handoff_workflow
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
