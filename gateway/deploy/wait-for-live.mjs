@@ -13,8 +13,10 @@ import {
   positiveInteger
 } from "./readiness-config.mjs";
 import {
+  armReadinessRequestDeadline,
   evaluateReadinessHttpResponse,
   hasJsonMediaType,
+  readinessRequestBudget,
   readReadinessJson
 } from "./readiness-http.mjs";
 
@@ -77,8 +79,17 @@ function writeReport(report) {
   fs.chmodSync(reportPath, 0o600);
 }
 
-function requestHealth() {
+function requestHealth(requestBudgetMs) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let cancelDeadline = () => {};
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      cancelDeadline();
+      fn(value);
+    };
+
     const req = https.request(
       {
         method: "GET",
@@ -86,13 +97,13 @@ function requestHealth() {
         port: baseUrl.port || 443,
         path: "/health",
         ca,
-        timeout: Math.min(5_000, timeoutMs)
+        timeout: requestBudgetMs
       },
       res => {
         const contentType = res.headers["content-type"];
         if (!hasJsonMediaType(contentType)) {
           res.destroy();
-          resolve({
+          settle(resolve, {
             status: res.statusCode,
             json: null,
             contentType,
@@ -103,27 +114,41 @@ function requestHealth() {
 
         void readReadinessJson(res).then(
           ({ json, bodyError }) => {
-            resolve({
+            settle(resolve, {
               status: res.statusCode,
               json,
               contentType,
               bodyError
             });
           },
-          reject
+          error => settle(reject, error)
         );
       }
     );
+
+    cancelDeadline = armReadinessRequestDeadline(req, {
+      timeoutMs: requestBudgetMs
+    });
     req.on("timeout", () => req.destroy(new Error("timeout")));
-    req.on("error", reject);
-    req.end();
+    req.on("error", error => settle(reject, error));
+
+    try {
+      req.end();
+    } catch (error) {
+      settle(reject, error);
+    }
   });
 }
 
 while (Date.now() <= deadline) {
+  const remainingBeforeRequest = deadline - Date.now();
+  if (remainingBeforeRequest <= 0) break;
+
   attempts += 1;
   try {
-    const response = await requestHealth();
+    const response = await requestHealth(
+      readinessRequestBudget(remainingBeforeRequest)
+    );
     last = evaluateReadinessHttpResponse({
       ...response,
       expectedRevision
