@@ -192,7 +192,7 @@ object SensorTrialRecorder {
             nonTriggerTrials = nonTriggerTrials,
             falseTriggers = falseTriggers,
             rejectedTrials = rejectedTrials,
-            mixedEvidenceIdentity = identities.size > 1,
+            mixedEvidenceIdentity = identities.size > 1 || unexpectedEvidenceIdentity,
             unexpectedEvidenceIdentity = unexpectedEvidenceIdentity,
             invalidEvidenceStructure = invalidEvidenceStructure
         )
