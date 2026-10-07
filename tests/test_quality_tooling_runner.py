@@ -42,6 +42,27 @@ class QualityToolingRunnerTests(unittest.TestCase):
         self.assertEqual(runner.QUALITY_MODULES, EXPECTED_MODULES)
         self.assertEqual(len(runner.QUALITY_MODULES), len(set(runner.QUALITY_MODULES)))
 
+    def test_tests_package_anchor_is_empty_regular_file(self):
+        self.assertTrue(runner.TEST_PACKAGE_INIT.is_file())
+        self.assertFalse(runner.TEST_PACKAGE_INIT.is_symlink())
+        self.assertEqual(runner.TEST_PACKAGE_INIT.read_bytes(), b"")
+
+    def test_nonempty_tests_package_anchor_fails_before_loading_contracts(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-package-anchor-") as tmp:
+            anchor = Path(tmp) / "__init__.py"
+            anchor.write_text("raise RuntimeError('unexpected package side effect')\n", encoding="utf-8")
+            original = runner.TEST_PACKAGE_INIT
+            runner.TEST_PACKAGE_INIT = anchor
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(("quality_fixture.does_not_exist",))
+            finally:
+                runner.TEST_PACKAGE_INIT = original
+        self.assertEqual(exit_code, 1)
+        self.assertIn("tests package anchor must remain empty", output.getvalue())
+        self.assertNotIn("FAILED (errors=1)", output.getvalue())
+
     def test_nonisolated_process_is_rejected_before_loading_contracts(self):
         completed = subprocess.run(
             [sys.executable, str(RUNNER)],
