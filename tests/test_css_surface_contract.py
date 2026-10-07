@@ -399,6 +399,24 @@ class CssSurfaceContractTests(unittest.TestCase):
             with self.subTest(event=event):
                 self.assertEqual(self._trigger_paths(event), expected)
 
+    def test_workflow_control_keys_cannot_hide_behind_yaml_quotes(self):
+        quoted_key = re.compile(
+            r"""(?m)^(?: {0}| {2}| {4}| {6}| {8}| {10})(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*:"""
+        )
+        self.assertNotRegex(
+            self.workflow,
+            quoted_key,
+            "quoted YAML mapping keys can bypass the exact workflow-surface key parsers",
+        )
+        for fixture in (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "if": false',
+            "  'pull_request':",
+        ):
+            with self.subTest(fixture=fixture):
+                self.assertRegex(fixture, quoted_key)
+
     def test_workflow_is_hosted_read_only_exact_head_bounded_and_secret_free(self):
         self.assertIn("runs-on: ubuntu-24.04", self.workflow)
         self.assertNotIn("self-hosted", self.workflow)
