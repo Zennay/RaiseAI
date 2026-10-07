@@ -12,16 +12,18 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.text = WORKFLOW.read_text(encoding="utf-8")
 
-    def test_trigger_surface_is_narrow_and_complete(self):
-        required = (
-            '      - ".gitignore"',
-            '      - "tests/test_tracked_secret_hygiene.py"',
-            '      - "tests/test_tracked_secret_hygiene_workflow.py"',
-            '      - ".github/workflows/tracked-secret-hygiene-quality.yml"',
+    def test_trigger_surface_covers_every_repository_change(self):
+        self.assertIn(
+            "on:\n"
+            "  push:\n"
+            "    branches:\n"
+            "      - main\n"
+            "  pull_request:\n\n"
+            "permissions:\n",
+            self.text,
         )
-        for line in required:
-            with self.subTest(line=line):
-                self.assertEqual(self.text.count(line), 2)
+        self.assertNotIn("    paths:", self.text)
+        self.assertNotIn("    paths-ignore:", self.text)
         self.assertNotIn("pull_request_target:", self.text)
         self.assertNotIn("workflow_dispatch:", self.text)
         self.assertNotIn("schedule:", self.text)
