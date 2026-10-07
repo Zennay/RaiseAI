@@ -8,7 +8,7 @@ TESTS_DIR = ROOT / "tests"
 
 
 def contract_exit_code(result: unittest.TestResult) -> int:
-    if result.skipped:
+    if result.skipped or result.expectedFailures:
         return 1
     return 0 if result.wasSuccessful() else 1
 
@@ -40,6 +40,15 @@ def main() -> int:
         )
         for test, reason in result.skipped:
             print(f"SKIPPED: {test.id()}: {reason}", file=sys.stderr)
+
+    if result.expectedFailures:
+        print(
+            f"ERROR: aggregate Python contracts accepted {len(result.expectedFailures)} "
+            "expected failure(s); contract failures may not be downgraded.",
+            file=sys.stderr,
+        )
+        for test, _ in result.expectedFailures:
+            print(f"EXPECTED-FAILURE: {test.id()}", file=sys.stderr)
 
     return contract_exit_code(result)
 
