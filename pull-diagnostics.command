@@ -1,5 +1,11 @@
 #!/bin/bash
 set -euo pipefail
+
+if [ "$#" -ne 0 ]; then
+  echo "Usage: ./pull-diagnostics.command"
+  exit 2
+fi
+
 cd "$(dirname "$0")"
 
 find_adb() {
