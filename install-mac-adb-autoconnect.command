@@ -29,18 +29,14 @@ ADB="$SDK_DIR/platform-tools/adb"
 
 mkdir -p "$BIN_DIR" "$LOG_DIR" "$HOME/Library/LaunchAgents"
 
-cat > "$HELPER" <<EOF
-#!/bin/bash
-set -u
-ADB="$ADB"
-STATE_DIR="$STATE_DIR"
-ENDPOINT_FILE="$ENDPOINT_FILE"
-
+printf '#!/bin/bash\nset -u\nADB=%q\nSTATE_DIR=%q\nENDPOINT_FILE=%q\n\n' \
+  "$ADB" "$STATE_DIR" "$ENDPOINT_FILE" > "$HELPER"
+cat >> "$HELPER" <<'EOF'
 "$ADB" start-server >/dev/null 2>&1 || exit 0
 
 find_watch() {
   local serial="" model=""
-  "$ADB" devices -l 2>/dev/null | awk 'NR>1 && \$2=="device" {print \$1}' | while IFS= read -r serial; do
+  "$ADB" devices -l 2>/dev/null | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
     [ -z "${serial:-}" ] && continue
     model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
     case "$model" in
