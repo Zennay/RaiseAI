@@ -15,6 +15,7 @@ class RaiseGestureDetector {
     private var gravityY = 0f
     private var gravityZ = 9.81f
     private var initialized = false
+    private var lastEventTimeMs = Long.MIN_VALUE
     private var movingUntilMs = 0L
     private var movementBurstStartedMs = 0L
     private var movementHits = 0
@@ -41,7 +42,7 @@ class RaiseGestureDetector {
     var rearmHoldMs = 500L
 
     fun configurationId(): String = listOf(
-        "raise-detector-v1",
+        "raise-detector-v2",
         "similarity=$similarityThreshold",
         "rearmSimilarity=$rearmSimilarityThreshold",
         "movement=$movementThreshold",
@@ -57,6 +58,17 @@ class RaiseGestureDetector {
     ).joinToString(";")
 
     fun onAccelerometer(x: Float, y: Float, z: Float, timeMs: Long, mouthPose: MouthPose?): DetectionDebug {
+        val currentSimilarity = if (hasSimilarity) lastSimilarity else 0f
+        val invalidSample =
+            !x.isFinite() || !y.isFinite() || !z.isFinite() ||
+            timeMs < 0L ||
+            (lastEventTimeMs != Long.MIN_VALUE && timeMs < lastEventTimeMs)
+        if (invalidSample) {
+            return DetectionDebug(false, currentSimilarity, 0f, armed)
+        }
+
+        lastEventTimeMs = timeMs
+
         if (!initialized) {
             // Establish the current wrist orientation as the baseline. Do not count sensor
             // startup/filter settling as an intentional arm movement.
