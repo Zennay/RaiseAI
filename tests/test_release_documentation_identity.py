@@ -5,6 +5,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+FROZEN_SOURCE_REVISION = "8f719bb273f9b997848864f342598e7df5f090e5"
+FROZEN_RELEASE_TAG = "physical-handoff-v1.5.2-8f719bb"
+FROZEN_RELEASE_ASSET_ID = "611084738"
+FROZEN_ARCHIVE_SHA256 = "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce"
 
 
 class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
@@ -23,13 +27,29 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
         )
         required = (
             "The only valid acceptance input is the preserved v1.5.2 handoff",
-            "8f719bb273f9b997848864f342598e7df5f090e5",
+            FROZEN_SOURCE_REVISION,
             "do not build from the repository tip",
             "Do not run `physical-validation.command all` from the current checkout",
         )
         for marker in required:
             with self.subTest(marker=marker):
                 self.assertIn(marker, text)
+
+    def test_start_here_pins_exact_preserved_carrier_identity(self):
+        text = (ROOT / "START-HERE.md").read_text(encoding="utf-8")
+        required = (
+            f"merged-main revision `{FROZEN_SOURCE_REVISION}`",
+            f"GitHub Release tag `{FROZEN_RELEASE_TAG}`",
+            f"Release asset id `{FROZEN_RELEASE_ASSET_ID}`",
+            f"archive digest `sha256:{FROZEN_ARCHIVE_SHA256}`",
+        )
+        for marker in required:
+            with self.subTest(marker=marker):
+                self.assertEqual(
+                    text.count(marker),
+                    1,
+                    "START-HERE must bind the frozen acceptance carrier unambiguously",
+                )
 
     def test_frozen_acceptance_version_is_not_derived_from_version_txt(self):
         current_version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
