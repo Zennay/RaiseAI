@@ -53,6 +53,14 @@ class NativeVoiceLifecycleContractTest {
             source.indexOf("private fun postToUiIfActive"),
             source.indexOf("private fun setState")
         )
+        val scopedListener = source.substring(
+            source.indexOf("private fun scopedRecognitionListener"),
+            source.indexOf("override fun onReadyForSpeech")
+        )
+        val retryRunnable = source.substring(
+            source.indexOf("private val retryListeningRunnable"),
+            source.indexOf("override fun onCreate")
+        )
 
         assertTrue("onStart must open UI delivery", onStart.contains("isUiStarted = true"))
         assertTrue("onStop must close UI delivery", onStop.contains("isUiStarted = false"))
@@ -63,6 +71,14 @@ class NativeVoiceLifecycleContractTest {
         assertTrue(
             "async outcomes must be rechecked on the main thread",
             postGate.contains("if (isUiStarted && !isFinishing && !isDestroyed)")
+        )
+        assertTrue(
+            "speech callbacks must not mutate a stopped voice UI",
+            scopedListener.contains("recognitionSessions.accepts(generation) &&\n                    isUiStarted &&")
+        )
+        assertTrue(
+            "delayed speech retries must not restart the microphone while stopped",
+            retryRunnable.contains("if (isUiStarted && !submitted && !isFinishing && !isDestroyed)")
         )
     }
 
