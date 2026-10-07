@@ -619,5 +619,23 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
 
 
+    def test_workflow_avoids_yaml_indirection(self):
+        self.assertNotRegex(
+            self.text,
+            r"(?m)(?:^|\s)&[A-Za-z0-9_-]+",
+            "YAML anchors can hide execution semantics from the text-level quality contract",
+        )
+        self.assertNotRegex(
+            self.text,
+            r"(?m)(?:^|\s)\*[A-Za-z0-9_-]+",
+            "YAML aliases can reintroduce hidden mappings outside the audited surface",
+        )
+        self.assertNotRegex(
+            self.text,
+            r"(?m)^\s*<<:\s*",
+            "YAML merge keys are forbidden in the dedicated hosted quality workflow",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
