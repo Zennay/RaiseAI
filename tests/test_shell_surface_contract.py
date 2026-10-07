@@ -168,6 +168,24 @@ class ShellSurfaceContractTests(unittest.TestCase):
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
 
+    def test_workflow_control_keys_cannot_hide_behind_yaml_quotes(self):
+        quoted_key = re.compile(
+            r"""(?m)^(?: {0}| {2}| {4}| {6}| {8}| {10})(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*:"""
+        )
+        self.assertNotRegex(
+            self.workflow,
+            quoted_key,
+            "quoted YAML mapping keys can bypass the exact workflow-surface key parsers",
+        )
+        for fixture in (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "if": false',
+            "  'pull_request':",
+        ):
+            with self.subTest(fixture=fixture):
+                self.assertRegex(fixture, quoted_key)
+
     def test_exact_head_guard_is_present_once_and_unconditional(self):
         command = '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"'
         self.assertEqual(
