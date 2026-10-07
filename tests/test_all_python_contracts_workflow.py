@@ -136,5 +136,96 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
                 self.assertEqual(self.text.count(command), 1)
 
 
+    def test_workflow_top_level_job_and_env_surfaces_are_exact(self):
+        lines = self.text.splitlines()
+
+        top_level = []
+        for line in lines:
+            match = re.fullmatch(r"([A-Za-z0-9_-]+):.*", line)
+            if match:
+                top_level.append(match.group(1))
+        self.assertEqual(
+            top_level,
+            ["name", "on", "permissions", "concurrency", "jobs"],
+            "aggregate workflow must not gain unreviewed top-level controls",
+        )
+
+        jobs_block = self.text.split("\njobs:\n", 1)[1]
+        job_keys = []
+        for line in jobs_block.splitlines()[1:]:
+            match = re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                job_keys.append(match.group(1))
+        self.assertEqual(
+            job_keys,
+            ["runs-on", "timeout-minutes", "env", "steps"],
+            "aggregate contract job must keep an exact execution surface",
+        )
+
+        env_start = lines.index("    env:") + 1
+        env_keys = []
+        for line in lines[env_start:]:
+            match = re.fullmatch(r"      ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                env_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            env_keys,
+            [
+                "LANG",
+                "LC_ALL",
+                "PYTHONHASHSEED",
+                "PYTHONNOUSERSITE",
+                "PYTHONDONTWRITEBYTECODE",
+                "PYTHONPYCACHEPREFIX",
+                "TZ",
+            ],
+            "job environment must not gain unreviewed interpreter controls",
+        )
+
+    def test_step_mapping_surfaces_are_exact(self):
+        lines = self.text.splitlines()
+        step_starts = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("      - name:")
+        ]
+        expected_names = [
+            "Checkout exact tested revision",
+            "Verify exact tested revision",
+            "Verify Python runtime",
+            "Run every Python contract without skips",
+            "Verify worktree remains clean",
+        ]
+        self.assertEqual(
+            [lines[index].removeprefix("      - name: ") for index in step_starts],
+            expected_names,
+            "aggregate workflow must not gain unreviewed steps",
+        )
+
+        expected_keys = {
+            "Checkout exact tested revision": ["name", "uses", "with"],
+            "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Verify Python runtime": ["name", "shell", "run"],
+            "Run every Python contract without skips": ["name", "shell", "run"],
+            "Verify worktree remains clean": ["name", "shell", "run"],
+        }
+        for position, start in enumerate(step_starts):
+            end = step_starts[position + 1] if position + 1 < len(step_starts) else len(lines)
+            step = lines[start:end]
+            name = lines[start].removeprefix("      - name: ")
+            keys = ["name"]
+            for line in step[1:]:
+                match = re.fullmatch(r"        ([A-Za-z0-9_-]+):.*", line)
+                if match:
+                    keys.append(match.group(1))
+            self.assertEqual(
+                keys,
+                expected_keys[name],
+                f"{name} must not gain unreviewed step-level controls",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
