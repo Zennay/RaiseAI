@@ -41,8 +41,23 @@ class WatchDataAnalyzerSelfHostedBoundaryTests(unittest.TestCase):
         self.assertIn("          persist-credentials: false", self.workflow)
 
     def test_python_runtime_isolated_and_boundary_test_self_validates(self):
-        self.assertIn('      PYTHONDONTWRITEBYTECODE: "1"', self.workflow)
-        self.assertIn('      PYTHONNOUSERSITE: "1"', self.workflow)
+        for line in (
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            "      TZ: UTC",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.workflow.count(line), 1)
+        self.assertEqual(
+            self.workflow.count(
+                'python3 -c \'import platform, sys; assert platform.python_implementation() == "CPython"; '
+                'assert sys.version_info[:2] == (3, 12), sys.version\''
+            ),
+            1,
+        )
         self.assertEqual(
             self.workflow.count(f'      - "{SELF}"'),
             2,
