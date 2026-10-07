@@ -129,6 +129,60 @@ class QualityToolingRunnerTests(unittest.TestCase):
         self.assertIn("SKIPPED:", output.getvalue())
         self.assertIn("synthetic skip", output.getvalue())
 
+    def test_expected_failure_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-xfail-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "xfail_contract.py").write_text(
+                "import unittest\n"
+                "class ExpectedFailureContract(unittest.TestCase):\n"
+                "    @unittest.expectedFailure\n"
+                "    def test_expected_failure(self):\n"
+                "        self.assertEqual(1, 2)\n",
+                encoding="utf-8",
+            )
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(("quality_fixture.xfail_contract",))
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.xfail_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("EXPECTED-FAILURE:", output.getvalue())
+
+    def test_unexpected_success_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-xpass-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "xpass_contract.py").write_text(
+                "import unittest\n"
+                "class UnexpectedSuccessContract(unittest.TestCase):\n"
+                "    @unittest.expectedFailure\n"
+                "    def test_unexpected_success(self):\n"
+                "        self.assertEqual(1, 1)\n",
+                encoding="utf-8",
+            )
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(("quality_fixture.xpass_contract",))
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.xpass_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("UNEXPECTED-SUCCESS:", output.getvalue())
+
     def test_passing_module_returns_zero(self):
         with tempfile.TemporaryDirectory(prefix="raise-quality-pass-") as tmp:
             root = Path(tmp)
