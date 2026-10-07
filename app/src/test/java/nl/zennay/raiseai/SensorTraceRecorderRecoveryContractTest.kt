@@ -10,6 +10,7 @@ class SensorTraceRecorderRecoveryContractTest {
         val source = findSource(
             "src/main/java/nl/zennay/raiseai/SensorTraceRecorder.kt"
         ).readText()
+        val headerWrite = "file.writeText(\"\\$HEADER\\n\")"
 
         assertTrue(
             "an interrupted first write may leave an empty trace that still needs the canonical header",
@@ -17,11 +18,11 @@ class SensorTraceRecorderRecoveryContractTest {
         )
         assertTrue(
             "empty-file recovery must restore the canonical CSV header",
-            source.contains("file.writeText(\"\$HEADER\\n\")")
+            source.contains(headerWrite)
         )
         assertTrue(
             "header recovery must happen before sample append",
-            source.indexOf("file.writeText(\"$HEADER\\n\")") < source.indexOf("file.appendText(")
+            source.indexOf(headerWrite) < source.indexOf("file.appendText(")
         )
     }
 
