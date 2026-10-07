@@ -1,6 +1,6 @@
 # ChatGPT Web setup (v1.0)
 
-> **Legacy fallback setup only.** ChatGPT Web/GeckoView is not the current physical acceptance path. For GitHub issue #34, use the preserved Raise AI v1.5.2 native handoff from source `8f719bb273f9b997848864f342598e7df5f090e5` through `bash ./start-frozen-acceptance.command [gateway-profile]` as documented in `START-HERE.md`.
+> **Legacy fallback setup only.** ChatGPT Web/GeckoView is not the current physical acceptance path. For GitHub issue #34, use only the preserved Raise AI v1.5.2 native handoff through `bash ./start-frozen-acceptance.command [gateway-profile]`; the complete canonical carrier identity and verification steps live in `START-HERE.md`.
 
 Raise AI v1.0 uses the official `https://chatgpt.com` website. It does not use an OpenAI API key and does not create API charges.
 
