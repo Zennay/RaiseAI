@@ -86,58 +86,55 @@ def read_samples(path: Path) -> list[Sample]:
         metadata = os.fstat(fd)
         if not stat.S_ISREG(metadata.st_mode):
             raise TraceError("trace CSV must be a regular non-symlink file")
-        handle = os.fdopen(fd, "r", encoding="utf-8", newline="", closefd=False)
-        try:
+
+        with os.fdopen(fd, "r", encoding="utf-8", newline="", closefd=False) as handle:
             reader = csv.DictReader(handle)
-        if reader.fieldnames is None:
-            raise TraceError("trace CSV has no header")
-        if len(reader.fieldnames) != len(set(reader.fieldnames)):
-            raise TraceError("trace CSV has duplicate column names")
-        missing = REQUIRED_COLUMNS - set(reader.fieldnames)
-        unexpected = set(reader.fieldnames) - REQUIRED_COLUMNS
-        if missing:
-            raise TraceError(f"missing columns: {', '.join(sorted(missing))}")
-        if unexpected:
-            raise TraceError(f"unexpected columns: {', '.join(sorted(unexpected))}")
+            if reader.fieldnames is None:
+                raise TraceError("trace CSV has no header")
+            if len(reader.fieldnames) != len(set(reader.fieldnames)):
+                raise TraceError("trace CSV has duplicate column names")
+            missing = REQUIRED_COLUMNS - set(reader.fieldnames)
+            unexpected = set(reader.fieldnames) - REQUIRED_COLUMNS
+            if missing:
+                raise TraceError(f"missing columns: {', '.join(sorted(missing))}")
+            if unexpected:
+                raise TraceError(f"unexpected columns: {', '.join(sorted(unexpected))}")
 
-        samples: list[Sample] = []
-        labels_by_session: dict[int, str] = {}
-        for line, row in enumerate(reader, start=2):
-            label = (row.get("label") or "").strip()
-            if label not in ALLOWED_LABELS:
-                raise TraceError(f"line {line}: unknown label {label!r}")
-            session_id = _parse_int(row, "session_id", line)
-            elapsed_ms = _parse_int(row, "elapsed_ms", line)
-            if session_id <= 0:
-                raise TraceError(f"line {line}: session_id must be positive")
-            if elapsed_ms < 0:
-                raise TraceError(f"line {line}: elapsed_ms must be non-negative")
+            samples: list[Sample] = []
+            labels_by_session: dict[int, str] = {}
+            for line, row in enumerate(reader, start=2):
+                label = (row.get("label") or "").strip()
+                if label not in ALLOWED_LABELS:
+                    raise TraceError(f"line {line}: unknown label {label!r}")
+                session_id = _parse_int(row, "session_id", line)
+                elapsed_ms = _parse_int(row, "elapsed_ms", line)
+                if session_id <= 0:
+                    raise TraceError(f"line {line}: session_id must be positive")
+                if elapsed_ms < 0:
+                    raise TraceError(f"line {line}: elapsed_ms must be non-negative")
 
-            previous_label = labels_by_session.setdefault(session_id, label)
-            if previous_label != label:
-                raise TraceError(
-                    f"session {session_id} mixes labels {previous_label!r} and {label!r}"
+                previous_label = labels_by_session.setdefault(session_id, label)
+                if previous_label != label:
+                    raise TraceError(
+                        f"session {session_id} mixes labels {previous_label!r} and {label!r}"
+                    )
+
+                samples.append(
+                    Sample(
+                        label=label,
+                        session_id=session_id,
+                        elapsed_ms=elapsed_ms,
+                        x=_parse_float(row, "x", line),
+                        y=_parse_float(row, "y", line),
+                        z=_parse_float(row, "z", line),
+                    )
                 )
-
-            samples.append(
-                Sample(
-                    label=label,
-                    session_id=session_id,
-                    elapsed_ms=elapsed_ms,
-                    x=_parse_float(row, "x", line),
-                    y=_parse_float(row, "y", line),
-                    z=_parse_float(row, "z", line),
-                )
-            )
-        finally:
-            handle.close()
     finally:
         os.close(fd)
 
     if not samples:
         raise TraceError("trace CSV contains no samples")
     return samples
-
 
 def summarize_sessions(
     samples: Iterable[Sample],
