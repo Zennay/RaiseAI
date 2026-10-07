@@ -58,10 +58,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest \
-            tests/test_watch_data_analyzer.py \
-            tests/test_watch_data_analyzer_selfhosted_boundary.py \
-            -v
+          python3 -m unittest tests/test_watch_data_analyzer.py -v
+          python3 -m unittest tests/test_watch_data_analyzer_selfhosted_boundary.py -v
           git diff --exit-code -- .
           git diff --cached --exit-code -- .
           test -z "$(git ls-files --others --exclude-standard)"
