@@ -98,6 +98,9 @@ jobs:
           test -f "$output/RaiseAI-v1.5.2-source.bundle"
           test -f "$output/start-physical-handoff.command"
 
+          unset GITHUB_TOKEN
+          test -z "${GITHUB_TOKEN:-}"
+
           RAISE_RESTORE_DIR="$restore" \
             bash "$output/start-physical-handoff.command" --verify-only
 
