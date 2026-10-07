@@ -10,7 +10,7 @@ class SensorTraceRecorderRecoveryContractTest {
         val source = findSource(
             "src/main/java/nl/zennay/raiseai/SensorTraceRecorder.kt"
         ).readText()
-        val headerWrite = "file.writeText(\"\\$HEADER\\n\")"
+        val headerWrite = "file.writeText(\"\$HEADER\\n\")"
 
         assertTrue(
             "an interrupted first write may leave an empty trace that still needs the canonical header",
