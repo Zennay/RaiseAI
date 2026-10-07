@@ -82,7 +82,16 @@ class WatchDataAnalyzerTests(unittest.TestCase):
             "mouth_raise,1,100,0,0,9.8\n"
             "mouth_raise,1,50,0,0,9.8\n"
         )
-        with self.assertRaisesRegex(analyzer.TraceError, "moved backwards"):
+        with self.assertRaisesRegex(analyzer.TraceError, "increase strictly"):
+            analyzer.read_sessions(path)
+
+    def test_rejects_duplicate_elapsed_time(self):
+        path = self.write_trace(
+            "label,session_id,elapsed_ms,x,y,z\n"
+            "mouth_raise,1,100,0,0,9.8\n"
+            "mouth_raise,1,100,0,0,9.8\n"
+        )
+        with self.assertRaisesRegex(analyzer.TraceError, "increase strictly"):
             analyzer.read_sessions(path)
 
     def test_rejects_invalid_utf8(self):
