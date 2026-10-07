@@ -168,6 +168,19 @@ class ShellSurfaceContractTests(unittest.TestCase):
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
 
+    def test_exact_head_guard_is_present_once_and_unconditional(self):
+        command = '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"'
+        self.assertEqual(
+            self.workflow.count(command),
+            1,
+            "exact-head equality must remain an executable workflow command",
+        )
+        self.assertNotRegex(
+            self.workflow,
+            r"""(?m)^(?:"if"|'if'|if|    (?:"if"|'if'|if)|        (?:"if"|'if'|if))\s*:""",
+            "workflow, job and step-level if guards must not be able to skip shell validation",
+        )
+
     def test_workflow_pins_exact_bash_runtime(self):
         self.assertIn("- name: Verify Bash runtime", self.workflow)
         self.assertEqual(
