@@ -1,0 +1,56 @@
+name: Self-hosted PR provenance quality CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+      - "tests/test_self_hosted_workflow_provenance.py"
+  pull_request:
+    paths:
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+      - "tests/test_self_hosted_workflow_provenance.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-self-hosted-pr-provenance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provenance:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision and runner
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(hostname)" = "vps-bb300bba"
+
+      - name: Run repository-wide provenance regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_self_hosted_workflow_provenance
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
