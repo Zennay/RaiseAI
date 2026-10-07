@@ -50,3 +50,6 @@ jobs:
           set -euo pipefail
           bash -n open-in-android-studio.command
           python3 -m unittest discover -s tests -p 'test_android_studio_launcher.py' -v
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"

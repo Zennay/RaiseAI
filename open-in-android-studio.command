@@ -9,8 +9,10 @@ if [ "$#" -ne 0 ]; then
   exit 2
 fi
 
-if [ -d "/Applications/Android Studio.app" ]; then
-  exec open -a "Android Studio" "$SCRIPT_DIR"
+ANDROID_STUDIO_APP="/Applications/Android Studio.app"
+
+if [ -d "$ANDROID_STUDIO_APP" ]; then
+  exec open -a "$ANDROID_STUDIO_APP" "$SCRIPT_DIR"
 fi
 
 echo "Android Studio was not found in /Applications."
