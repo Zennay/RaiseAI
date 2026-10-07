@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 
@@ -9,6 +10,14 @@ FROZEN_SOURCE_REVISION = "8f719bb273f9b997848864f342598e7df5f090e5"
 FROZEN_RELEASE_TAG = "physical-handoff-v1.5.2-8f719bb"
 FROZEN_RELEASE_ASSET_ID = "611084738"
 FROZEN_ARCHIVE_SHA256 = "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce"
+
+PHYSICAL_ACCEPTANCE_ENTRYPOINTS = (
+    "start-frozen-acceptance.command",
+    "start-physical-handoff.command",
+    "tools/fetch-frozen-physical-handoff.py",
+    "tools/create-physical-observation-template.py",
+    "tools/validate-physical-observations.py",
+)
 
 
 class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
@@ -194,6 +203,39 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
             lines,
             "two trailing backslashes break Bash line continuation and must fail the documentation contract",
         )
+
+
+    def test_physical_acceptance_entrypoints_are_tracked_regular_files(self):
+        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        tracked = {
+            item
+            for item in subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
+            .decode("utf-8")
+            .split("\0")
+            if item
+        }
+
+        for relative in PHYSICAL_ACCEPTANCE_ENTRYPOINTS:
+            with self.subTest(relative=relative):
+                self.assertIn(
+                    relative,
+                    text,
+                    f"physical runbook must reference canonical entrypoint {relative}",
+                )
+                self.assertIn(
+                    relative,
+                    tracked,
+                    f"physical runbook entrypoint must remain tracked: {relative}",
+                )
+                path = ROOT / relative
+                self.assertFalse(
+                    path.is_symlink(),
+                    f"physical runbook entrypoint must not be a symlink: {relative}",
+                )
+                self.assertTrue(
+                    path.is_file(),
+                    f"physical runbook entrypoint must remain a regular file: {relative}",
+                )
 
 
 if __name__ == "__main__":
