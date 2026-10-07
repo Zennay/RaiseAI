@@ -331,6 +331,10 @@ ln -s "$ADB" "$SDK_SHIM/platform-tools/adb"
 echo "Fetching canonical frozen v1.5.2 handoff..."
 python3 "$FETCHER" --output "$HANDOFF_DIR"
 
+# The fetcher may use an operator GitHub token for authenticated Release retrieval.
+# Do not pass that credential into the downloaded frozen handoff launcher.
+unset GITHUB_TOKEN
+
 echo
 echo "Verifying frozen handoff before install..."
 RAISE_RESTORE_DIR="$VERIFY_SOURCE" \
