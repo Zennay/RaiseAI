@@ -520,6 +520,24 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertTrue(lines[1].startswith("run:watch-1:"))
 
+    def test_run_mode_canonicalizes_relative_path_adb_for_shim(self):
+        relative_bin = self.repo / "relative-bin"
+        relative_bin.mkdir()
+        relative_adb = relative_bin / "adb"
+        shutil.copy2(self.bin / "adb", relative_adb)
+        relative_adb.chmod(0o755)
+
+        env_path = os.environ.get("PATH", "")
+        result = self.run_launcher(
+            {"PATH": f"relative-bin:{env_path}"},
+            args=[str(self.profile)],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[1].startswith("run:watch-1:"))
+
     def test_rejects_no_active_adb_device_before_fetch(self):
         result = self.run_launcher({"FAKE_NO_DEVICES": "1"})
 

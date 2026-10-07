@@ -226,6 +226,17 @@ ADB="$(find_adb || true)"
   echo "ADB not found. Install Android SDK Platform-Tools and connect the Watch first."
   exit 1
 }
+ADB="$(python3 - "$ADB" <<'PY'
+import os
+import sys
+
+print(os.path.abspath(sys.argv[1]))
+PY
+)"
+[ -x "$ADB" ] || {
+  echo "Selected ADB is not executable: $ADB"
+  exit 1
+}
 
 "$ADB" start-server >/dev/null
 DEVICES="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
