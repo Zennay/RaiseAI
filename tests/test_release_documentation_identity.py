@@ -238,5 +238,22 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                 )
 
 
+    def test_physical_acceptance_validator_persists_secret_safe_quality_result(self):
+        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        command = "\n".join(
+            (
+                "python3 tools/validate-physical-observations.py " + "\\",
+                "  ~/.raiseai/evidence/<session>/session.json " + "\\",
+                "  ~/.raiseai/evidence/<session>/operator-observations.json " + "\\",
+                "  --output ~/.raiseai/evidence/<session>/quality-result.json",
+            )
+        )
+        self.assertEqual(
+            text.count(command),
+            1,
+            "physical runbook must persist the secret-safe quality-result.json output",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
