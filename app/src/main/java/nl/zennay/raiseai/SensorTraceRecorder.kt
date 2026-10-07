@@ -20,7 +20,7 @@ object SensorTraceRecorder {
         if (!isValidSample(label, sessionId, elapsedMs, x, y, z)) return false
 
         val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) {
+        if (!file.exists() || file.length() == 0L) {
             file.writeText("$HEADER\n")
         } else if (!file.useLines { lines -> lines.firstOrNull() == HEADER }) {
             return false
