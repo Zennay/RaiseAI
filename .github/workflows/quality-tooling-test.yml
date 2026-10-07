@@ -11,6 +11,7 @@ on:
       - "provision-watch-gateway.command"
       - "physical-validation.command"
       - "start-frozen-acceptance.command"
+      - "start-physical-handoff.command"
       - "tools/analyze-watch-sensor-traces.py"
       - "tools/analyze-watch-sensor-trials.py"
       - "tools/create-physical-observation-template.py"
@@ -37,6 +38,7 @@ on:
       - "provision-watch-gateway.command"
       - "physical-validation.command"
       - "start-frozen-acceptance.command"
+      - "start-physical-handoff.command"
       - "tools/analyze-watch-sensor-traces.py"
       - "tools/analyze-watch-sensor-trials.py"
       - "tools/create-physical-observation-template.py"
@@ -97,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command
+          bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command
 
       - name: Python syntax
         shell: bash
