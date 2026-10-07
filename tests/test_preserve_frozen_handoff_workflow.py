@@ -128,7 +128,7 @@ class FrozenPreserveContractWorkflowTests(unittest.TestCase):
                 self.assertEqual(self.text.count(line), 1)
 
         self.assertEqual(
-            len(re.findall(r'(?m)^\\s+PYTHONNOUSERSITE:\\s*', self.text)),
+            len(re.findall(r'(?m)^\s+PYTHONNOUSERSITE:\s*', self.text)),
             1,
             "contract lane must expose exactly one PYTHONNOUSERSITE binding",
         )
