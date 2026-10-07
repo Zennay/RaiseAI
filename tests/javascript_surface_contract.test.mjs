@@ -16,6 +16,7 @@ const WORKFLOW_PATH = resolve(
 const WORKFLOW = readFileSync(WORKFLOW_PATH, "utf8");
 const EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
 const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
+const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 const EXPECTED_CRITICAL = new Set([
   "app/src/main/assets/raiseai_wear/wear.js",
   "gateway/src/server.mjs",
@@ -32,6 +33,18 @@ function trackedJavaScriptPaths() {
     .filter(Boolean)
     .filter((path) => EXTENSIONS.has(extname(path)))
     .sort();
+}
+
+function decodeCanonicalJavaScriptSource(raw, label) {
+  assert.equal(
+    raw.subarray(0, UTF8_BOM.length).equals(UTF8_BOM),
+    false,
+    `${label} must not start with a UTF-8 BOM`,
+  );
+  const source = STRICT_UTF8.decode(raw);
+  assert.equal(source.includes("\0"), false, `${label} must not contain NUL bytes`);
+  assert.equal(source.includes("\r"), false, `${label} must use LF-only line endings`);
+  return source;
 }
 
 function triggerPaths(event) {
@@ -69,7 +82,7 @@ test("tracked JavaScript surface is nonempty and includes critical files", () =>
   }
 });
 
-test("every tracked JavaScript file is regular and syntax-valid", () => {
+test("every tracked JavaScript file is regular, canonical and syntax-valid", () => {
   for (const relative of trackedJavaScriptPaths()) {
     const absolute = resolve(ROOT, relative);
     const stat = lstatSync(absolute);
@@ -80,8 +93,8 @@ test("every tracked JavaScript file is regular and syntax-valid", () => {
     );
     assert.equal(stat.isFile(), true, `${relative} must be a regular file`);
     assert.doesNotThrow(
-      () => STRICT_UTF8.decode(readFileSync(absolute)),
-      `${relative} must be strict UTF-8 JavaScript source`,
+      () => decodeCanonicalJavaScriptSource(readFileSync(absolute), relative),
+      `${relative} must be canonical strict UTF-8 JavaScript source`,
     );
 
     const checked = spawnSync(process.execPath, ["--check", relative], {
@@ -101,6 +114,29 @@ test("strict UTF-8 decoder rejects malformed JavaScript source bytes", () => {
   assert.throws(
     () => STRICT_UTF8.decode(Buffer.from([0x2f, 0x2f, 0x20, 0xff, 0x0a])),
     /encoded data was not valid|invalid/i,
+  );
+});
+
+test("canonical JavaScript decoder rejects BOM, CR and NUL bytes", () => {
+  assert.throws(
+    () => decodeCanonicalJavaScriptSource(
+      Buffer.concat([UTF8_BOM, Buffer.from("const value = 1;\n")]),
+      "fixture.mjs",
+    ),
+    /UTF-8 BOM/,
+  );
+  for (const source of ["const value = 1;\r\n", "const value = 1;\r"]) {
+    assert.throws(
+      () => decodeCanonicalJavaScriptSource(Buffer.from(source), "fixture.mjs"),
+      /LF-only line endings/,
+    );
+  }
+  assert.throws(
+    () => decodeCanonicalJavaScriptSource(
+      Buffer.from("const value = 1;\0\n"),
+      "fixture.mjs",
+    ),
+    /NUL bytes/,
   );
 });
 
