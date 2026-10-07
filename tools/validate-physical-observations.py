@@ -15,8 +15,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -177,6 +179,40 @@ def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
     }
 
 
+def write_new_json_atomically(path: Path, payload: dict[str, Any]) -> None:
+    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    temp_path: Path | None = None
+    published = False
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as output_file:
+            temp_path = Path(output_file.name)
+            output_file.write(serialized)
+            output_file.flush()
+            os.fsync(output_file.fileno())
+
+        try:
+            os.link(temp_path, path)
+        except FileExistsError as exc:
+            raise ObservationError(
+                f"refusing to overwrite existing quality result: {path}"
+            ) from exc
+        published = True
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                if not published:
+                    raise
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path, help="physical-validation session.json")
@@ -192,13 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         observations = load_json_document(args.observations, "observations")
         result = validate_observations(session, observations)
         if args.output is not None:
-            try:
-                with args.output.open("x", encoding="utf-8") as output_file:
-                    output_file.write(json.dumps(result, indent=2, sort_keys=True) + "\n")
-            except FileExistsError as exc:
-                raise ObservationError(
-                    f"refusing to overwrite existing quality result: {args.output}"
-                ) from exc
+            write_new_json_atomically(args.output, result)
     except (OSError, json.JSONDecodeError, ObservationError) as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
         return 1
