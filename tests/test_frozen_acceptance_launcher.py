@@ -88,6 +88,10 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                   echo "shim adb missing"
                   exit 73
                 }
+                [ "$(command -v adb)" = "${ANDROID_SDK_ROOT:-}/platform-tools/adb" ] || {
+                  echo "selected adb is not first on PATH: $(command -v adb)"
+                  exit 81
+                }
                 [ -d "${ANDROID_SDK_ROOT:-}/build-tools" ] || {
                   echo "shim build-tools directory missing"
                   exit 74
@@ -485,6 +489,36 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         lines = self.log.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 1)
         self.assertTrue(lines[0].startswith("verify:"))
+
+    def test_run_mode_pins_selected_sdk_adb_ahead_of_path(self):
+        sdk_root = self.root / "explicit-run-sdk"
+        sdk_adb = sdk_root / "platform-tools" / "adb"
+        sdk_adb.parent.mkdir(parents=True)
+        shutil.copy2(self.bin / "adb", sdk_adb)
+        sdk_adb.chmod(0o755)
+
+        bad_adb_marker = self.root / "run-path-adb-used"
+        (self.bin / "adb").write_text(
+            "#!/bin/bash\n"
+            "printf 'used\\n' > \"$BAD_ADB_MARKER\"\n"
+            "exit 99\n",
+            encoding="utf-8",
+        )
+        (self.bin / "adb").chmod(0o755)
+
+        result = self.run_launcher(
+            {
+                "ANDROID_SDK_ROOT": str(sdk_root),
+                "BAD_ADB_MARKER": str(bad_adb_marker),
+            },
+            args=[str(self.profile)],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(bad_adb_marker.exists(), result.stdout)
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[1].startswith("run:watch-1:"))
 
     def test_rejects_no_active_adb_device_before_fetch(self):
         result = self.run_launcher({"FAKE_NO_DEVICES": "1"})
