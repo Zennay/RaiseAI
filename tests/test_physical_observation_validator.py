@@ -234,6 +234,36 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             )
 
 
+    def test_quality_summary_has_exact_secret_safe_shape(self):
+        result = validator.validate_observations(session_payload(), observation_payload())
+        self.assertEqual(
+            set(result),
+            {
+                "valid",
+                "quality_evidence_complete",
+                "recorded_at_utc",
+                "watch_identity_match",
+                "app_version",
+                "source_revision",
+                "apk_sha256",
+                "screen_off_tested",
+                "background_tested",
+                "ux_failures_reviewed",
+                "visible_ux_failure_count",
+            },
+        )
+        serialized = json.dumps(result, sort_keys=True)
+        for forbidden in (
+            "watch_serial",
+            "screen_off_behavior",
+            "background_behavior",
+            "visible_ux_failures",
+            "transcript",
+            "answer_text",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, serialized)
+
     def test_cli_success_returns_machine_readable_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
