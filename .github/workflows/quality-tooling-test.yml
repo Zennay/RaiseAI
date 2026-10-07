@@ -74,7 +74,7 @@ jobs:
       LC_ALL: C.UTF-8
       PYTHONHASHSEED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/raise-quality-pyc
+      PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc
       TZ: UTC
     steps:
       - name: Checkout exact tested revision
