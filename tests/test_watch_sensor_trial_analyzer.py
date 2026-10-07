@@ -77,6 +77,15 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
             {"app_version", "source_revision", "detector_config"},
         )
         self.assertEqual(
+            set(report["requirements"]),
+            {
+                "mouth_raise_trials",
+                "non_trigger_trials",
+                "min_detection_rate",
+                "max_false_trigger_rate",
+            },
+        )
+        self.assertEqual(
             set(report["results"]),
             {
                 "mouth_raise_trials",
@@ -86,6 +95,10 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
                 "false_triggers",
                 "false_trigger_rate",
             },
+        )
+        self.assertEqual(
+            set(report["remaining"]),
+            {"mouth_raise_trials", "non_trigger_trials"},
         )
         serialized = str(report)
         for forbidden in ("session_id", "max_similarity", "detector_triggered"):
