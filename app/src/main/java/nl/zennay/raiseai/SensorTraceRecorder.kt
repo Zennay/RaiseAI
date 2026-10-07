@@ -5,6 +5,7 @@ import java.io.File
 
 object SensorTraceRecorder {
     private const val FILE_NAME = "sensor-traces.csv"
+    private const val HEADER = "label,session_id,elapsed_ms,x,y,z"
 
     @Synchronized
     fun append(
@@ -20,7 +21,9 @@ object SensorTraceRecorder {
 
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
-            file.writeText("label,session_id,elapsed_ms,x,y,z\n")
+            file.writeText("$HEADER\n")
+        } else if (!file.useLines { lines -> lines.firstOrNull() == HEADER }) {
+            return false
         }
         file.appendText(
             "$label,$sessionId,$elapsedMs,$x,$y,$z\n"
@@ -49,8 +52,11 @@ object SensorTraceRecorder {
         return file.useLines(::validSampleLineCount)
     }
 
-    internal fun validSampleLineCount(lines: Sequence<String>): Int =
-        lines.drop(1).count { line ->
+    internal fun validSampleLineCount(lines: Sequence<String>): Int {
+        val iterator = lines.iterator()
+        if (!iterator.hasNext() || iterator.next() != HEADER) return 0
+
+        return iterator.asSequence().count { line ->
             val fields = line.split(',')
             if (fields.size != 6) return@count false
 
@@ -62,6 +68,7 @@ object SensorTraceRecorder {
 
             isValidSample(fields[0], sessionId, elapsedMs, x, y, z)
         }
+    }
 
     fun clear(context: Context) {
         File(context.filesDir, FILE_NAME).delete()
