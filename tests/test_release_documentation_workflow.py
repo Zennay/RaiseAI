@@ -144,6 +144,188 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("pull_request_target:", self.text)
         self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")
 
+    def test_workflow_keeps_exact_top_level_and_job_surfaces(self):
+        lines = self.text.splitlines()
+        top_level = [
+            match.group(1)
+            for line in lines
+            if (match := re.fullmatch(r"([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(
+            top_level,
+            ["name", "on", "permissions", "concurrency", "jobs"],
+        )
+        self.assertEqual(lines[0], "name: Release documentation identity contract")
+
+        jobs_block = self.text.split("\njobs:\n", 1)[1]
+        job_keys = [
+            match.group(1)
+            for line in jobs_block.splitlines()[1:]
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(
+            job_keys,
+            ["runs-on", "timeout-minutes", "env", "steps"],
+            "release documentation workflow must not gain unreviewed job controls",
+        )
+
+    def test_trigger_concurrency_and_env_surfaces_are_exact(self):
+        lines = self.text.splitlines()
+
+        on_start = lines.index("on:") + 1
+        permissions_start = lines.index("permissions:")
+        events = [
+            match.group(1)
+            for line in lines[on_start:permissions_start]
+            if (match := re.fullmatch(r"  ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(events, ["push", "pull_request"])
+
+        def event_block(event):
+            start = lines.index(f"  {event}:") + 1
+            block = []
+            for line in lines[start:]:
+                if line and not line.startswith("    "):
+                    break
+                block.append(line)
+            return block
+
+        push = event_block("push")
+        self.assertEqual(
+            [
+                match.group(1)
+                for line in push
+                if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+            ],
+            ["branches", "paths"],
+        )
+        branches_start = push.index("    branches:") + 1
+        self.assertEqual(push[branches_start], "      - main")
+
+        pull_request = event_block("pull_request")
+        self.assertEqual(
+            [
+                match.group(1)
+                for line in pull_request
+                if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+            ],
+            ["paths"],
+            "pull_request must not gain filters that can skip synchronize validation",
+        )
+
+        concurrency_start = lines.index("concurrency:") + 1
+        jobs_start = lines.index("jobs:")
+        self.assertEqual(
+            [
+                match.group(1)
+                for line in lines[concurrency_start:jobs_start]
+                if (match := re.fullmatch(r"  ([A-Za-z0-9_-]+):.*", line))
+            ],
+            ["group", "cancel-in-progress"],
+        )
+
+        env_start = lines.index("    env:") + 1
+        env_keys = []
+        for line in lines[env_start:]:
+            match = re.fullmatch(r"      ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                env_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            env_keys,
+            [
+                "LANG",
+                "LC_ALL",
+                "PYTHONHASHSEED",
+                "PYTHONNOUSERSITE",
+                "PYTHONDONTWRITEBYTECODE",
+                "PYTHONPYCACHEPREFIX",
+                "TZ",
+            ],
+            "release documentation workflow environment must not gain unreviewed controls",
+        )
+
+    def test_step_and_nested_mapping_surfaces_are_exact(self):
+        lines = self.text.splitlines()
+        step_starts = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("      - name:")
+        ]
+        expected_names = [
+            "Checkout exact tested revision",
+            "Verify exact tested revision",
+            "Verify Python runtime",
+            "Run release documentation identity contract",
+            "Verify worktree remains clean",
+        ]
+        names = [lines[index].removeprefix("      - name: ") for index in step_starts]
+        self.assertEqual(
+            names,
+            expected_names,
+            "release documentation workflow must not gain unreviewed steps",
+        )
+
+        expected_keys = {
+            "Checkout exact tested revision": ["name", "uses", "with"],
+            "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Verify Python runtime": ["name", "shell", "run"],
+            "Run release documentation identity contract": ["name", "shell", "run"],
+            "Verify worktree remains clean": ["name", "shell", "run"],
+        }
+        for position, start in enumerate(step_starts):
+            end = (
+                step_starts[position + 1]
+                if position + 1 < len(step_starts)
+                else len(lines)
+            )
+            step = lines[start:end]
+            name = names[position]
+            keys = ["name"]
+            for line in step[1:]:
+                match = re.fullmatch(r"        ([A-Za-z0-9_-]+):.*", line)
+                if match:
+                    keys.append(match.group(1))
+            self.assertEqual(
+                keys,
+                expected_keys[name],
+                f"{name} must not gain unreviewed step-level controls",
+            )
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index
+                for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        checkout = step_named("Checkout exact tested revision")
+        with_start = checkout.index("        with:") + 1
+        checkout_keys = []
+        for line in checkout[with_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                checkout_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(checkout_keys, ["ref", "persist-credentials"])
+
+        verifier = step_named("Verify exact tested revision")
+        env_start = verifier.index("        env:") + 1
+        verifier_keys = []
+        for line in verifier[env_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                verifier_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(verifier_keys, ["EXPECTED_SHA"])
+
+
 
 if __name__ == "__main__":
     unittest.main()
