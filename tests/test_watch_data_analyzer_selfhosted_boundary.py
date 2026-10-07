@@ -9,6 +9,7 @@ FORK_GUARD = (
     "    if: ${{ github.event_name != 'pull_request' || "
     "github.event.pull_request.head.repo.full_name == github.repository }}"
 )
+SELF = "tests/test_watch_data_analyzer_selfhosted_boundary.py"
 
 
 class WatchDataAnalyzerSelfHostedBoundaryTests(unittest.TestCase):
@@ -38,6 +39,16 @@ class WatchDataAnalyzerSelfHostedBoundaryTests(unittest.TestCase):
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotIn("${{ secrets.", self.workflow)
         self.assertIn("          persist-credentials: false", self.workflow)
+
+    def test_python_runtime_isolated_and_boundary_test_self_validates(self):
+        self.assertIn('      PYTHONDONTWRITEBYTECODE: "1"', self.workflow)
+        self.assertIn('      PYTHONNOUSERSITE: "1"', self.workflow)
+        self.assertEqual(
+            self.workflow.count(f'      - "{SELF}"'),
+            2,
+            "the boundary contract must trigger both push and pull_request validation",
+        )
+        self.assertIn(f"            {SELF} \\", self.workflow)
 
 
 if __name__ == "__main__":
