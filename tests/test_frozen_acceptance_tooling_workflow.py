@@ -100,6 +100,23 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("        env:", carrier_step)
         self.assertIn("          GITHUB_TOKEN: ${{ github.token }}", carrier_step)
 
+    def test_release_carrier_drops_token_before_downloaded_launcher_exec(self):
+        lines = self.text.splitlines()
+        fetch = lines.index(
+            '          python3 tools/fetch-frozen-physical-handoff.py --output "$output"'
+        )
+        unset_token = lines.index("          unset GITHUB_TOKEN")
+        prove_unset = lines.index('          test -z "${GITHUB_TOKEN:-}"')
+        launcher = lines.index(
+            '            bash "$output/start-physical-handoff.command" --verify-only'
+        )
+
+        self.assertLess(fetch, unset_token)
+        self.assertLess(unset_token, prove_unset)
+        self.assertLess(prove_unset, launcher)
+        self.assertEqual(self.text.count("          unset GITHUB_TOKEN"), 1)
+        self.assertEqual(self.text.count('          test -z "${GITHUB_TOKEN:-}"'), 1)
+
     def test_permissions_are_read_only(self):
         self.assertRegex(
             self.text,
