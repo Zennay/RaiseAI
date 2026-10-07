@@ -74,6 +74,10 @@ def validate_portable_paths(paths: list[str]) -> None:
                 )
             if any(ord(char) < 32 for char in segment):
                 raise ValueError(f"{path!r}: ASCII control characters are forbidden")
+            if any(unicodedata.category(char) in {"Cc", "Cf"} for char in segment):
+                raise ValueError(
+                    f"{path!r}: Unicode control and format characters are forbidden"
+                )
             if any(char in WINDOWS_FORBIDDEN_CHARACTERS for char in segment):
                 raise ValueError(
                     f"{path!r}: Windows-reserved filename characters are forbidden"
@@ -186,6 +190,16 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
             with self.subTest(codepoint=codepoint):
                 path = f"docs/bad{chr(codepoint)}name.md"
                 with self.assertRaisesRegex(ValueError, "ASCII control"):
+                    validate_portable_paths([path])
+
+    def test_rejects_invisible_unicode_path_controls(self):
+        for codepoint in (0x0085, 0x00AD, 0x200B, 0x200D, 0x202E, 0x2060):
+            with self.subTest(codepoint=f"U+{codepoint:04X}"):
+                path = f"docs/bad{chr(codepoint)}name.md"
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Unicode control and format characters",
+                ):
                     validate_portable_paths([path])
 
     def test_rejects_duplicate_or_empty_path_sets(self):
