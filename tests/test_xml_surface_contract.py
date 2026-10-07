@@ -13,7 +13,7 @@ EXPECTED_CRITICAL = {
     "app/src/main/res/values/colors.xml",
     "app/src/main/res/values/styles.xml",
 }
-FORBIDDEN_DECLARATIONS = (b"<!DOCTYPE", b"<!ENTITY")
+FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
 
 
 def tracked_xml_paths():
@@ -47,7 +47,11 @@ class XmlSurfaceContractTests(unittest.TestCase):
                 )
                 self.assertTrue(path.is_file(), f"{relative} must resolve to a regular file")
                 data = path.read_bytes()
-                upper = data.upper()
+                try:
+                    text = data.decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    self.fail(f"{relative} must be strict UTF-8 XML: {exc}")
+                upper = text.upper()
                 for declaration in FORBIDDEN_DECLARATIONS:
                     self.assertNotIn(
                         declaration,
@@ -55,7 +59,7 @@ class XmlSurfaceContractTests(unittest.TestCase):
                         f"{relative} must not contain DTD/entity declarations",
                     )
                 try:
-                    ET.fromstring(data)
+                    ET.fromstring(text)
                 except ET.ParseError as exc:
                     self.fail(f"{relative} must be well-formed XML: {exc}")
 
@@ -124,8 +128,9 @@ class XmlSurfaceContractTests(unittest.TestCase):
             'pathlib.PurePosixPath(item).suffix.lower() == ".xml"',
             "candidate.is_symlink()",
             "tracked XML files must not be symlinks",
-            'FORBIDDEN_DECLARATIONS = (b"<!DOCTYPE", b"<!ENTITY")',
-            "ET.fromstring(data)",
+            'FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")',
+            'data.decode("utf-8")',
+            "ET.fromstring(text)",
             "python3 -m unittest tests.test_xml_surface_contract",
             "git diff --exit-code -- .",
             'test -z "$(git ls-files --others --exclude-standard)"',
