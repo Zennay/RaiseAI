@@ -38,10 +38,7 @@ object WearBridge {
         }
 
         override fun onDisconnect(port: WebExtension.Port) {
-            if (port === this@WearBridge.port) {
-                this@WearBridge.port = null
-                currentState = "disconnected"
-            }
+            markDisconnected(port)
         }
     }
 
@@ -86,19 +83,23 @@ object WearBridge {
     }
 
     fun setSpeaking(speaking: Boolean) {
-        currentState = if (speaking) "speaking" else "ready"
-        val currentPort = port ?: return
+        val currentPort = port
+        currentState = WearBridgeStatePolicy.stateAfterSpeakingUpdate(
+            speaking = speaking,
+            connected = currentPort != null
+        )
+        if (currentPort == null) return
         runCatching {
             currentPort.postMessage(JSONObject().apply {
                 put("type", "ttsState")
                 put("speaking", speaking)
             })
         }.onFailure {
-            if (port === currentPort) port = null
+            markDisconnected(currentPort)
         }
     }
 
-    fun shouldBlockGesture(): Boolean = currentState in busyStates || currentState == "loading"
+    fun shouldBlockGesture(): Boolean = WearBridgeStatePolicy.blocksGesture(currentState)
     fun state(): String = currentState
 
     fun onSessionClosed(session: GeckoSession) {
@@ -119,8 +120,14 @@ object WearBridge {
             })
             currentState = "starting"
         }.onFailure {
-            if (this.port === port) this.port = null
+            markDisconnected(port)
             pendingStartReason = reason
+        }
+    }
+
+    private fun markDisconnected(disconnectedPort: WebExtension.Port) {
+        if (port === disconnectedPort) {
+            port = null
             currentState = "disconnected"
         }
     }
