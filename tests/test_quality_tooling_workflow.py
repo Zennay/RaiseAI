@@ -141,6 +141,13 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertRegex(self.text, r"timeout-minutes:\s*[1-9][0-9]*")
         self.assertIn("cancel-in-progress: true", self.text)
 
+    def test_concurrency_is_namespaced_per_pull_request_or_ref(self):
+        self.assertIn(
+            "group: raise-quality-tooling-${{ github.event.pull_request.number || github.ref }}",
+            self.text,
+        )
+        self.assertIn("cancel-in-progress: true", self.text)
+
     def test_job_stays_github_hosted_and_secret_free(self):
         self.assertIn("runs-on: ubuntu-latest", self.text)
         self.assertNotIn("self-hosted", self.text)
