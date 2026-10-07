@@ -1,5 +1,6 @@
 package nl.zennay.raiseai
 
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -119,7 +120,11 @@ class GatewayClient(private val settings: GatewaySettings) {
                 throw IOException("gateway_http_$code")
             }
 
-            val json = JSONObject(responseText)
+            val json = try {
+                JSONObject(responseText)
+            } catch (error: JSONException) {
+                throw IOException("gateway_response_invalid_json", error)
+            }
             val execution = when (val value = json.optionalValue("execution")) {
                 null -> null
                 is JSONObject -> value
