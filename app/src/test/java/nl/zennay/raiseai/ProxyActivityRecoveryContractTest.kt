@@ -13,7 +13,8 @@ class ProxyActivityRecoveryContractTest {
 
         val failure = source.indexOf("if (!ChatGptLauncher.launchFromActivity(this))")
         val launch = source.indexOf("ChatGptLauncher.launchFromActivity(this)", failure)
-        val recoveryCall = source.indexOf("openSetup()", launch)
+        val recoveryMessage = source.indexOf("ChatGPT kon niet worden geopend.", launch)
+        val recoveryCall = source.indexOf("openSetup()", recoveryMessage)
         val finish = source.indexOf("finish()", recoveryCall)
         val setupIntent = source.indexOf("Intent(this, MainActivity::class.java)")
         val setupFlags = source.indexOf(
@@ -23,7 +24,8 @@ class ProxyActivityRecoveryContractTest {
 
         assertTrue("failed ChatGPT launch must enter recovery", failure >= 0)
         assertTrue("ChatGPT proxy must inspect launch result inside recovery guard", launch > failure)
-        assertTrue("failed ChatGPT launch must call setup recovery", recoveryCall > launch)
+        assertTrue("failed ChatGPT launch must explain the recovery to the user", recoveryMessage > launch)
+        assertTrue("failed ChatGPT launch must call setup recovery", recoveryCall > recoveryMessage)
         assertTrue("proxy must finish after handing off to setup recovery", finish > recoveryCall)
         assertTrue("setup recovery must route to MainActivity", setupIntent >= 0)
         assertTrue(
