@@ -74,6 +74,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
         guides = {
             "START-HERE.md": (ROOT / "START-HERE.md").read_text(encoding="utf-8"),
             "PHYSICAL-ACCEPTANCE.md": (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8"),
+            "DEVICE-TEST.md": (ROOT / "DEVICE-TEST.md").read_text(encoding="utf-8"),
         }
         markers = (
             FROZEN_SOURCE_REVISION,
@@ -89,6 +90,23 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                         text,
                         f"{guide} must retain the canonical frozen carrier identity",
                     )
+
+    def test_historical_device_checklist_cannot_masquerade_as_acceptance(self):
+        text = (ROOT / "DEVICE-TEST.md").read_text(encoding="utf-8")
+        required = (
+            "**Historical fallback checklist only.**",
+            "Do not use this V0.3 Gemini-first checklist for the current physical acceptance gate.",
+            "The only valid acceptance carrier is the preserved Raise AI v1.5.2 handoff",
+            "bash ./start-frozen-acceptance.command [gateway-profile]",
+            "Any different carrier or rebuilt APK is not acceptance evidence.",
+        )
+        for marker in required:
+            with self.subTest(marker=marker):
+                self.assertEqual(
+                    text.count(marker),
+                    1,
+                    "legacy checklist must fail closed toward the canonical frozen acceptance path",
+                )
 
     def test_frozen_acceptance_version_is_not_derived_from_version_txt(self):
         current_version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
