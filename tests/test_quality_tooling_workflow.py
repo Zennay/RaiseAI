@@ -30,6 +30,11 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
     def test_push_and_pull_request_filters_cover_quality_surface(self):
         paths = [
+            "pull-diagnostics.command",
+            "pull-watch-data.command",
+            "install-watch-apk.command",
+            "provision-watch-gateway.command",
+            "physical-validation.command",
             "start-frozen-acceptance.command",
             "tools/analyze-watch-sensor-traces.py",
             "tools/analyze-watch-sensor-trials.py",
