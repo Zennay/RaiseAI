@@ -1,6 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
+usage() {
+  echo "Usage: $0 [--quiet]" >&2
+}
+
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--quiet" ]; }; then
+  usage
+  exit 2
+fi
+
 QUIET="${1:-}"
 STATE_DIR="$HOME/.raiseai"
 BIN_DIR="$STATE_DIR/bin"
@@ -31,7 +40,7 @@ ENDPOINT_FILE="$ENDPOINT_FILE"
 
 find_watch() {
   local serial="" model=""
-  "$ADB" devices -l 2>/dev/null | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
+  "$ADB" devices -l 2>/dev/null | awk 'NR>1 && \$2=="device" {print \$1}' | while IFS= read -r serial; do
     [ -z "${serial:-}" ] && continue
     model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
     case "$model" in
@@ -111,7 +120,7 @@ if [ -f "$HOME/.android/adbkey" ]; then
 fi
 
 if [ "$QUIET" != "--quiet" ]; then
-  echo "Race AI ADB auto-connect installed."
+  echo "Raise AI ADB auto-connect installed."
   echo "macOS will retry the paired Watch every 30 seconds."
   echo "Pairing is still required only if the Watch revokes/forgets this Mac."
 fi
