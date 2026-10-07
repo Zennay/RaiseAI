@@ -23,10 +23,10 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
         next_gate = text.split("## Next proof gate\n", 1)[1].split("\n## ", 1)[0]
         required = (
-            f"merged-main revision \`{FROZEN_SOURCE_REVISION}\`",
-            f"GitHub Release tag \`{FROZEN_RELEASE_TAG}\`",
-            f"Release asset id \`{FROZEN_RELEASE_ASSET_ID}\`",
-            f"archive digest \`sha256:{FROZEN_ARCHIVE_SHA256}\`",
+            f"merged-main revision `{FROZEN_SOURCE_REVISION}`",
+            f"GitHub Release tag `{FROZEN_RELEASE_TAG}`",
+            f"Release asset id `{FROZEN_RELEASE_ASSET_ID}`",
+            f"archive digest `sha256:{FROZEN_ARCHIVE_SHA256}`",
             "Any different carrier or rebuilt APK is not acceptance evidence.",
         )
         for marker in required:
