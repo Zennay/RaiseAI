@@ -27,26 +27,27 @@ internal object SensorTrialCsvPolicy {
         val fields = line.split(',', limit = 9)
         if (fields.size != 9) return null
 
-        val label = fields[0]
+        val label = fields[0].trim()
         if (label !in allowedLabels) return null
 
-        val sessionId = fields[1].toLongOrNull() ?: return null
-        val durationMs = fields[2].toLongOrNull() ?: return null
-        val sampleCount = fields[3].toIntOrNull() ?: return null
-        val detectorTriggered = when (fields[4]) {
+        val sessionId = fields[1].trim().toLongOrNull() ?: return null
+        val durationMs = fields[2].trim().toLongOrNull() ?: return null
+        val sampleCount = fields[3].trim().toIntOrNull() ?: return null
+        val detectorTriggered = when (fields[4].trim().lowercase()) {
             "true" -> true
             "false" -> false
             else -> return null
         }
-        val maxSimilarity = fields[5].toFloatOrNull() ?: return null
-        val appVersion = fields[6]
-        val sourceRevision = fields[7].lowercase()
-        val detectorConfig = fields[8]
+        val maxSimilarity = fields[5].trim().toFloatOrNull() ?: return null
+        val appVersion = fields[6].trim()
+        val sourceRevision = fields[7].trim().lowercase()
+        val detectorConfig = fields[8].trim()
 
         if (sessionId <= 0L ||
             durationMs < 0L ||
             sampleCount < 0 ||
             !maxSimilarity.isFinite() ||
+            maxSimilarity < -1f || maxSimilarity > 1f ||
             appVersion.isBlank() ||
             !sourceRevision.matches(sourceRevisionPattern) ||
             detectorConfig.isBlank() ||
