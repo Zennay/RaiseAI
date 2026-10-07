@@ -220,9 +220,11 @@ def validate_css_source(data: bytes, *, label: str) -> None:
 
     for target in _css_url_targets(text, label=label):
         lowered = target.lower()
-        if lowered.startswith(("http://", "https://", "//")):
+        scheme = re.match(r"^[a-z][a-z0-9+.-]*:", target, flags=re.IGNORECASE)
+        if lowered.startswith("//") or (scheme and not lowered.startswith("data:")):
             raise ValueError(
-                f"{label}: remote CSS url() assets are forbidden; bundle assets locally"
+                f"{label}: remote or opaque CSS url() schemes are forbidden; "
+                "use relative or data URLs"
             )
 
     stack: list[tuple[str, int]] = []
@@ -341,17 +343,23 @@ class CssSurfaceContractTests(unittest.TestCase):
         for target in (
             "https://example.invalid/font.woff2",
             "http://example.invalid/image.png",
+            "ftp://example.invalid/image.png",
+            "file:///tmp/image.png",
+            "blob:https://example.invalid/1234",
+            "custom-scheme:asset",
             "//cdn.example.invalid/image.png",
         ):
             with self.subTest(target=target):
                 payload = f'.a {{ background: url("{target}"); }}\n'.encode("utf-8")
-                with self.assertRaisesRegex(ValueError, "remote CSS url"):
+                with self.assertRaisesRegex(ValueError, "remote or opaque CSS url"):
                     validate_css_source(payload, label="fixture.css")
 
         for payload in (
             b'.a { background: url("local/icon.svg"); }\n',
             b".a { background: url(../icon.svg); }\n",
             b'.a { background: url("data:image/svg+xml,%3Csvg%3E"); }\n',
+            b'.a { background: url("/assets/icon.svg"); }\n',
+            b'.a { filter: url("#local-filter"); }\n',
             b'.a { content: "url(https://example.invalid/not-a-fetch)"; }\n',
             b'/* url(https://example.invalid/not-a-fetch) */ .a {}\n',
         ):
