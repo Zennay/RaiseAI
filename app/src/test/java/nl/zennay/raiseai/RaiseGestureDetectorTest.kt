@@ -100,6 +100,39 @@ class RaiseGestureDetectorTest {
     }
 
     @Test
+    fun scaledMouthPoseIsNormalizedBeforeScoring() {
+        val unitDetector = RaiseGestureDetector()
+        val scaledDetector = RaiseGestureDetector()
+        val unitPose = MouthPose(0f, 0f, 1f)
+        val scaledPose = MouthPose(0f, 0f, 10f)
+
+        unitDetector.onAccelerometer(9.81f, 0f, 0f, 0L, unitPose)
+        scaledDetector.onAccelerometer(9.81f, 0f, 0f, 0L, scaledPose)
+
+        val unit = unitDetector.onAccelerometer(0f, 0f, 9.81f, 100L, unitPose)
+        val scaled = scaledDetector.onAccelerometer(0f, 0f, 9.81f, 100L, scaledPose)
+
+        assertEquals(unit.similarity, scaled.similarity, 0.000001f)
+        assertTrue(scaled.similarity in -1f..1f)
+    }
+
+    @Test
+    fun zeroLengthMouthPoseFailsClosedWithoutPoisoningDetector() {
+        val detector = triggerableDetector()
+        val mouth = MouthPose(0f, 0f, 1f)
+        primeAwayPose(detector, mouth)
+
+        val rejected = detector.onAccelerometer(9.81f, 0f, 0f, 425L, MouthPose(0f, 0f, 0f))
+        assertFalse(rejected.triggered)
+        assertTrue(rejected.similarity.isFinite())
+
+        detector.onAccelerometer(7f, 0f, 7f, 450L, mouth)
+        detector.onAccelerometer(4f, 0f, 10f, 500L, mouth)
+
+        assertTrue(triggerFromMouthHold(detector, mouth))
+    }
+
+    @Test
     fun duplicateTimestampInvalidatesInProgressMovementEvidence() {
         val detector = triggerableDetector()
         val mouth = MouthPose(0f, 0f, 1f)
