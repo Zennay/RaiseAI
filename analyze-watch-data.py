@@ -68,10 +68,13 @@ def _parse_finite_float(row: dict[str, str | None], key: str, line: int) -> floa
 
 def read_sessions(path: Path) -> dict[tuple[str, int], list[Sample]]:
     nofollow = getattr(os, "O_NOFOLLOW", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
     if not nofollow:
         raise TraceError("platform does not support safe no-follow trace reads")
+    if not nonblock:
+        raise TraceError("platform does not support safe non-blocking trace reads")
 
-    flags = os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0)
+    flags = os.O_RDONLY | nofollow | nonblock | getattr(os, "O_CLOEXEC", 0)
     try:
         fd = os.open(path, flags)
     except OSError as exc:
