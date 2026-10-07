@@ -79,8 +79,8 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
 
     def test_read_samples_rejects_duplicate_columns(self):
         content = (
-            "label,session_id,elapsed_ms,x,y,z,x\\n"
-            "mouth_raise,1,0,0.1,0.2,9.7,99.0\\n"
+            "label,session_id,elapsed_ms,x,y,z,x\n"
+            "mouth_raise,1,0,0.1,0.2,9.7,99.0\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "traces.csv"
