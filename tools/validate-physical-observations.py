@@ -57,18 +57,39 @@ def _reject_duplicate_json_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any
 
 
 def load_json_document(path: Path, label: str) -> Any:
-    metadata = path.lstat()
-    _require(stat.S_ISREG(metadata.st_mode), f"{label} must be a regular file")
     _require(
-        metadata.st_size <= MAX_JSON_BYTES,
-        f"{label} exceeds maximum size of {MAX_JSON_BYTES} bytes",
+        hasattr(os, "O_NOFOLLOW"),
+        f"{label} cannot be read safely on this platform",
     )
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
 
-    raw = path.read_bytes()
-    _require(
-        len(raw) <= MAX_JSON_BYTES,
-        f"{label} exceeds maximum size of {MAX_JSON_BYTES} bytes",
-    )
+    fd = os.open(path, flags)
+    try:
+        metadata = os.fstat(fd)
+        _require(stat.S_ISREG(metadata.st_mode), f"{label} must be a regular file")
+        _require(
+            metadata.st_size <= MAX_JSON_BYTES,
+            f"{label} exceeds maximum size of {MAX_JSON_BYTES} bytes",
+        )
+
+        chunks: list[bytes] = []
+        remaining = MAX_JSON_BYTES + 1
+        while remaining > 0:
+            chunk = os.read(fd, min(8192, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+        _require(
+            len(raw) <= MAX_JSON_BYTES,
+            f"{label} exceeds maximum size of {MAX_JSON_BYTES} bytes",
+        )
+    finally:
+        os.close(fd)
+
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
