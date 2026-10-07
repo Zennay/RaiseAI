@@ -477,6 +477,34 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertFalse(self.fetch_marker.exists())
         self.assertFalse(self.log.exists())
 
+    def test_run_mode_rejects_explicit_empty_profile_before_side_effects(self):
+        adb_started = self.root / "empty-run-profile-adb-started"
+        result = self.run_launcher(
+            {"FAKE_ADB_START_MARKER": str(adb_started)},
+            args=[""],
+        )
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Gateway profile argument must not be empty.", result.stdout)
+        self.assertIn("Usage:", result.stdout)
+        self.assertFalse(adb_started.exists(), result.stdout)
+        self.assertFalse(self.fetch_marker.exists(), result.stdout)
+        self.assertFalse(self.log.exists(), result.stdout)
+
+    def test_preflight_rejects_explicit_empty_profile_before_side_effects(self):
+        adb_started = self.root / "empty-preflight-profile-adb-started"
+        result = self.run_launcher(
+            {"FAKE_ADB_START_MARKER": str(adb_started)},
+            args=["--preflight-only", ""],
+        )
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Gateway profile argument must not be empty.", result.stdout)
+        self.assertIn("Usage:", result.stdout)
+        self.assertFalse(adb_started.exists(), result.stdout)
+        self.assertFalse(self.fetch_marker.exists(), result.stdout)
+        self.assertFalse(self.log.exists(), result.stdout)
+
     def test_help_exits_without_profile_device_or_fetch_side_effects(self):
         missing_profile = self.root / "missing.properties"
         result = self.run_launcher(
