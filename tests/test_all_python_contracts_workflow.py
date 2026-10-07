@@ -70,8 +70,13 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
 
     def test_discovers_every_python_contract_through_zero_skip_runner(self):
         self.assertEqual(
-            self.text.count("          python3 tools/run_python_contracts.py"),
+            self.text.count("          python3 -I tools/run_python_contracts.py"),
             1,
+        )
+        self.assertNotIn(
+            "          python3 tools/run_python_contracts.py",
+            self.text,
+            "aggregate contracts must ignore inherited Python environment/import paths",
         )
         self.assertNotRegex(
             self.text,
