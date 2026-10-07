@@ -292,6 +292,31 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
             "concurrency must not gain unreviewed controls",
         )
 
+    def test_rejects_quoted_yaml_mapping_keys(self):
+        quoted_mapping_key = re.compile(
+            r'''(?m)^\s*(?:"[^"\n]+"|'[^'\n]+')\s*:'''
+        )
+        fixtures = (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "timeout-minutes": 30',
+            "  'pull_request_target':",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                self.assertRegex(
+                    fixture,
+                    quoted_mapping_key,
+                    "regression fixture must exercise the quoted-key detector",
+                )
+
+        self.assertNotRegex(
+            self.text,
+            quoted_mapping_key,
+            "quoted YAML mapping keys can bypass aggregate workflow exact-surface parsers",
+        )
+
+
     def test_checkout_and_revision_verifier_nested_mappings_are_exact(self):
         lines = self.text.splitlines()
 
