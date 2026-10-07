@@ -28,6 +28,8 @@ jobs:
       RELEASE_TAG: "physical-handoff-v1.5.2-8f719bb"
       ASSET_NAME: "RaiseAI-Watch7-v1.5.2-physical-handoff-37241768528.zip"
       HANDOFF_NAME: "RaiseAI-Watch7-v1.5.2-physical-handoff-37241768528"
+      CURL_CONNECT_TIMEOUT_SECONDS: "10"
+      CURL_MAX_TIME_SECONDS: "120"
 
     steps:
       - name: Download exact Actions artifact archive
@@ -39,7 +41,7 @@ jobs:
           archive="$RUNNER_TEMP/$ASSET_NAME"
           api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
 
-          curl --fail --location --silent --show-error \
+          curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$CURL_MAX_TIME_SECONDS" --fail --location --silent --show-error \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -118,7 +120,7 @@ jobs:
           set -euo pipefail
           api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
 
-          release_json="$(curl --silent --show-error \
+          release_json="$(curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$CURL_MAX_TIME_SECONDS" --silent --show-error \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -154,7 +156,7 @@ jobs:
           }))
           PY
           )"
-            release_json="$(curl --fail --silent --show-error \
+            release_json="$(curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$CURL_MAX_TIME_SECONDS" --fail --silent --show-error \
               -X POST \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -185,7 +187,7 @@ jobs:
         run: |
           set -euo pipefail
           api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
-          assets_json="$(curl --fail --silent --show-error \
+          assets_json="$(curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$CURL_MAX_TIME_SECONDS" --fail --silent --show-error \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -209,7 +211,7 @@ jobs:
           PY
           )"
             upload_url="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$encoded_name"
-            uploaded="$(curl --fail --silent --show-error \
+            uploaded="$(curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$CURL_MAX_TIME_SECONDS" --fail --silent --show-error \
               -X POST \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -225,7 +227,7 @@ jobs:
           fi
 
           verify="$RUNNER_TEMP/verify-$ASSET_NAME"
-          curl --fail --location --silent --show-error \
+          curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$CURL_MAX_TIME_SECONDS" --fail --location --silent --show-error \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/octet-stream" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
