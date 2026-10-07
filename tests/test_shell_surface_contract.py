@@ -31,6 +31,15 @@ def tracked_shell_paths():
     return sorted(paths)
 
 
+def decode_shell_source(raw: bytes, *, relative: str) -> str:
+    if b"\r" in raw:
+        raise ValueError(f"{relative} must use LF line endings without carriage returns")
+    try:
+        return raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{relative} must be strict UTF-8") from exc
+
+
 class ShellSurfaceContractTests(unittest.TestCase):
     def setUp(self):
         self.workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -51,7 +60,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
                     path.is_symlink(),
                     f"{relative} must be a regular repository file, not a symlink",
                 )
-                lines = path.read_text(encoding="utf-8").splitlines()
+                text = decode_shell_source(path.read_bytes(), relative=relative)
+                lines = text.splitlines()
                 self.assertGreaterEqual(len(lines), 2, f"{relative} must include shebang + strict mode")
                 self.assertIn(lines[0], ALLOWED_SHEBANGS, f"{relative} must declare Bash explicitly")
                 self.assertEqual(
@@ -72,6 +82,22 @@ class ShellSurfaceContractTests(unittest.TestCase):
                     0,
                     f"{relative} must pass bash -n: {completed.stderr}",
                 )
+
+    def test_shell_source_rejects_crlf_and_bare_carriage_returns(self):
+        for payload in (
+            b"#!/bin/bash\r\nset -euo pipefail\r\necho ok\r\n",
+            b"#!/bin/bash\nset -euo pipefail\necho bad\rvalue\n",
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(ValueError, "LF line endings"):
+                    decode_shell_source(payload, relative="fixture.command")
+
+    def test_shell_source_rejects_non_utf8_bytes(self):
+        with self.assertRaisesRegex(ValueError, "strict UTF-8"):
+            decode_shell_source(
+                b"#!/bin/bash\nset -euo pipefail\necho \xff\n",
+                relative="fixture.command",
+            )
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -131,9 +157,13 @@ class ShellSurfaceContractTests(unittest.TestCase):
     def test_workflow_runs_dynamic_shell_discovery_and_contract(self):
         for token in (
             'subprocess.check_output(["git", "ls-files", "-z"])',
-            "path.suffix in {\".command\", \".sh\"}",
+            'path.suffix in {".command", ".sh"}',
             'candidate.is_symlink()',
             'tracked shell entrypoints must not be symlinks',
+            'source = candidate.read_bytes()',
+            'if b"\\r" in source:',
+            'shell source must use LF line endings without carriage returns',
+            'source.decode("utf-8", errors="strict")',
             'subprocess.run(["bash", "-n", path], check=True)',
             "python3 -m unittest tests.test_shell_surface_contract",
             "git diff --exit-code -- .",
