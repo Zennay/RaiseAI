@@ -3,6 +3,7 @@ package nl.zennay.raiseai
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 
 /** Notification action that opens the bundled RaiseGPT Wear browser. */
 class ChatGptProxyActivity : Activity() {
@@ -14,6 +15,11 @@ class ChatGptProxyActivity : Activity() {
         }
 
         if (!ChatGptLauncher.launchFromActivity(this)) {
+            Toast.makeText(
+                this,
+                "ChatGPT kon niet worden geopend. Controleer de browserinstellingen in Raise AI.",
+                Toast.LENGTH_LONG
+            ).show()
             openSetup()
         }
         finish()
