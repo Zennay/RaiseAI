@@ -48,7 +48,10 @@ class WatchDataAnalyzerSelfHostedBoundaryTests(unittest.TestCase):
             2,
             "the boundary contract must trigger both push and pull_request validation",
         )
-        self.assertIn(f"            {SELF} \\", self.workflow)
+        self.assertIn(
+            f"          python3 -m unittest {SELF} -v",
+            self.workflow,
+        )
 
 
 if __name__ == "__main__":
