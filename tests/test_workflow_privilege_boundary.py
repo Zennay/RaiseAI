@@ -399,6 +399,10 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                 "on: pull_request\njobs: {verify: {steps: "
                 "[{uses: ./.github/actions/local-check}]}}\n"
             ),
+            "docker.yml": (
+                "on: pull_request\njobs: {verify: {steps: "
+                "[{uses: docker://alpine:3.20}]}}\n"
+            ),
             "comment.yml": (
                 "on: pull_request\njobs:\n  verify:\n    steps:\n"
                 "      # uses: owner/action@v1\n"
@@ -410,6 +414,7 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             "quoted.yml": [("actions/checkout", sha)],
             "flow.yml": [("actions/checkout", sha)],
             "local.yml": [],
+            "docker.yml": [],
             "comment.yml": [],
         }
 
