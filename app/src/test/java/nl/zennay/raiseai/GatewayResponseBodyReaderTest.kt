@@ -91,7 +91,56 @@ class GatewayResponseBodyReaderTest {
     }
 
     @Test
-    fun nullResponseBodyIsEmpty() {
+    fun acceptsBodyMatchingDeclaredLength() {
+        val payload = """{"status":"answered"}""".toByteArray(Charsets.UTF_8)
+
+        val result = GatewayResponseBodyReader.read(
+            ByteArrayInputStream(payload),
+            payload.size.toLong()
+        )
+
+        assertEquals(String(payload, Charsets.UTF_8), result)
+    }
+
+    @Test
+    fun rejectsBodyShorterThanDeclaredLength() {
+        val payload = "{}".toByteArray(Charsets.UTF_8)
+
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(
+                ByteArrayInputStream(payload),
+                payload.size.toLong() + 1L
+            )
+        }
+
+        assertEquals("gateway_response_length_mismatch", error.message)
+    }
+
+    @Test
+    fun rejectsBodyLongerThanDeclaredLength() {
+        val payload = "{}".toByteArray(Charsets.UTF_8)
+
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(
+                ByteArrayInputStream(payload),
+                payload.size.toLong() - 1L
+            )
+        }
+
+        assertEquals("gateway_response_length_mismatch", error.message)
+    }
+
+    @Test
+    fun declaredNonEmptyBodyRejectsMissingStream() {
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(null, 1L)
+        }
+
+        assertEquals("gateway_response_length_mismatch", error.message)
+    }
+
+    @Test
+    fun nullResponseBodyIsEmptyWhenLengthIsUnknown() {
         assertEquals("", GatewayResponseBodyReader.read(null))
     }
 }
