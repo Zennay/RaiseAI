@@ -55,6 +55,12 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
+      - name: Verify Bash runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${BASH_VERSION}" = "5.2.21(1)-release"
+
       - name: Verify Python runtime
         shell: bash
         run: |
