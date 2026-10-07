@@ -47,5 +47,58 @@ class AndroidStudioLauncherContractTest(unittest.TestCase):
         self.assertNotIn('open -a "Android Studio" "$PWD"', self.source)
 
 
+class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = (
+            ROOT / ".github" / "workflows" / "android-studio-launcher-quality.yml"
+        ).read_text(encoding="utf-8")
+
+    def test_workflow_is_exact_head_read_only_and_immutable(self):
+        self.assertIn(
+            "    runs-on: [self-hosted, linux, x64, vps-bb300bba]",
+            self.workflow,
+        )
+        self.assertIn("permissions:\n  contents: read", self.workflow)
+        self.assertEqual(self.workflow.count("        uses:"), 1)
+        self.assertIn(
+            "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+            self.workflow,
+        )
+        self.assertIn("          persist-credentials: false", self.workflow)
+        self.assertIn(
+            '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
+            self.workflow,
+        )
+        self.assertIn(
+            '          test "$(hostname)" = "vps-bb300bba"',
+            self.workflow,
+        )
+        self.assertNotIn("pull_request_target:", self.workflow)
+        self.assertNotIn("contents: write", self.workflow)
+        self.assertNotIn("id-token: write", self.workflow)
+        self.assertNotIn("actions: write", self.workflow)
+        self.assertNotIn("secrets.", self.workflow)
+        self.assertNotIn("continue-on-error: true", self.workflow)
+
+    def test_workflow_trigger_surface_covers_all_contract_inputs(self):
+        for path in (
+            "open-in-android-studio.command",
+            "tests/test_android_studio_launcher.py",
+            ".github/workflows/android-studio-launcher-quality.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self.workflow.count(f'      - "{path}"'),
+                    2,
+                    f"{path} must trigger both push and pull_request validation",
+                )
+        self.assertIn("  pull_request:\n    paths:", self.workflow)
+        self.assertIn(
+            "  push:\n    branches:\n      - main\n    paths:",
+            self.workflow,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
