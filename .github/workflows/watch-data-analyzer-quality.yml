@@ -7,11 +7,13 @@ on:
     paths:
       - "analyze-watch-data.py"
       - "tests/test_watch_data_analyzer.py"
+      - "tests/test_watch_data_analyzer_selfhosted_boundary.py"
       - ".github/workflows/watch-data-analyzer-quality.yml"
   pull_request:
     paths:
       - "analyze-watch-data.py"
       - "tests/test_watch_data_analyzer.py"
+      - "tests/test_watch_data_analyzer_selfhosted_boundary.py"
       - ".github/workflows/watch-data-analyzer-quality.yml"
 
 permissions:
@@ -23,10 +25,12 @@ concurrency:
 
 jobs:
   analyzer-quality:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, linux, x64, vps-bb300bba]
     timeout-minutes: 10
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONNOUSERSITE: "1"
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,6 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest tests/test_watch_data_analyzer.py -v
+          python3 -m unittest tests/test_watch_data_analyzer_selfhosted_boundary.py -v
           git diff --exit-code -- .
           git diff --cached --exit-code -- .
           test -z "$(git ls-files --others --exclude-standard)"
