@@ -165,6 +165,21 @@ test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () 
   );
   assert.match(DEPLOY_WORKFLOW, /timeout-minutes:\s*30\b/);
   assert.match(DEPLOY_WORKFLOW, /cancel-in-progress:\s*false\b/);
+  for (const line of [
+    "      LANG: C.UTF-8",
+    "      LC_ALL: C.UTF-8",
+    "      TZ: UTC",
+  ]) {
+    assert.equal(
+      DEPLOY_WORKFLOW.split(line).length - 1,
+      1,
+      `expected deterministic deploy env line: ${line}`,
+    );
+  }
+  assert.match(
+    DEPLOY_WORKFLOW,
+    /defaults:\s*\n\s+run:\s*\n\s+working-directory:\s*gateway\s*\n\s+shell:\s*bash\b/,
+  );
 
   const deploySha = "\${{ github.sha }}";
   assert.ok(
@@ -203,7 +218,11 @@ test("gateway deploy exceptional execution controls stay narrow", () => {
   );
   assert.match(
     DEPLOY_WORKFLOW,
-    /- name: Baseline health \(pre-deploy, best-effort\)[\s\S]*?continue-on-error: true[\s\S]*?curl --fail/,
+    /- name: Baseline health \(pre-deploy, best-effort\)[\s\S]*?continue-on-error: true[\s\S]*?set -euo pipefail[\s\S]*?curl --fail/,
+  );
+  assert.match(
+    DEPLOY_WORKFLOW,
+    /- name: Record machine-readable deploy evidence[\s\S]*?if: always\(\)[\s\S]*?run: \|\n\s+set -euo pipefail/,
   );
 
   assert.equal(
