@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v ruby >/dev/null
-          ruby --disable-gems -e 'require "psych"; abort "Psych unavailable" unless defined?(Psych); puts "Ruby #{RUBY_VERSION} / Psych #{Psych::VERSION}"'
+          ruby --disable-gems -e 'require "psych"; expected = ["3.2.3", "5.0.1"]; actual = [RUBY_VERSION, Psych::VERSION]; abort "unexpected Ruby/Psych runtime: #{actual.join(" / ")}" unless actual == expected; puts "Ruby #{RUBY_VERSION} / Psych #{Psych::VERSION}"'
 
       - name: Validate tracked YAML surface
         shell: bash

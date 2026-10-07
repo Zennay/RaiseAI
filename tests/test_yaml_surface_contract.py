@@ -210,6 +210,25 @@ class YamlSurfaceContractTests(unittest.TestCase):
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
 
+    def test_workflow_pins_exact_ruby_psych_runtime(self):
+        for token in (
+            'expected = ["3.2.3", "5.0.1"]',
+            "actual = [RUBY_VERSION, Psych::VERSION]",
+            "unless actual == expected",
+            'unexpected Ruby/Psych runtime:',
+        ):
+            with self.subTest(token=token):
+                self.assertEqual(
+                    self.workflow.count(token),
+                    1,
+                    "YAML parser runtime identity must remain fail-closed and exact",
+                )
+        self.assertNotIn(
+            'abort "Psych unavailable" unless defined?(Psych); puts ',
+            self.workflow,
+            "runtime probe must not silently accept a different Ruby/Psych version",
+        )
+
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
