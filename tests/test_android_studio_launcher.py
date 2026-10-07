@@ -92,6 +92,13 @@ class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("actions: write", self.workflow)
         self.assertNotIn("secrets.", self.workflow)
         self.assertNotIn("continue-on-error: true", self.workflow)
+        for command in (
+            "          git diff --exit-code -- .",
+            "          git diff --cached --exit-code -- .",
+            '          test -z "$(git ls-files --others --exclude-standard)"',
+        ):
+            with self.subTest(clean_worktree_command=command):
+                self.assertIn(command, self.workflow)
 
     def test_workflow_trigger_surface_covers_all_contract_inputs(self):
         for path in (
