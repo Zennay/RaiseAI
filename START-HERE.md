@@ -10,6 +10,8 @@ ChatGPT Web and Gemini are retained as fallbacks; they are no longer the primary
 
 For the current M0/V0 gate, **do not build from the repository tip**. The only valid acceptance input is the preserved v1.5.2 handoff from merged-main revision `8f719bb273f9b997848864f342598e7df5f090e5`.
 
+The preserved carrier is fixed as GitHub Release tag `physical-handoff-v1.5.2-8f719bb`, Release asset id `611084738`, with archive digest `sha256:867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce`. Any different release asset, archive digest, rebuilt APK, or repository-tip build is not acceptance evidence.
+
 Connect exactly one ADB device—the intended Galaxy Watch 7—and run the canonical frozen launcher from the current checkout. Preflight first if you want to prove device + artifact provenance without installing anything:
 
 ```bash
