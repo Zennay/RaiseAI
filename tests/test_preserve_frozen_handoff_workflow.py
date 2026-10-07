@@ -165,9 +165,18 @@ class FrozenPreserveContractWorkflowTests(unittest.TestCase):
 
         lines = self.text.splitlines()
         run_indices = [i for i, line in enumerate(lines) if line == "        run: |"]
-        self.assertEqual(len(run_indices), 2)
+        self.assertEqual(len(run_indices), 3)
         for index in run_indices:
             self.assertEqual(lines[index + 1], "          set -euo pipefail")
+
+        self.assertIn("- name: Verify worktree remains clean", self.text)
+        for command in (
+            "          git diff --exit-code -- .",
+            "          git diff --cached --exit-code -- .",
+            '          test -z "$(git ls-files --others --exclude-standard)"',
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.text.count(command), 1)
 
 
 if __name__ == "__main__":
