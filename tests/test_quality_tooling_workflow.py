@@ -42,6 +42,39 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("persist-credentials: false", self.text)
         self.assertNotIn("pull_request_target:", self.text)
 
+    def test_action_execution_surface_is_checkout_only(self):
+        refs = re.findall(
+            r"^\\s*(?:-\\s*)?uses:\\s*([^@\\s]+)@([^\\s#]+)",
+            self.text,
+            flags=re.MULTILINE,
+        )
+        self.assertEqual(
+            [action for action, _ in refs],
+            ["actions/checkout"],
+            "quality workflow must not expand beyond the audited checkout action",
+        )
+
+        lines = self.text.splitlines()
+        checkout_index = next(
+            index
+            for index, line in enumerate(lines)
+            if "uses: actions/checkout@" in line
+        )
+        step_starts = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("      - name:")
+        ]
+        step_start = max(index for index in step_starts if index < checkout_index)
+        following_steps = [index for index in step_starts if index > step_start]
+        step_end = min(following_steps) if following_steps else len(lines)
+        checkout_step = lines[step_start:step_end]
+        self.assertIn(
+            "          persist-credentials: false",
+            checkout_step,
+            "checkout must not leave GitHub credentials in the worktree",
+        )
+
     def test_verifies_exact_requested_revision(self):
         expression = (
             "${{ github.event_name == 'pull_request' && "
