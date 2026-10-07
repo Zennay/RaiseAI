@@ -36,6 +36,7 @@ jobs:
       LC_ALL: C.UTF-8
       PYTHONHASHSEED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/raise-frozen-tooling-pyc
       TZ: UTC
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
@@ -87,3 +88,11 @@ jobs:
 
           RAISE_RESTORE_DIR="$restore" \
             bash "$output/start-physical-handoff.command" --verify-only
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
