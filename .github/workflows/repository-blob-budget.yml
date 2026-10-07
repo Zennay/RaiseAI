@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    runs-on: [self-hosted, linux, x64, vps-bb300bba]
+    timeout-minutes: 10
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
