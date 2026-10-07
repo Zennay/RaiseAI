@@ -397,7 +397,7 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             ),
             "local.yml": (
                 "on: pull_request\njobs: {verify: {steps: "
-                "[{uses: ./.github/actions/local-check}]}\n"
+                "[{uses: ./.github/actions/local-check}]}}\n"
             ),
             "comment.yml": (
                 "on: pull_request\njobs:\n  verify:\n    steps:\n"
@@ -420,6 +420,21 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                 path.write_text(source, encoding="utf-8")
                 with self.subTest(name=name):
                     self.assertEqual(external_action_refs(path), expected[name])
+
+    def test_unversioned_external_action_fixture_is_detected(self):
+        fixture = """on: pull_request
+jobs:
+  verify:
+    steps:
+      - uses: owner/action
+"""
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "unversioned.yml"
+            path.write_text(fixture, encoding="utf-8")
+            refs = external_action_refs(path)
+
+        self.assertEqual(refs, [("owner/action", "")])
+        self.assertIsNone(IMMUTABLE_ACTION_REF_RE.fullmatch(refs[0][1]))
 
     def test_floating_external_action_fixture_is_detected(self):
         fixture = """on: pull_request
