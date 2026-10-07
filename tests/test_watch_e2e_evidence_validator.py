@@ -60,6 +60,13 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
             with self.assertRaisesRegex(validator.EvidenceError, "exceeds maximum size"):
                 validator.load_evidence(evidence)
 
+    def test_load_rejects_invalid_utf8_without_traceback_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary) / "watch-e2e-evidence.json"
+            evidence.write_bytes(b"{\\xff}")
+            with self.assertRaisesRegex(validator.EvidenceError, "valid UTF-8"):
+                validator.load_evidence(evidence)
+
     def test_rejects_unexpected_field_to_keep_evidence_secret_safe(self):
         with self.assertRaisesRegex(validator.EvidenceError, "unexpected evidence fields"):
             validator.validate_evidence(success_payload(answer_text="must never be serialized"))
