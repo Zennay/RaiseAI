@@ -60,6 +60,7 @@ def load_session(path: Path) -> Any:
     _require(nofollow != 0, "platform does not support safe no-follow session reads")
 
     flags = os.O_RDONLY | nofollow
+    flags |= getattr(os, "O_NONBLOCK", 0)
     flags |= getattr(os, "O_CLOEXEC", 0)
     try:
         fd = os.open(path, flags)
