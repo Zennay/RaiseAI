@@ -1,4 +1,5 @@
 import pathlib
+import re
 import subprocess
 import unicodedata
 import unittest
@@ -191,7 +192,7 @@ class SourceTextReviewIntegrityTests(unittest.TestCase):
             with self.subTest(escaped=escaped):
                 value = escaped.encode("ascii").decode("unicode_escape")
                 payload = f"safe {value} tail".encode("utf-8")
-                with self.assertRaisesRegex(ValueError, expected):
+                with self.assertRaisesRegex(ValueError, re.escape(expected)):
                     validate_reviewable_text(payload, "fixture.py")
 
     def test_validator_preserves_allowed_source_whitespace(self):
