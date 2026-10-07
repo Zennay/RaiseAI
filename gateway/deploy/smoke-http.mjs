@@ -1,4 +1,44 @@
 export const MAX_SMOKE_BODY_BYTES = 64 * 1024;
+export const SMOKE_REQUEST_DEADLINE_MS = 10_000;
+
+export function armSmokeRequestDeadline(
+  request,
+  {
+    timeoutMs = SMOKE_REQUEST_DEADLINE_MS,
+    setTimeoutImpl = globalThis.setTimeout,
+    clearTimeoutImpl = globalThis.clearTimeout
+  } = {}
+) {
+  if (!request || typeof request.destroy !== "function") {
+    throw new TypeError("smoke request must expose destroy()");
+  }
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    throw new TypeError("smoke request timeout must be a positive safe integer");
+  }
+  if (
+    typeof setTimeoutImpl !== "function" ||
+    typeof clearTimeoutImpl !== "function"
+  ) {
+    throw new TypeError("smoke request timer functions must be callable");
+  }
+
+  let active = true;
+  const timer = setTimeoutImpl(() => {
+    if (!active) return;
+    active = false;
+    request.destroy(new Error("smoke_request_deadline_exceeded"));
+  }, timeoutMs);
+
+  return function cancelSmokeRequestDeadline() {
+    if (!active) return;
+    active = false;
+    try {
+      clearTimeoutImpl(timer);
+    } catch {
+      // Timer cleanup is best effort after the request has already settled.
+    }
+  };
+}
 
 function destroyReadable(readable) {
   try {
