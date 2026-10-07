@@ -22,6 +22,12 @@ function stepBlock(text, name) {
   return text.slice(start, next === -1 ? undefined : next);
 }
 
+function externalActionRefs(text) {
+  return [...text.matchAll(/^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
+    .map((match) => ({ action: match[1], ref: match[2] }))
+    .filter(({ action }) => !action.startsWith("./"));
+}
+
 test("hosted gateway tests bypass mutable package scripts", () => {
   assert.equal(HOSTED.split("          node --test").length - 1, 1);
   assert.equal(HOSTED.includes("          npm test"), false);
@@ -36,6 +42,14 @@ test("self-hosted gateway quality gate is exact-head and VPS-bound", () => {
   assert.equal(/^\s*pull_request_target\s*:/m.test(SELF_HOSTED), false);
   assert.equal(SELF_HOSTED.includes("${{ secrets."), false);
 
+  const actions = externalActionRefs(SELF_HOSTED);
+  assert.deepEqual(actions, [
+    { action: "actions/checkout", ref: CHECKOUT_SHA },
+    { action: "actions/setup-node", ref: SETUP_NODE_SHA },
+  ]);
+  for (const { ref } of actions) {
+    assert.match(ref, /^[0-9a-f]{40}$/);
+  }
   assert.ok(SELF_HOSTED.includes(`uses: actions/checkout@${CHECKOUT_SHA} # v7.0.1 (node24)`));
   assert.ok(SELF_HOSTED.includes(`uses: actions/setup-node@${SETUP_NODE_SHA} # v7.0.0 (node24)`));
   assert.ok(SELF_HOSTED.includes("          persist-credentials: false"));
@@ -62,6 +76,14 @@ test("self-hosted gateway gate runs full tests with strict Bash", () => {
   assert.equal(SELF_HOSTED.includes("          npm test"), false);
   assert.equal(SELF_HOSTED.includes("          npm run test"), false);
   assert.equal(SELF_HOSTED.includes("continue-on-error: true"), false);
+  assert.equal(/^\s*if\s*:/m.test(SELF_HOSTED), false);
+  for (const line of [
+    "      LANG: C.UTF-8",
+    "      LC_ALL: C.UTF-8",
+    "      TZ: UTC",
+  ]) {
+    assert.equal(SELF_HOSTED.split(line).length - 1, 1);
+  }
 });
 
 test("self-hosted gateway gate checks runtime, triggers and clean worktree", () => {
