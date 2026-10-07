@@ -7,10 +7,32 @@ import {
   hasJsonMediaType,
   MAX_READINESS_BODY_BYTES,
   MAX_READINESS_REQUEST_MS,
+  readinessRequestBudget,
   readReadinessJson
 } from "../deploy/readiness-http.mjs";
 
 const REVISION = "a".repeat(40);
+
+test("readiness attempt budget never exceeds the remaining global gate", () => {
+  assert.equal(readinessRequestBudget(1), 1);
+  assert.equal(readinessRequestBudget(4999), 4999);
+  assert.equal(readinessRequestBudget(5000), 5000);
+  assert.equal(readinessRequestBudget(5001), 5000);
+  assert.equal(readinessRequestBudget(30_000), MAX_READINESS_REQUEST_MS);
+
+  for (const remainingMs of [
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.MAX_SAFE_INTEGER + 1
+  ]) {
+    assert.throws(
+      () => readinessRequestBudget(remainingMs),
+      /remaining budget must be a positive safe integer/
+    );
+  }
+});
 
 test("readiness absolute deadline destroys a request at the hard budget", () => {
   let scheduled = null;
