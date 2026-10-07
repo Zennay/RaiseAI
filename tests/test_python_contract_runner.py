@@ -67,6 +67,23 @@ class FailingContract(unittest.TestCase):
         )
         self.assertEqual(exit_code, 1)
 
+    def test_expected_failure_returns_nonzero_and_reports_test_identity(self):
+        exit_code, output = self.run_temporary_suite(
+            """
+import unittest
+
+class ExpectedFailureContract(unittest.TestCase):
+    @unittest.expectedFailure
+    def test_failure_must_not_be_downgraded(self):
+        self.fail("synthetic contract failure")
+""",
+            "test_runner_expected_failure_case.py",
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("expected failure(s)", output)
+        self.assertIn("test_failure_must_not_be_downgraded", output)
+        self.assertIn("EXPECTED-FAILURE:", output)
+
     def test_skipped_suite_returns_nonzero_and_reports_test_identity(self):
         exit_code, output = self.run_temporary_suite(
             """
