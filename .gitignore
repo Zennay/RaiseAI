@@ -31,11 +31,17 @@ keystore.properties
 signing.properties
 credentials.json
 *.jks
+*.ks
 *.keystore
+*.pk8
 *.p12
 *.pfx
 *.pem
 *.key
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
 
 # Project archives and temporary files
 *.zip
