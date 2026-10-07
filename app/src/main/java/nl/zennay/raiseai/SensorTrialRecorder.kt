@@ -64,6 +64,12 @@ object SensorTrialRecorder {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return SensorTrialProgress()
 
+        return file.useLines { lines ->
+            summarize(lines.drop(1))
+        }
+    }
+
+    internal fun summarize(lines: Sequence<String>): SensorTrialProgress {
         var mouthTrials = 0
         var mouthDetections = 0
         var nonTriggerTrials = 0
@@ -71,52 +77,58 @@ object SensorTrialRecorder {
         var rejectedTrials = 0
         val identities = mutableSetOf<String>()
 
-        file.useLines { lines ->
-            lines.drop(1).forEach { line ->
-                val fields = line.split(',', limit = 9)
-                if (fields.size != 9) {
-                    rejectedTrials++
-                    return@forEach
-                }
+        lines.forEach { line ->
+            val fields = line.split(',', limit = 9)
+            if (fields.size != 9) {
+                rejectedTrials++
+                return@forEach
+            }
 
-                val label = fields[0]
-                val durationMs = fields[2].toLongOrNull()
-                val sampleCount = fields[3].toIntOrNull()
-                val triggered = when (fields[4]) {
-                    "true" -> true
-                    "false" -> false
-                    else -> null
-                }
-                val appVersion = fields[6]
-                val sourceRevision = fields[7].lowercase()
-                val detectorConfig = fields[8]
+            val label = fields[0]
+            val sessionId = fields[1].toLongOrNull()
+            val durationMs = fields[2].toLongOrNull()
+            val sampleCount = fields[3].toIntOrNull()
+            val triggered = when (fields[4]) {
+                "true" -> true
+                "false" -> false
+                else -> null
+            }
+            val maxSimilarity = fields[5].toFloatOrNull()
+            val appVersion = fields[6]
+            val sourceRevision = fields[7].lowercase()
+            val detectorConfig = fields[8]
 
-                if (durationMs == null || sampleCount == null || triggered == null ||
-                    appVersion.isBlank() ||
-                    !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
-                    detectorConfig.isBlank() || detectorConfig == "missing"
-                ) {
-                    rejectedTrials++
-                    return@forEach
-                }
+            if (sessionId == null ||
+                durationMs == null ||
+                sampleCount == null ||
+                triggered == null ||
+                maxSimilarity == null ||
+                !maxSimilarity.isFinite() ||
+                appVersion.isBlank() ||
+                !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
+                detectorConfig.isBlank() ||
+                detectorConfig == "missing"
+            ) {
+                rejectedTrials++
+                return@forEach
+            }
 
-                if (durationMs < MIN_QUALIFYING_DURATION_MS || sampleCount < MIN_QUALIFYING_SAMPLES) {
-                    rejectedTrials++
-                    return@forEach
-                }
+            if (durationMs < MIN_QUALIFYING_DURATION_MS || sampleCount < MIN_QUALIFYING_SAMPLES) {
+                rejectedTrials++
+                return@forEach
+            }
 
-                identities += "$appVersion|$sourceRevision|$detectorConfig"
-                when (label) {
-                    "mouth_raise" -> {
-                        mouthTrials++
-                        if (triggered) mouthDetections++
-                    }
-                    "view_time", "normal_move" -> {
-                        nonTriggerTrials++
-                        if (triggered) falseTriggers++
-                    }
-                    else -> rejectedTrials++
+            identities += "$appVersion|$sourceRevision|$detectorConfig"
+            when (label) {
+                "mouth_raise" -> {
+                    mouthTrials++
+                    if (triggered) mouthDetections++
                 }
+                "view_time", "normal_move" -> {
+                    nonTriggerTrials++
+                    if (triggered) falseTriggers++
+                }
+                else -> rejectedTrials++
             }
         }
 
