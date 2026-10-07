@@ -255,6 +255,14 @@ def main(argv: list[str] | None = None) -> int:
             expect_app_version=args.expect_app_version,
             expect_source_revision=args.expect_source_revision,
         )
+    except UnicodeDecodeError:
+        print(
+            json.dumps(
+                {"valid": False, "reason": "trial CSV must be valid UTF-8"},
+                separators=(",", ":"),
+            )
+        )
+        return 2
     except TrialError as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
         return 2
