@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import json
 import sys
@@ -48,6 +49,10 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
             raise TrialError("trial CSV has no header")
+        header_counts = Counter(reader.fieldnames)
+        duplicates = sorted(name for name, count in header_counts.items() if count > 1)
+        if duplicates:
+            raise TrialError(f"duplicate columns: {', '.join(duplicates)}")
         columns = set(reader.fieldnames)
         missing = REQUIRED_COLUMNS - columns
         unexpected = columns - REQUIRED_COLUMNS
