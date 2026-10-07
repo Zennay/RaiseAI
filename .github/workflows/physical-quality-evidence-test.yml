@@ -12,6 +12,7 @@ on:
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
       - "tests/test_quality_workflow_action_pinning.py"
+      - "tests/test_physical_quality_workflow_contract.py"
       - "tests/test_physical_quality_workflow.py"
       - ".github/workflows/watch-app-test.yml"
       - ".github/workflows/physical-quality-evidence-test.yml"
@@ -24,6 +25,7 @@ on:
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
       - "tests/test_quality_workflow_action_pinning.py"
+      - "tests/test_physical_quality_workflow_contract.py"
       - "tests/test_physical_quality_workflow.py"
       - ".github/workflows/watch-app-test.yml"
       - ".github/workflows/physical-quality-evidence-test.yml"
@@ -39,6 +41,14 @@ jobs:
   physical-quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/raise-physical-quality-pyc
+      TZ: UTC
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
@@ -68,7 +78,14 @@ jobs:
           set -euo pipefail
           python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
 
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
       - name: Compile evidence tooling
+        shell: bash
         shell: bash
         run: |
           set -euo pipefail
@@ -78,11 +95,13 @@ jobs:
 
       - name: Physical quality evidence regressions
         shell: bash
+        shell: bash
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_physical_observation_validator.py'
           python3 -m unittest discover -s tests -p 'test_physical_observation_template.py'
           python3 -m unittest discover -s tests -p 'test_quality_workflow_action_pinning.py'
+          python3 -m unittest tests.test_physical_quality_workflow_contract
           python3 -m unittest discover -s tests -p 'test_physical_quality_workflow.py'
 
       - name: Verify worktree remains clean
