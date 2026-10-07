@@ -536,5 +536,24 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
 
 
+    def test_python_quality_job_mapping_surface_is_exact(self):
+        jobs_block = self.text.split("\njobs:\n", 1)[1]
+        job_lines = jobs_block.splitlines()
+        job_start = job_lines.index("  python-quality:") + 1
+        job_body = job_lines[job_start:]
+
+        keys = []
+        for line in job_body:
+            match = re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                keys.append(match.group(1))
+
+        self.assertEqual(
+            keys,
+            ["runs-on", "timeout-minutes", "env", "steps"],
+            "python-quality must not gain unreviewed job-level execution controls",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
