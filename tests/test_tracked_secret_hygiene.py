@@ -38,6 +38,7 @@ PRIVATE_KEY_MARKERS = (
     "-----BEGIN " + "ENCRYPTED PRIVATE KEY-----",
     "-----BEGIN " + "RSA PRIVATE KEY-----",
     "-----BEGIN " + "EC PRIVATE KEY-----",
+    "-----BEGIN " + "DSA PRIVATE KEY-----",
     "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
 )
 
@@ -158,6 +159,10 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             [],
             "tracked private-key material is forbidden",
         )
+
+    def test_private_key_markers_cover_traditional_dsa_pem(self):
+        dsa_marker = "-----BEGIN " + "DSA PRIVATE KEY-----"
+        self.assertIn(dsa_marker, PRIVATE_KEY_MARKERS)
 
     def test_git_index_blobs_do_not_contain_high_confidence_tokens(self):
         offenders = cached_grep_paths(
