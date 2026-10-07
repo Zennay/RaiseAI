@@ -126,7 +126,7 @@ class ShellSurfaceContractTests(unittest.TestCase):
 
     def test_workflow_runs_dynamic_shell_discovery_and_contract(self):
         for token in (
-            'git ls-files -z',
+            'subprocess.check_output(["git", "ls-files", "-z"])',
             "path.suffix in {\".command\", \".sh\"}",
             'subprocess.run(["bash", "-n", path], check=True)',
             "python3 -m unittest tests.test_shell_surface_contract",
