@@ -111,9 +111,9 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "traces.csv"
             path.write_bytes(
-                b"label,session_id,elapsed_ms,x,y,z\\n"
-                b"mouth_raise,1,0,0.1,0.2,9.7\\n"
-                b"\\xff"
+                b"label,session_id,elapsed_ms,x,y,z\n"
+                b"mouth_raise,1,0,0.1,0.2,9.7\n"
+                b"\xff"
             )
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
