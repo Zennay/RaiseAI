@@ -1,0 +1,40 @@
+name: Windows installer quality CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "install-watch-windows.ps1"
+      - "tests/test_windows_installer_contract.py"
+      - ".github/workflows/windows-installer-quality.yml"
+  pull_request:
+    paths:
+      - "install-watch-windows.ps1"
+      - "tests/test_windows_installer_contract.py"
+      - ".github/workflows/windows-installer-quality.yml"
+
+concurrency:
+  group: raise-windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installer-quality:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+
+      - name: Run Windows installer contract regressions
+        run: python3 -m unittest tests/test_windows_installer_contract.py -v
