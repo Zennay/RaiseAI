@@ -51,6 +51,26 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                     "START-HERE must bind the frozen acceptance carrier unambiguously",
                 )
 
+    def test_operator_guides_pin_the_same_frozen_carrier(self):
+        guides = {
+            "START-HERE.md": (ROOT / "START-HERE.md").read_text(encoding="utf-8"),
+            "PHYSICAL-ACCEPTANCE.md": (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8"),
+        }
+        markers = (
+            FROZEN_SOURCE_REVISION,
+            FROZEN_RELEASE_TAG,
+            FROZEN_RELEASE_ASSET_ID,
+            FROZEN_ARCHIVE_SHA256,
+        )
+        for guide, text in guides.items():
+            for marker in markers:
+                with self.subTest(guide=guide, marker=marker):
+                    self.assertIn(
+                        marker,
+                        text,
+                        f"{guide} must retain the canonical frozen carrier identity",
+                    )
+
     def test_frozen_acceptance_version_is_not_derived_from_version_txt(self):
         current_version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
         self.assertNotEqual(
