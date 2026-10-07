@@ -45,7 +45,10 @@ class PythonSurfaceContractTests(unittest.TestCase):
                 )
                 self.assertTrue(path.is_file(), f"{relative} must resolve to a regular file")
                 try:
-                    compile(path.read_bytes(), relative, "exec", dont_inherit=True)
+                    source = path.read_bytes().decode("utf-8")
+                    compile(source, relative, "exec", dont_inherit=True)
+                except UnicodeDecodeError as exc:
+                    self.fail(f"{relative} must be strict UTF-8 Python source: {exc}")
                 except (SyntaxError, ValueError) as exc:
                     self.fail(f"{relative} must compile as Python: {exc.__class__.__name__}")
 
@@ -107,7 +110,8 @@ class PythonSurfaceContractTests(unittest.TestCase):
             "candidate.is_symlink()",
             "tracked Python files must not be symlinks",
             "candidate.is_file()",
-            'compile(candidate.read_bytes(), path, "exec", dont_inherit=True)',
+            'candidate.read_bytes().decode("utf-8")',
+            'compile(source, path, "exec", dont_inherit=True)',
             "python3 -m unittest tests.test_python_surface_contract",
             "git diff --exit-code -- .",
             'test -z "$(git ls-files --others --exclude-standard)"',
