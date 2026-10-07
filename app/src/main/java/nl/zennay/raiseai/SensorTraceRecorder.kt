@@ -15,7 +15,9 @@ object SensorTraceRecorder {
         x: Float,
         y: Float,
         z: Float
-    ) {
+    ): Boolean {
+        if (!isValidSample(label, sessionId, elapsedMs, x, y, z)) return false
+
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
             file.writeText("label,session_id,elapsed_ms,x,y,z\n")
@@ -23,7 +25,23 @@ object SensorTraceRecorder {
         file.appendText(
             "$label,$sessionId,$elapsedMs,$x,$y,$z\n"
         )
+        return true
     }
+
+    internal fun isValidSample(
+        label: String,
+        sessionId: Long,
+        elapsedMs: Long,
+        x: Float,
+        y: Float,
+        z: Float
+    ): Boolean =
+        label in setOf("mouth_raise", "view_time", "normal_move") &&
+            sessionId > 0L &&
+            elapsedMs >= 0L &&
+            x.isFinite() &&
+            y.isFinite() &&
+            z.isFinite()
 
     fun sampleCount(context: Context): Int {
         val file = File(context.filesDir, FILE_NAME)
