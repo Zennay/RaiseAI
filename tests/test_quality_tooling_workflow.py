@@ -179,6 +179,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_watch_sensor_trace_analyzer.py",
             "tests/test_watch_sensor_trial_analyzer.py",
             ".github/workflows/*.yml",
+            ".github/workflows/*.yaml",
         ]
         for event in ("push", "pull_request"):
             with self.subTest(event=event):
