@@ -1,6 +1,7 @@
 import pathlib
 import re
 import subprocess
+import tempfile
 import unittest
 
 
@@ -27,7 +28,27 @@ require "psych"
 raw = File.binread(ARGV.fetch(0))
 raw.force_encoding(Encoding::UTF_8)
 abort("#{ARGV.fetch(0)}: invalid UTF-8") unless raw.valid_encoding?
-Psych.parse_stream(raw)
+def reject_duplicate_mapping_keys(node)
+  if node.is_a?(Psych::Nodes::Mapping)
+    seen = {}
+    node.children.each_slice(2) do |key, value|
+      if key.is_a?(Psych::Nodes::Scalar)
+        label = key.value
+        abort("duplicate YAML mapping key: #{label}") if seen.key?(label)
+        seen[label] = true
+      end
+      reject_duplicate_mapping_keys(key)
+      reject_duplicate_mapping_keys(value)
+    end
+    return
+  end
+
+  children = node.respond_to?(:children) ? node.children : nil
+  Array(children).each { |child| reject_duplicate_mapping_keys(child) }
+end
+
+tree = Psych.parse_stream(raw)
+reject_duplicate_mapping_keys(tree)
 """
     return subprocess.run(
         ["ruby", "--disable-gems", "-e", script, str(path)],
@@ -67,6 +88,23 @@ class YamlSurfaceContractTests(unittest.TestCase):
                     0,
                     f"{relative} must parse as YAML: {parsed.stderr}",
                 )
+
+    def test_parser_rejects_duplicate_scalar_mapping_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "duplicate.yml"
+            path.write_text(
+                "jobs:\n"
+                "  verify:\n"
+                "    runs-on: ubuntu-24.04\n"
+                "    runs-on: self-hosted\n",
+                encoding="utf-8",
+            )
+            parsed = parse_yaml_with_psych(path)
+            self.assertNotEqual(parsed.returncode, 0)
+            self.assertIn(
+                "duplicate YAML mapping key: runs-on",
+                parsed.stderr,
+            )
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -135,6 +173,7 @@ class YamlSurfaceContractTests(unittest.TestCase):
             "candidate.is_symlink()",
             "tracked YAML files must not be symlinks",
             'subprocess.run(["ruby", "--disable-gems", "-e", ruby_parser, path], check=True)',
+            "duplicate YAML mapping key",
             "python3 -m unittest tests.test_yaml_surface_contract",
             "git diff --exit-code -- .",
             'test -z "$(git ls-files --others --exclude-standard)"',
