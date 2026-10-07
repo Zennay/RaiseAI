@@ -14,6 +14,7 @@ EXPECTED_CRITICAL = {
     "app/src/main/res/values/styles.xml",
 }
 FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
+UTF8_BOM = b"\xef\xbb\xbf"
 
 
 def tracked_xml_paths():
@@ -23,6 +24,19 @@ def tracked_xml_paths():
         for item in raw.decode("utf-8").split("\0")
         if item and pathlib.PurePosixPath(item).suffix.lower() == ".xml"
     )
+
+
+def decode_canonical_xml_source(data: bytes, *, relative: str) -> str:
+    if data.startswith(UTF8_BOM):
+        raise ValueError(f"{relative} must not start with a UTF-8 BOM")
+    if b"\x00" in data:
+        raise ValueError(f"{relative} must not contain NUL bytes")
+    if b"\r" in data:
+        raise ValueError(f"{relative} must use LF-only line endings")
+    try:
+        return data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{relative} must be strict UTF-8 XML") from exc
 
 
 class XmlSurfaceContractTests(unittest.TestCase):
@@ -48,9 +62,9 @@ class XmlSurfaceContractTests(unittest.TestCase):
                 self.assertTrue(path.is_file(), f"{relative} must resolve to a regular file")
                 data = path.read_bytes()
                 try:
-                    text = data.decode("utf-8")
-                except UnicodeDecodeError as exc:
-                    self.fail(f"{relative} must be strict UTF-8 XML: {exc}")
+                    text = decode_canonical_xml_source(data, relative=relative)
+                except ValueError as exc:
+                    self.fail(str(exc))
                 upper = text.upper()
                 for declaration in FORBIDDEN_DECLARATIONS:
                     self.assertNotIn(
@@ -62,6 +76,24 @@ class XmlSurfaceContractTests(unittest.TestCase):
                     ET.fromstring(text)
                 except ET.ParseError as exc:
                     self.fail(f"{relative} must be well-formed XML: {exc}")
+
+    def test_canonical_xml_decoder_rejects_bom_cr_nul_and_invalid_utf8(self):
+        with self.assertRaisesRegex(ValueError, "UTF-8 BOM"):
+            decode_canonical_xml_source(
+                UTF8_BOM + b'<?xml version="1.0"?><root/>\n',
+                relative="fixture.xml",
+            )
+        for payload in (
+            b'<?xml version="1.0"?><root/>\r\n',
+            b'<?xml version="1.0"?><root/>\r',
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(ValueError, "LF-only line endings"):
+                    decode_canonical_xml_source(payload, relative="fixture.xml")
+        with self.assertRaisesRegex(ValueError, "NUL bytes"):
+            decode_canonical_xml_source(b"<root>\x00</root>\n", relative="fixture.xml")
+        with self.assertRaisesRegex(ValueError, "strict UTF-8 XML"):
+            decode_canonical_xml_source(b"<root>\xff</root>\n", relative="fixture.xml")
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
