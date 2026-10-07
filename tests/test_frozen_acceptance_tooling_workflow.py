@@ -42,7 +42,7 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
                 self.assertEqual(self.text.count(line), 1)
 
     def test_python_user_site_is_disabled_once(self):
-        lines = [line for line in self.text.splitlines() if re.match(r"^\\s+PYTHONNOUSERSITE:", line)]
+        lines = [line for line in self.text.splitlines() if re.match(r"^\s+PYTHONNOUSERSITE:", line)]
         self.assertEqual(lines, ['      PYTHONNOUSERSITE: "1"'])
 
     def test_python_runtime_is_explicitly_pinned(self):
