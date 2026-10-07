@@ -1,4 +1,4 @@
-# Raise AI v1.5.2 — START HERE
+# Raise AI — START HERE (frozen v1.5.2 acceptance)
 
 Raise AI is native-first:
 
