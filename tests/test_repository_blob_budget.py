@@ -4,6 +4,7 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+WORKFLOW = ROOT / ".github" / "workflows" / "repository-blob-budget.yml"
 MAX_TRACKED_BLOB_BYTES = 5 * 1024 * 1024
 
 
@@ -117,6 +118,40 @@ class RepositoryBlobBudgetTests(unittest.TestCase):
             validate_blob_budget([("", 1)])
         with self.assertRaisesRegex(ValueError, "size must not be negative"):
             validate_blob_budget([("bad.bin", -1)])
+
+    def test_workflow_is_read_only_exact_head_and_vps_bound(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("permissions:\n  contents: read", text)
+        self.assertNotRegex(text, r"^\s+[A-Za-z0-9_-]+:\s*write\s*$")
+        self.assertNotRegex(text, r"\$\{\{\s*secrets\.")
+        self.assertIn(
+            "    runs-on: [self-hosted, linux, x64, vps-bb300bba]",
+            text,
+        )
+        self.assertNotIn("ubuntu-latest", text)
+        self.assertNotIn("ubuntu-24.04", text)
+        self.assertIn("    timeout-minutes: 10", text)
+        self.assertIn(
+            "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            text,
+        )
+        self.assertIn("          persist-credentials: false", text)
+        self.assertIn(
+            "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+            text,
+        )
+        self.assertIn(
+            "EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+            text,
+        )
+
+    def test_workflow_runs_for_main_pushes_and_all_pull_requests(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("  push:\n    branches:\n      - main", text)
+        self.assertIn("  pull_request:\n", text)
+        self.assertNotIn("    paths:", text)
+        self.assertNotIn("    paths-ignore:", text)
+        self.assertIn("  cancel-in-progress: true", text)
 
 
 if __name__ == "__main__":
