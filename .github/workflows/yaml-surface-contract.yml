@@ -82,7 +82,28 @@ jobs:
           raw = File.binread(ARGV.fetch(0))
           raw.force_encoding(Encoding::UTF_8)
           abort("#{ARGV.fetch(0)}: invalid UTF-8") unless raw.valid_encoding?
-          Psych.parse_stream(raw)
+          def reject_duplicate_mapping_keys(node)
+            if node.is_a?(Psych::Nodes::Mapping)
+              seen = {}
+              node.children.each_slice(2) do |key, value|
+                if key.is_a?(Psych::Nodes::Scalar)
+                  label = key.value
+                  abort("duplicate YAML mapping key: #{label}") if seen.key?(label)
+                  seen[label] = true
+                end
+                reject_duplicate_mapping_keys(key)
+                reject_duplicate_mapping_keys(value)
+              end
+              return
+            end
+
+            if node.respond_to?(:children)
+              node.children.each { |child| reject_duplicate_mapping_keys(child) }
+            end
+          end
+
+          tree = Psych.parse_stream(raw)
+          reject_duplicate_mapping_keys(tree)
           '''
           for path in paths:
               candidate = pathlib.Path(path)
