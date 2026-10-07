@@ -10,7 +10,7 @@ LAUNCHER = ROOT / "start-physical-handoff.command"
 class PhysicalHandoffLauncherCliTest(unittest.TestCase):
     def run_launcher(self, *args):
         return subprocess.run(
-            [str(LAUNCHER), *args],
+            ["bash", str(LAUNCHER), *args],
             cwd=ROOT,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
