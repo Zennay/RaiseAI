@@ -95,11 +95,14 @@ abort("workflow root must be a mapping") unless root.is_a?(Psych::Nodes::Mapping
 
 lookup = lambda do |mapping, target|
   next nil unless mapping.is_a?(Psych::Nodes::Mapping)
+  found = nil
   mapping.children.each_slice(2) do |key_node, value_node|
     if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == target
-      break value_node
+      found = value_node
+      break
     end
   end
+  found
 end
 
 values = []
