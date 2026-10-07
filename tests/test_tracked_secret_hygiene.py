@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 FORBIDDEN_BASENAMES = {
+    ".envrc",
     "local.properties",
     "secrets.properties",
     "keystore.properties",
@@ -134,7 +135,7 @@ class TrackedSecretHygieneTests(unittest.TestCase):
                 continue
 
             lowered_parts = tuple(part.lower() for part in path.parts)
-            if ".raiseai" in lowered_parts:
+            if ".direnv" in lowered_parts or ".raiseai" in lowered_parts:
                 offenders.append(raw)
                 continue
 
@@ -206,6 +207,10 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             ".env",
             ".env.production",
             "nested/.env.local",
+            ".envrc",
+            "nested/.envrc",
+            ".direnv/allow",
+            "nested/.direnv/cache",
             "local.properties",
             "nested/secrets.properties",
             "nested/keystore.properties",
@@ -243,6 +248,8 @@ class TrackedSecretHygieneTests(unittest.TestCase):
         required = (
             ".env",
             ".env.*",
+            ".envrc",
+            ".direnv/",
             "local.properties",
             "secrets.properties",
             "keystore.properties",
