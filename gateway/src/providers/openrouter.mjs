@@ -100,14 +100,28 @@ async function cancelResponseBody(response) {
 
 async function readBoundedJsonResponse(response) {
   const contentLength = response?.headers?.get?.("content-length");
-  if (
-    typeof contentLength === "string" &&
-    contentLength.trim() &&
-    (!/^\d+$/u.test(contentLength.trim()) ||
-      Number(contentLength.trim()) > MAX_RESPONSE_BODY_BYTES)
-  ) {
-    await cancelResponseBody(response);
-    return { ok: false, json: null };
+  let declaredBytes = null;
+
+  if (contentLength !== null && contentLength !== undefined) {
+    if (typeof contentLength !== "string") {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+
+    const normalized = contentLength.trim();
+    if (!/^\d+$/u.test(normalized)) {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+
+    declaredBytes = Number(normalized);
+    if (
+      !Number.isSafeInteger(declaredBytes) ||
+      declaredBytes > MAX_RESPONSE_BODY_BYTES
+    ) {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
   }
 
   const reader = response?.body?.getReader?.();
@@ -134,6 +148,10 @@ async function readBoundedJsonResponse(response) {
     }
   } catch {
     await reader.cancel().catch(() => {});
+    return { ok: false, json: null };
+  }
+
+  if (declaredBytes !== null && totalBytes !== declaredBytes) {
     return { ok: false, json: null };
   }
 
