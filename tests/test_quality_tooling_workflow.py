@@ -344,7 +344,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("LC_ALL: C.UTF-8", self.text)
         self.assertIn('PYTHONHASHSEED: "1"', self.text)
         self.assertIn('PYTHONDONTWRITEBYTECODE: "1"', self.text)
-        self.assertIn("PYTHONPYCACHEPREFIX: ${{ runner.temp }}/raise-quality-pyc", self.text)
+        self.assertIn("PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc", self.text)
         self.assertIn("TZ: UTC", self.text)
         self.assertIn("- name: Verify Python runtime", self.text)
         self.assertIn('platform.python_implementation() == "CPython"', self.text)
@@ -421,7 +421,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "LC_ALL": "      LC_ALL: C.UTF-8",
             "PYTHONHASHSEED": '      PYTHONHASHSEED: "1"',
             "PYTHONDONTWRITEBYTECODE": '      PYTHONDONTWRITEBYTECODE: "1"',
-            "PYTHONPYCACHEPREFIX": "      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/raise-quality-pyc",
+            "PYTHONPYCACHEPREFIX": "      PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc",
             "TZ": "      TZ: UTC",
         }
         for key, expected_line in expected_lines.items():
