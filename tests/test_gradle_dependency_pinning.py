@@ -1,5 +1,7 @@
 from pathlib import Path
 import re
+import stat
+import tempfile
 import unittest
 from urllib.parse import urlsplit
 
@@ -10,6 +12,18 @@ APP_BUILD = ROOT / "app" / "build.gradle.kts"
 SETTINGS = ROOT / "settings.gradle.kts"
 
 DYNAMIC_VERSION_MARKERS = ("+", "latest.", "snapshot")
+
+
+def read_gradle_text(path: Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: Gradle contract input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: Gradle contract input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: Gradle contract input must be valid UTF-8") from exc
 CANONICAL_DEPENDENCY_DECLARATION = re.compile(
     r'^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(\s*"'
     r'([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[^"\n]+)"'
@@ -84,9 +98,29 @@ def literal_dependency_coordinates(build_text: str) -> list[str]:
 
 class GradleDependencyPinningTests(unittest.TestCase):
     def setUp(self):
-        self.root_build = ROOT_BUILD.read_text(encoding="utf-8")
-        self.app_build = APP_BUILD.read_text(encoding="utf-8")
-        self.settings = SETTINGS.read_text(encoding="utf-8")
+        self.root_build = read_gradle_text(ROOT_BUILD)
+        self.app_build = read_gradle_text(APP_BUILD)
+        self.settings = read_gradle_text(SETTINGS)
+
+    def test_gradle_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular = root / "regular.gradle.kts"
+            regular.write_text("plugins {}\n", encoding="utf-8")
+            linked = root / "linked.gradle.kts"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_gradle_text(linked)
+
+            directory = root / "directory.gradle.kts"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_gradle_text(directory)
+
+            invalid = root / "invalid.gradle.kts"
+            invalid.write_bytes(b"plugins {}\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_gradle_text(invalid)
 
     def test_android_plugin_version_is_literal_and_non_dynamic(self):
         matches = re.findall(
