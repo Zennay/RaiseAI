@@ -87,6 +87,36 @@ class SensorTrialProgressTest {
     }
 
     @Test
+    fun duplicateAcceptedSessionCannotInflateTrialCounts() {
+        val progress = SensorTrialRecorder.progressFromLines(
+            sequenceOf(
+                HEADER,
+                row(label = "mouth_raise", revision = REV_A, sessionId = 42),
+                row(label = "mouth_raise", revision = REV_A, sessionId = 42)
+            )
+        )
+
+        assertEquals(1, progress.mouthTrials)
+        assertEquals(1, progress.rejectedTrials)
+        assertFalse(progress.mixedEvidenceIdentity)
+    }
+
+    @Test
+    fun rejectedRowDoesNotReserveSessionIdForLaterValidEvidence() {
+        val progress = SensorTrialRecorder.progressFromLines(
+            sequenceOf(
+                HEADER,
+                row(label = "unexpected", revision = REV_B, sessionId = 42),
+                row(label = "mouth_raise", revision = REV_A, sessionId = 42)
+            )
+        )
+
+        assertEquals(1, progress.mouthTrials)
+        assertEquals(1, progress.rejectedTrials)
+        assertFalse(progress.mixedEvidenceIdentity)
+    }
+
+    @Test
     fun acceptedTrialsFromDifferentIdentitiesStillFailMixedEvidenceGate() {
         val progress = SensorTrialRecorder.progressFromLines(
             sequenceOf(
@@ -104,10 +134,11 @@ class SensorTrialProgressTest {
     private fun row(
         label: String,
         revision: String,
+        sessionId: Long = 1,
         durationMs: Long = 3_000,
         samples: Int = 20
     ): String =
-        "$label,1,$durationMs,$samples,false,0.98,1.5.2,$revision,raise-detector-v1"
+        "$label,$sessionId,$durationMs,$samples,false,0.98,1.5.2,$revision,raise-detector-v1"
 
     companion object {
         private const val HEADER =
