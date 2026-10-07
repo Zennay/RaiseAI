@@ -136,6 +136,7 @@ class ShellSurfaceContractTests(unittest.TestCase):
         self.assertNotIn("self-hosted", self.workflow)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
+        self.assertNotRegex(self.workflow, r"(?m)^\s+if:\s*")
         self.assertIn("timeout-minutes: 5", self.workflow)
         self.assertIn("cancel-in-progress: true", self.workflow)
         expression = (
@@ -144,6 +145,10 @@ class ShellSurfaceContractTests(unittest.TestCase):
         )
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
+        self.assertEqual(
+            self.workflow.count('          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"'),
+            1,
+        )
 
     def test_workflow_pins_exact_bash_runtime(self):
         self.assertIn("- name: Verify Bash runtime", self.workflow)
