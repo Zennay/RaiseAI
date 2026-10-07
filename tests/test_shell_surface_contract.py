@@ -145,6 +145,14 @@ class ShellSurfaceContractTests(unittest.TestCase):
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
 
+    def test_workflow_pins_exact_bash_runtime(self):
+        self.assertIn("- name: Verify Bash runtime", self.workflow)
+        self.assertEqual(
+            self.workflow.count('test "${BASH_VERSION}" = "5.2.21(1)-release"'),
+            1,
+            "shell syntax parser must remain pinned to reviewed Bash 5.2.21(1)-release",
+        )
+
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
