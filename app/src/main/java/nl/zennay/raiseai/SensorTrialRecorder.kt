@@ -65,8 +65,10 @@ object SensorTrialRecorder {
     fun trialCount(context: Context): Int {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return 0
+        return trialCount(file.readLines())
+    }
 
-        val lines = file.readLines()
+    internal fun trialCount(lines: List<String>): Int {
         if (lines.isEmpty() || !SensorTrialCsvPolicy.hasCanonicalHeader(lines.first())) return 0
 
         val seenSessions = mutableSetOf<Long>()
@@ -82,8 +84,10 @@ object SensorTrialRecorder {
     fun progress(context: Context): SensorTrialProgress {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return SensorTrialProgress()
+        return progress(file.readLines())
+    }
 
-        val lines = file.readLines()
+    internal fun progress(lines: List<String>): SensorTrialProgress {
         if (lines.isEmpty()) return SensorTrialProgress()
 
         if (!SensorTrialCsvPolicy.hasCanonicalHeader(lines.first())) {
