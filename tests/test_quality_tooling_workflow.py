@@ -637,5 +637,63 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
 
 
+    def test_reproducibility_nested_mapping_surfaces_are_exact(self):
+        lines = self.text.splitlines()
+
+        job_env_start = lines.index("    env:") + 1
+        job_env_keys = []
+        for line in lines[job_env_start:]:
+            match = re.fullmatch(r"      ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                job_env_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            job_env_keys,
+            ["LANG", "PYTHONHASHSEED", "PYTHONDONTWRITEBYTECODE", "TZ"],
+            "python-quality job env must not gain unreviewed variables",
+        )
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index
+                for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        checkout = step_named("Checkout exact tested revision")
+        with_start = checkout.index("        with:") + 1
+        with_keys = []
+        for line in checkout[with_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                with_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            with_keys,
+            ["ref", "persist-credentials"],
+            "checkout with: mapping must remain limited to exact-head binding and credential removal",
+        )
+
+        verifier = step_named("Verify exact tested revision")
+        env_start = verifier.index("        env:") + 1
+        verifier_env_keys = []
+        for line in verifier[env_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                verifier_env_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            verifier_env_keys,
+            ["EXPECTED_SHA"],
+            "revision verifier env must not gain unreviewed variables",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
