@@ -227,5 +227,109 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
             )
 
 
+    def test_trigger_and_concurrency_mappings_are_exact(self):
+        lines = self.text.splitlines()
+        on_start = lines.index("on:") + 1
+        permissions_start = lines.index("permissions:")
+        trigger_lines = lines[on_start:permissions_start]
+        events = []
+        for line in trigger_lines:
+            match = re.fullmatch(r"  ([A-Za-z0-9_-]+):", line)
+            if match:
+                events.append(match.group(1))
+        self.assertEqual(
+            events,
+            ["push", "pull_request"],
+            "aggregate validation must retain only the audited trigger events",
+        )
+
+        push_start = lines.index("  push:") + 1
+        push = []
+        for line in lines[push_start:]:
+            if line and not line.startswith("    "):
+                break
+            push.append(line)
+        push_keys = []
+        for line in push:
+            match = re.fullmatch(r"    ([A-Za-z0-9_-]+):", line)
+            if match:
+                push_keys.append(match.group(1))
+        self.assertEqual(push_keys, ["branches"])
+        self.assertEqual(
+            [line for line in push if line.startswith("      - ")],
+            ["      - main"],
+            "aggregate push validation must remain main-only",
+        )
+
+        pr_start = lines.index("  pull_request:") + 1
+        pull_request = []
+        for line in lines[pr_start:]:
+            if line and not line.startswith("    "):
+                break
+            pull_request.append(line)
+        self.assertEqual(
+            [line for line in pull_request if line.strip()],
+            [],
+            "pull_request must stay unfiltered so synchronize commits always validate",
+        )
+
+        concurrency_start = lines.index("concurrency:") + 1
+        jobs_start = lines.index("jobs:")
+        concurrency = lines[concurrency_start:jobs_start]
+        concurrency_keys = []
+        for line in concurrency:
+            match = re.fullmatch(r"  ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                concurrency_keys.append(match.group(1))
+        self.assertEqual(
+            concurrency_keys,
+            ["group", "cancel-in-progress"],
+            "concurrency must not gain unreviewed controls",
+        )
+
+    def test_checkout_and_revision_verifier_nested_mappings_are_exact(self):
+        lines = self.text.splitlines()
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index
+                for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        checkout = step_named("Checkout exact tested revision")
+        with_start = checkout.index("        with:") + 1
+        with_keys = []
+        for line in checkout[with_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                with_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            with_keys,
+            ["ref", "persist-credentials"],
+            "checkout inputs must stay limited to exact-head binding and credential removal",
+        )
+
+        verifier = step_named("Verify exact tested revision")
+        env_start = verifier.index("        env:") + 1
+        verifier_env_keys = []
+        for line in verifier[env_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                verifier_env_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            verifier_env_keys,
+            ["EXPECTED_SHA"],
+            "revision verifier must not gain unreviewed environment controls",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
