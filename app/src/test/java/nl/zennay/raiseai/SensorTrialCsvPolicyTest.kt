@@ -54,6 +54,15 @@ class SensorTrialCsvPolicyTest {
     }
 
     @Test
+    fun rejectsExtraCsvColumnsHiddenInDetectorConfig() {
+        assertNull(
+            SensorTrialCsvPolicy.parseRow(
+                "mouth_raise,123,4000,40,true,0.98,1.5.2," + revision + "," + detector + ",unexpected"
+            )
+        )
+    }
+
+    @Test
     fun rejectsNonFiniteSimilarityAndMalformedRevision() {
         assertNull(
             SensorTrialCsvPolicy.parseRow(
