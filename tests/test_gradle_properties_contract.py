@@ -34,12 +34,14 @@ def decode_canonical_properties(data: bytes) -> str:
 def parse_properties(text):
     values = {}
     for number, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("!"):
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("!"):
             continue
-        if "=" not in line:
+        if "=" not in raw_line:
             raise ValueError(f"line {number}: expected key=value")
-        key, value = (part.strip() for part in line.split("=", 1))
+        key, value = raw_line.split("=", 1)
+        if key != key.strip() or value != value.strip():
+            raise ValueError(f"line {number}: surrounding whitespace is not allowed")
         if not key:
             raise ValueError(f"line {number}: empty key")
         if key in values:
@@ -85,6 +87,18 @@ class GradlePropertiesContractTests(unittest.TestCase):
     def test_parser_rejects_non_assignment(self):
         with self.assertRaisesRegex(ValueError, "expected key=value"):
             parse_properties("android.useAndroidX true\n")
+
+    def test_parser_rejects_surrounding_assignment_whitespace(self):
+        cases = (
+            " android.useAndroidX=true\n",
+            "android.useAndroidX =true\n",
+            "android.useAndroidX= true\n",
+            "android.useAndroidX=true \n",
+        )
+        for payload in cases:
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(ValueError, "surrounding whitespace"):
+                    parse_properties(payload)
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -247,6 +261,8 @@ class GradlePropertiesContractTests(unittest.TestCase):
             'if b"\\x00" in data:',
             'if b"\\r" in data:',
             "BIDI_CONTROL_RE.search(text)",
+            "key != key.strip() or value != value.strip()",
+            "surrounding whitespace is not allowed",
             '"org.gradle.jvmargs": "-Xmx2048m -Dfile.encoding=UTF-8"',
             '"android.useAndroidX": "true"',
             '"kotlin.code.style": "official"',
