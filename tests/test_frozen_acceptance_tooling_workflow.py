@@ -34,10 +34,26 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
             "      LC_ALL: C.UTF-8",
             '      PYTHONHASHSEED: "1"',
             '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      PYTHONPYCACHEPREFIX: /tmp/raise-frozen-tooling-pyc",
             "      TZ: UTC",
         ):
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
+
+    def test_explicit_py_compile_cannot_dirty_checkout(self):
+        self.assertIn("python3 -m py_compile", self.text)
+        self.assertEqual(
+            self.text.count("      PYTHONPYCACHEPREFIX: /tmp/raise-frozen-tooling-pyc"),
+            1,
+        )
+        self.assertIn("- name: Verify worktree remains clean", self.text)
+        for command in (
+            "          git diff --exit-code -- .",
+            "          git diff --cached --exit-code -- .",
+            '          test -z "$(git ls-files --others --exclude-standard)"',
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.text.count(command), 1)
 
     def test_permissions_are_read_only(self):
         self.assertRegex(
