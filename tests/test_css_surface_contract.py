@@ -7,6 +7,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "css-surface-contract.yml"
 EXPECTED_CRITICAL = {"app/src/main/assets/raiseai_wear/wear.css"}
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def tracked_css_paths() -> list[str]:
@@ -200,6 +201,8 @@ def validate_css_source(data: bytes, *, label: str) -> None:
         raise ValueError(f"{label}: CSS source must not contain NUL characters")
     if "\r" in text:
         raise ValueError(f"{label}: CSS source must use LF line endings")
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError(f"{label}: CSS source must not contain bidirectional control characters")
 
     visible = _visible_css_code(text, label=label)
     if "\\" in visible:
@@ -282,6 +285,7 @@ class CssSurfaceContractTests(unittest.TestCase):
             ("\ufeff.a {}".encode("utf-8"), "UTF-8 BOM"),
             (b".a {\r\n  color: red;\r\n}\r\n", "LF line endings"),
             (b".a { color: red;\x00 }", "NUL"),
+            (".a { content: \"safe\u202eunsafe\"; }\n".encode("utf-8"), "bidirectional control"),
         )
         for payload, expected in cases:
             with self.subTest(expected=expected):
