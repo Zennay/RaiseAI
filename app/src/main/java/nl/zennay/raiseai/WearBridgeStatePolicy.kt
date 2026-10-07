@@ -19,6 +19,11 @@ internal object WearBridgeStatePolicy {
     fun normalizeInboundState(state: String): String =
         state.takeIf { it in inboundStates } ?: "unknown"
 
+    fun acceptsStartRequest(state: String, reason: String, active: Boolean): Boolean {
+        if (active) return false
+        return reason != "gesture" || !blocksGesture(state)
+    }
+
     fun stateAfterSpeakingUpdate(speaking: Boolean, connected: Boolean): String =
         if (!connected) "disconnected" else if (speaking) "speaking" else "ready"
 }
