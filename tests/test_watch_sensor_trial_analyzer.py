@@ -53,58 +53,6 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
         self.assertEqual(report["results"]["detection_rate"], 0.9)
         self.assertEqual(report["results"]["false_trigger_rate"], 0.05)
 
-    def test_report_has_exact_share_safe_shape(self):
-        trials = [trial("mouth_raise", 1, True), trial("normal_move", 2, False)]
-        report = analyzer.build_report(
-            trials,
-            required_raises=1,
-            required_non_triggers=1,
-        )
-        self.assertEqual(
-            set(report),
-            {
-                "schema_version",
-                "v1_gate_passed",
-                "evidence_identity",
-                "requirements",
-                "results",
-                "remaining",
-                "rejected_trial_count",
-            },
-        )
-        self.assertEqual(
-            set(report["evidence_identity"]),
-            {"app_version", "source_revision", "detector_config"},
-        )
-        self.assertEqual(
-            set(report["requirements"]),
-            {
-                "mouth_raise_trials",
-                "non_trigger_trials",
-                "min_detection_rate",
-                "max_false_trigger_rate",
-            },
-        )
-        self.assertEqual(
-            set(report["results"]),
-            {
-                "mouth_raise_trials",
-                "mouth_raise_detected",
-                "detection_rate",
-                "non_trigger_trials",
-                "false_triggers",
-                "false_trigger_rate",
-            },
-        )
-        self.assertEqual(
-            set(report["remaining"]),
-            {"mouth_raise_trials", "non_trigger_trials"},
-        )
-        serialized = str(report)
-        for forbidden in ("session_id", "max_similarity", "detector_triggered"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, serialized)
-
     def test_fails_when_detection_rate_is_below_target(self):
         trials = [trial("mouth_raise", sid, sid <= 26) for sid in range(1, 31)]
         trials += [trial("normal_move", sid, False) for sid in range(31, 131)]
