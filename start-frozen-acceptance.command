@@ -125,14 +125,17 @@ for raw_line in text.splitlines():
     raw_key, raw_value = raw_line.split("=", 1)
     key = raw_key.strip()
     value = raw_value.strip()
-    if key in required_keys:
-        if raw_key != key or raw_value != value:
-            raise SystemExit(
-                f"Gateway profile is invalid: {key} property must use canonical key=value syntax"
-            )
-        if key in values:
-            raise SystemExit(f"Gateway profile is invalid: duplicate {key} property")
-        values[key] = value
+    if key not in required_keys:
+        raise SystemExit(
+            f"Gateway profile is invalid: unexpected property: {key or '<empty>'}"
+        )
+    if raw_key != key or raw_value != value:
+        raise SystemExit(
+            f"Gateway profile is invalid: {key} property must use canonical key=value syntax"
+        )
+    if key in values:
+        raise SystemExit(f"Gateway profile is invalid: duplicate {key} property")
+    values[key] = value
 
 missing = sorted(required_keys - values.keys())
 if missing:
