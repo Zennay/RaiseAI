@@ -1,11 +1,19 @@
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+import importlib.util
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
-from tools import run_quality_tooling_contracts as runner
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNNER = ROOT / "tools" / "run_quality_tooling_contracts.py"
+SPEC = importlib.util.spec_from_file_location("raise_quality_tooling_runner", RUNNER)
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError("could not load quality tooling contract runner")
+runner = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(runner)
 
 
 EXPECTED_MODULES = (
