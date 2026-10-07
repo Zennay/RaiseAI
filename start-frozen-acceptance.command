@@ -35,6 +35,10 @@ fi
 
 case "${1:-}" in
   -h|--help|help)
+    if [ "$#" -ne 1 ]; then
+      usage
+      exit 2
+    fi
     usage
     exit 0
     ;;
