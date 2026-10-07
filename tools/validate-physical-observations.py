@@ -216,6 +216,7 @@ def write_new_json_atomically(path: Path, payload: dict[str, Any]) -> None:
             delete=False,
         ) as output_file:
             temp_path = Path(output_file.name)
+            os.fchmod(output_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
             output_file.write(serialized)
             output_file.flush()
             os.fsync(output_file.fileno())

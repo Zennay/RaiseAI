@@ -4,6 +4,7 @@ import io
 import json
 import os
 import pathlib
+import stat
 import tempfile
 import unittest
 from unittest import mock
@@ -266,6 +267,7 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 first = validator.main([str(session), str(observations), "--output", str(result)])
             self.assertEqual(first, 0)
             persisted = result.read_text(encoding="utf-8")
+            self.assertEqual(stat.S_IMODE(result.stat().st_mode), 0o600)
             self.assertNotIn(secret, persisted)
             self.assertNotIn(session_payload()["watch_serial"], persisted)
             self.assertTrue(json.loads(persisted)["quality_evidence_complete"])
