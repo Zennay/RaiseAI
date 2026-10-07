@@ -261,6 +261,104 @@ test("enabled current-info route requests web search explicitly", async () => {
   assert.deepEqual(calls[0].request.tools, [{ type: "web_search" }]);
 });
 
+test("OpenAI accepts an explicit completed response status", async () => {
+  const execute = createOpenAIExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: responseHeaders(),
+      async json() {
+        return {
+          status: "completed",
+          output: [{
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "voltooid" }]
+          }]
+        };
+      }
+    })
+  });
+
+  const result = await execute({ route: "quick_ai" }, "hoi");
+  assert.equal(result.answer, "voltooid");
+});
+
+test("OpenAI never returns partial output from explicit non-completed responses", async () => {
+  for (const responseStatus of [
+    "incomplete",
+    "failed",
+    "in_progress",
+    "queued",
+    "cancelled",
+    "requires_action",
+    "completed "
+  ]) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: responseHeaders(),
+        async json() {
+          return {
+            status: responseStatus,
+            output: [{
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "partial must not pass" }]
+            }]
+          };
+        }
+      })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_incomplete_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      },
+      String(responseStatus)
+    );
+  }
+});
+
+test("malformed explicit OpenAI completion status fails as an invalid response", async () => {
+  for (const responseStatus of [null, "", 42, {}, []]) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: responseHeaders(),
+        async json() {
+          return {
+            status: responseStatus,
+            output: [{
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "must not pass" }]
+            }]
+          };
+        }
+      })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      },
+      String(responseStatus)
+    );
+  }
+});
+
 test("OpenAI response preserves every non-empty output_text block", async () => {
   const execute = createOpenAIExecutor({
     apiKey: "test-key",
