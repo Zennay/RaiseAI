@@ -127,6 +127,12 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertRegex(self.text, r"timeout-minutes:\s*[1-9][0-9]*")
         self.assertIn("cancel-in-progress: true", self.text)
 
+    def test_job_stays_github_hosted_and_secret_free(self):
+        self.assertIn("runs-on: ubuntu-latest", self.text)
+        self.assertNotIn("self-hosted", self.text)
+        self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")
+        self.assertNotRegex(self.text, r"(?m)^\s*environment\s*:")
+
 
 if __name__ == "__main__":
     unittest.main()
