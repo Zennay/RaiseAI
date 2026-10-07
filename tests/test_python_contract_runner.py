@@ -113,9 +113,9 @@ class PassingContract(unittest.TestCase):
 
         rendered = output.getvalue()
         self.assertEqual(exit_code, 1, rendered)
-        self.assertIn("invalid test module entries", rendered)
+        self.assertIn("unsafe test module entries", rendered)
         self.assertIn(
-            "INVALID-CONTRACT-MODULE: test_linked_contract.py: symbolic links are forbidden",
+            "UNSAFE-CONTRACT-MODULE: test_linked_contract.py: symbolic links are forbidden",
             rendered,
         )
         self.assertNotIn("linked contract target must not be imported", rendered)
