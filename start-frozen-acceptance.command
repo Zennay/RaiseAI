@@ -87,6 +87,7 @@ from urllib.parse import urlsplit
 
 source = os.path.abspath(os.path.expanduser(sys.argv[1]))
 destination = sys.argv[2]
+MAX_PROFILE_BYTES = 4096
 
 if not hasattr(os, "O_NOFOLLOW"):
     raise SystemExit("Gateway profile snapshot requires O_NOFOLLOW support")
@@ -104,8 +105,16 @@ try:
         raise SystemExit(
             f"Gateway profile must be a regular non-symlink file: {source}"
         )
+    if source_stat.st_size > MAX_PROFILE_BYTES:
+        raise SystemExit(
+            f"Gateway profile is invalid: exceeds {MAX_PROFILE_BYTES} byte limit"
+        )
     with os.fdopen(source_fd, "rb", closefd=False) as handle:
-        payload = handle.read()
+        payload = handle.read(MAX_PROFILE_BYTES + 1)
+    if len(payload) > MAX_PROFILE_BYTES:
+        raise SystemExit(
+            f"Gateway profile is invalid: exceeds {MAX_PROFILE_BYTES} byte limit"
+        )
 finally:
     os.close(source_fd)
 
