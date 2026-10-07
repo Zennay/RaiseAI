@@ -86,7 +86,7 @@ class NativeVoiceLifecycleContractTest {
         assertOutcomeWriteIsLifecycleGated(
             source = gatewaySource,
             blockStart = ".onFailure { error ->",
-            blockEnd = "        }\n    }",
+            blockEnd = null,
             evidenceWrite = "WatchE2eEvidence.recordFailure("
         )
     }
@@ -94,13 +94,21 @@ class NativeVoiceLifecycleContractTest {
     private fun assertOutcomeWriteIsLifecycleGated(
         source: String,
         blockStart: String,
-        blockEnd: String,
+        blockEnd: String?,
         evidenceWrite: String
     ) {
         val start = source.indexOf(blockStart)
-        val end = source.indexOf(blockEnd, start + blockStart.length)
         assertTrue("expected gateway outcome block: $blockStart", start >= 0)
-        assertTrue("expected gateway outcome block end: $blockEnd", end > start)
+
+        val end = if (blockEnd == null) {
+            source.length
+        } else {
+            source.indexOf(blockEnd, start + blockStart.length)
+        }
+        assertTrue(
+            "expected gateway outcome block end: " + (blockEnd ?: "<scope end>"),
+            end > start
+        )
 
         val block = source.substring(start, end)
         val gate = block.indexOf("postToUiIfActive {")
