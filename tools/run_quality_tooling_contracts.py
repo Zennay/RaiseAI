@@ -26,6 +26,16 @@ QUALITY_MODULES = (
 )
 
 
+def suite_test_modules(suite: unittest.TestSuite) -> set[str]:
+    modules: set[str] = set()
+    for item in suite:
+        if isinstance(item, unittest.TestSuite):
+            modules.update(suite_test_modules(item))
+            continue
+        modules.add(item.__class__.__module__)
+    return modules
+
+
 def build_suite(
     modules: tuple[str, ...] = QUALITY_MODULES,
 ) -> tuple[unittest.TestSuite, list[str]]:
@@ -34,8 +44,10 @@ def build_suite(
     empty_modules: list[str] = []
 
     for module in modules:
+        errors_before = len(loader.errors)
         module_suite = loader.loadTestsFromName(module)
-        if module_suite.countTestCases() == 0:
+        import_failed = len(loader.errors) != errors_before
+        if not import_failed and module not in suite_test_modules(module_suite):
             empty_modules.append(module)
         suite.addTests(module_suite)
 
