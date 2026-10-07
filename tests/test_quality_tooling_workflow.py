@@ -342,5 +342,84 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertNotRegex(self.text, r"(?m)^\s*environment\s*:")
 
 
+    def test_critical_yaml_mapping_keys_are_unique(self):
+        for key in ("on", "permissions", "concurrency", "jobs"):
+            with self.subTest(scope="top-level", key=key):
+                matches = re.findall(
+                    rf"(?m)^{re.escape(key)}:\\s*$",
+                    self.text,
+                )
+                self.assertEqual(
+                    len(matches),
+                    1,
+                    f"top-level {key!r} mapping must appear exactly once",
+                )
+
+        jobs_block = self.text.split("\\njobs:\\n", 1)[1]
+        job_names = re.findall(r"(?m)^  ([A-Za-z0-9_-]+):\\s*$", jobs_block)
+        self.assertEqual(
+            job_names,
+            ["python-quality"],
+            "hosted quality workflow must remain a single audited job",
+        )
+
+        for key in ("runs-on", "timeout-minutes", "env", "steps"):
+            with self.subTest(scope="python-quality", key=key):
+                matches = re.findall(
+                    rf"(?m)^    {re.escape(key)}:[^\\n]*$",
+                    jobs_block,
+                )
+                self.assertEqual(
+                    len(matches),
+                    1,
+                    f"python-quality {key!r} mapping must appear exactly once",
+                )
+
+        for key in ("container", "services", "strategy", "permissions"):
+            with self.subTest(scope="python-quality", forbidden_key=key):
+                self.assertNotRegex(
+                    jobs_block,
+                    rf"(?m)^    {re.escape(key)}:",
+                    f"python-quality must not add job-level {key!r}",
+                )
+
+    def test_trigger_surface_stays_push_and_pull_request_only(self):
+        lines = self.text.splitlines()
+        on_start = lines.index("on:") + 1
+        permissions_start = lines.index("permissions:")
+        trigger_lines = lines[on_start:permissions_start]
+        events = []
+        for line in trigger_lines:
+            match = re.fullmatch(r"  ([A-Za-z0-9_-]+):", line)
+            if match:
+                events.append(match.group(1))
+
+        self.assertEqual(
+            events,
+            ["push", "pull_request"],
+            "dedicated quality lane must not gain extra trigger surfaces",
+        )
+
+    def test_reproducible_environment_keys_cannot_be_shadowed(self):
+        expected_lines = {
+            "LANG": "      LANG: C.UTF-8",
+            "PYTHONHASHSEED": '      PYTHONHASHSEED: "1"',
+            "PYTHONDONTWRITEBYTECODE": '      PYTHONDONTWRITEBYTECODE: "1"',
+            "TZ": "      TZ: UTC",
+        }
+        for key, expected_line in expected_lines.items():
+            with self.subTest(key=key):
+                matches = [
+                    line
+                    for line in self.text.splitlines()
+                    if re.match(rf"^\\s+{re.escape(key)}:", line)
+                ]
+                self.assertEqual(
+                    matches,
+                    [expected_line],
+                    f"{key} must be declared exactly once at job scope",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
