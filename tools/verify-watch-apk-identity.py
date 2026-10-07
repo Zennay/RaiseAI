@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import re
@@ -53,6 +54,16 @@ def verify_apk(
     try:
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
+            duplicate_names = sorted(
+                name for name, count in Counter(names).items() if count > 1
+            )
+            if duplicate_names:
+                rendered = ", ".join(duplicate_names[:5])
+                suffix = " ..." if len(duplicate_names) > 5 else ""
+                raise ApkIdentityError(
+                    f"APK contains duplicate ZIP members: {rendered}{suffix}"
+                )
+
             dex_files = sorted(name for name in names if name.endswith(".dex"))
             if not dex_files:
                 raise ApkIdentityError("APK contains no DEX files")
