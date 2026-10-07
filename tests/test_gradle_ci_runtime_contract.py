@@ -25,6 +25,14 @@ class GradleCiRuntimeContractTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
 
+    def test_python_runtime_contract_is_explicit(self):
+        command = (
+            '          python3 -c \'import platform, sys; '
+            'assert platform.python_implementation() == "CPython"; '
+            'assert sys.version_info[:2] == (3, 12), sys.version\''
+        )
+        self.assertEqual(self.text.count(command), 1)
+
     def test_checkout_is_immutable_node24_exact_head(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
