@@ -470,6 +470,62 @@ test("OpenRouter response body is bounded before JSON parsing", async () => {
   );
 });
 
+test("OpenRouter enforces canonical declared response lengths", async () => {
+  const body = JSON.stringify({
+    model: "z-ai/glm-5.3-flash",
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "ok" }
+    }]
+  });
+  const actualBytes = Buffer.byteLength(body, "utf8");
+
+  const exact = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () =>
+      rawHttpResponse(
+        200,
+        body,
+        "application/json",
+        { "content-length": String(actualBytes) }
+      )
+  });
+  const exactResult = await exact({ route: "quick_ai" }, "hoi");
+  assert.equal(exactResult.answer, "ok");
+
+  for (const declared of [
+    "",
+    " ",
+    "abc",
+    "-1",
+    "1.5",
+    "10, 10",
+    String(actualBytes - 1),
+    String(actualBytes + 1)
+  ]) {
+    const execute = createOpenRouterExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () =>
+        rawHttpResponse(
+          200,
+          body,
+          "application/json",
+          { "content-length": declared }
+        )
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openrouter_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      },
+      JSON.stringify(declared)
+    );
+  }
+});
+
 test("OpenRouter rejects oversized declared response bodies before reading them", async () => {
   const execute = createOpenRouterExecutor({
     apiKey: "test-key",
