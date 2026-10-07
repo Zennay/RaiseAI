@@ -161,6 +161,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
     def test_push_and_pull_request_filters_cover_quality_surface(self):
         expected_paths = [
             "*.command",
+            "*.py",
             "tools/analyze-watch-sensor-traces.py",
             "tools/analyze-watch-sensor-trials.py",
             "tools/create-physical-observation-template.py",
@@ -218,6 +219,17 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                     "set -euo pipefail",
                     f"{path} must fail closed on command, unset-variable, and pipeline errors",
                 )
+
+    def test_root_python_entrypoints_trigger_and_compile_automatically(self):
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                self.assertEqual(self._trigger_paths(event)[:2], ["*.command", "*.py"])
+        self.assertIn("python3 -m py_compile *.py ", self.text)
+        discovered = sorted(path.name for path in ROOT.glob("*.py"))
+        self.assertTrue(discovered, "repository must retain at least one root Python entrypoint")
+        for path in discovered:
+            with self.subTest(path=path):
+                self.assertTrue(path.endswith(".py"))
 
     def test_compiles_all_python_quality_tools(self):
         tools = [
@@ -749,7 +761,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Python syntax": [
                 "set -euo pipefail",
-                "python3 -m py_compile tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/create-physical-observation-template.py tools/fetch-frozen-physical-handoff.py tools/validate-physical-observations.py tools/validate-watch-e2e-evidence.py tools/verify-watch-apk-identity.py",
+                "python3 -m py_compile *.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/create-physical-observation-template.py tools/fetch-frozen-physical-handoff.py tools/validate-physical-observations.py tools/validate-watch-e2e-evidence.py tools/verify-watch-apk-identity.py",
             ],
             "Quality tooling regressions": [
                 "set -euo pipefail",
