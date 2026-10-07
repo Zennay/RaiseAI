@@ -60,7 +60,10 @@ def unsafe_contract_module_paths(paths: list[Path]) -> list[str]:
 def contract_module_names(paths: list[Path] | None = None) -> list[str]:
     if paths is None:
         paths = contract_module_paths()
-    return sorted(path.stem for path in paths)
+    return sorted(
+        ".".join(path.relative_to(TESTS_DIR).with_suffix("").parts)
+        for path in paths
+    )
 
 
 def discovered_test_modules(suite: unittest.TestSuite) -> set[str]:
