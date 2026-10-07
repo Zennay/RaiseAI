@@ -193,14 +193,18 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                       printf '%s\n' "${FAKE_MODEL:-SM-L315F}"
                       ;;
                     "shell getprop ro.build.characteristics")
-                      if [ "${FAKE_NOT_WEAR:-0}" = "1" ]; then
+                      if [ "${FAKE_NEAR_WEAR:-0}" = "1" ]; then
+                        echo "notwatch,nosdcard"
+                      elif [ "${FAKE_NOT_WEAR:-0}" = "1" ]; then
                         echo "nosdcard"
                       else
                         echo "watch"
                       fi
                       ;;
                     "shell pm list features")
-                      if [ "${FAKE_NOT_WEAR:-0}" != "1" ]; then
+                      if [ "${FAKE_NEAR_WEAR:-0}" = "1" ]; then
+                        echo "feature:vendor.android.hardware.type.watch.compat"
+                      elif [ "${FAKE_NOT_WEAR:-0}" != "1" ]; then
                         echo "feature:android.hardware.type.watch"
                       fi
                       ;;
@@ -761,6 +765,17 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         )
         self.assertFalse(self.fetch_marker.exists())
         self.assertFalse(self.log.exists())
+
+    def test_rejects_wear_substrings_before_fetch(self):
+        result = self.run_launcher({"FAKE_NEAR_WEAR": "1"})
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            "Selected ADB target does not identify as Wear OS",
+            result.stdout,
+        )
+        self.assertFalse(self.fetch_marker.exists(), result.stdout)
+        self.assertFalse(self.log.exists(), result.stdout)
 
     def test_rejects_multiple_active_adb_devices_before_fetch(self):
         result = self.run_launcher({"FAKE_MULTIPLE_DEVICES": "1"})

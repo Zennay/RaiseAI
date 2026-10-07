@@ -256,6 +256,32 @@ PY
   exit 1
 }
 
+is_wear_os_identity() {
+  local characteristics="$1"
+  local features="$2"
+
+  if printf '%s\n' "$characteristics" | awk -F',' '
+    {
+      for (i = 1; i <= NF; i++) {
+        value = $i
+        gsub(/^[[:space:]]+/, "", value)
+        gsub(/[[:space:]]+$/, "", value)
+        if (tolower(value) == "watch") {
+          found = 1
+        }
+      }
+    }
+    END { exit(found ? 0 : 1) }
+  '; then
+    return 0
+  fi
+
+  printf '%s\n' "$features" | awk '
+    tolower($0) == "feature:android.hardware.type.watch" { found = 1 }
+    END { exit(found ? 0 : 1) }
+  '
+}
+
 if ! "$ADB" start-server >/dev/null; then
   echo "ADB server failed to start."
   exit 1
@@ -290,8 +316,7 @@ case "$MODEL" in
     ;;
 esac
 
-if ! printf '%s' "$CHARACTERISTICS" | grep -qi watch &&
-   ! printf '%s\n' "$FEATURES" | grep -q 'android.hardware.type.watch'; then
+if ! is_wear_os_identity "$CHARACTERISTICS" "$FEATURES"; then
   echo "Selected ADB target does not identify as Wear OS: $TARGET"
   exit 1
 fi
@@ -338,8 +363,7 @@ case "$POST_MODEL" in
     exit 1
     ;;
 esac
-if ! printf '%s' "$POST_CHARACTERISTICS" | grep -qi watch &&
-   ! printf '%s\n' "$POST_FEATURES" | grep -q 'android.hardware.type.watch'; then
+if ! is_wear_os_identity "$POST_CHARACTERISTICS" "$POST_FEATURES"; then
   echo "Bound ADB target stopped identifying as Wear OS during frozen handoff verification: $TARGET"
   exit 1
 fi
