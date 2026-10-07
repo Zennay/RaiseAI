@@ -1,4 +1,7 @@
+import contextlib
 import importlib.util
+import io
+import json
 import pathlib
 import sys
 import tempfile
@@ -103,6 +106,23 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
             path.write_text(content, encoding="utf-8")
             with self.assertRaisesRegex(analyzer.TraceError, "x must be a finite number"):
                 analyzer.read_samples(path)
+
+    def test_cli_rejects_invalid_utf8_with_machine_readable_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "traces.csv"
+            path.write_bytes(
+                b"label,session_id,elapsed_ms,x,y,z\n"
+                b"mouth_raise,1,0,0.1,0.2,9.7\n"
+                b"\xff"
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = analyzer.main([str(path)])
+
+        self.assertEqual(code, 2)
+        payload = json.loads(output.getvalue())
+        self.assertFalse(payload["valid"])
+        self.assertEqual(payload["reason"], "trace CSV must be valid UTF-8")
 
     def test_read_samples_rejects_infinite_sensor_value(self):
         content = "label,session_id,elapsed_ms,x,y,z\nmouth_raise,1,0,0.1,inf,9.7\n"
