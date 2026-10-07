@@ -18,6 +18,15 @@ def main() -> int:
         str(TESTS_DIR),
         pattern="test_*.py",
     )
+    test_count = suite.countTestCases()
+    if test_count == 0:
+        print(
+            "ERROR: aggregate Python contract discovery found zero tests; "
+            "an empty quality suite must fail closed.",
+            file=sys.stderr,
+        )
+        return 1
+
     result = unittest.TextTestRunner(
         stream=sys.stdout,
         verbosity=2,
