@@ -10,6 +10,7 @@ on:
       - "README.md"
       - "START-HERE.md"
       - "tests/test_release_documentation_identity.py"
+      - "tests/test_release_documentation_workflow.py"
       - ".github/workflows/release-documentation-identity.yml"
 
 permissions:
@@ -44,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest tests.test_release_documentation_identity
+          python3 -m unittest tests.test_release_documentation_identity tests.test_release_documentation_workflow
       - name: Verify worktree remains clean
         shell: bash
         run: |
