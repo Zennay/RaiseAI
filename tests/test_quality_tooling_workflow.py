@@ -345,6 +345,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("LANG: C.UTF-8", self.text)
         self.assertIn("LC_ALL: C.UTF-8", self.text)
         self.assertIn('PYTHONHASHSEED: "1"', self.text)
+        self.assertIn('PYTHONNOUSERSITE: "1"', self.text)
         self.assertIn('PYTHONDONTWRITEBYTECODE: "1"', self.text)
         self.assertIn("PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc", self.text)
         self.assertIn("TZ: UTC", self.text)
@@ -422,6 +423,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "LANG": "      LANG: C.UTF-8",
             "LC_ALL": "      LC_ALL: C.UTF-8",
             "PYTHONHASHSEED": '      PYTHONHASHSEED: "1"',
+            "PYTHONNOUSERSITE": '      PYTHONNOUSERSITE: "1"',
             "PYTHONDONTWRITEBYTECODE": '      PYTHONDONTWRITEBYTECODE: "1"',
             "PYTHONPYCACHEPREFIX": "      PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc",
             "TZ": "      TZ: UTC",
@@ -659,7 +661,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             break
         self.assertEqual(
             job_env_keys,
-            ["LANG", "LC_ALL", "PYTHONHASHSEED", "PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX", "TZ"],
+            ["LANG", "LC_ALL", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX", "TZ"],
             "python-quality job env must not gain unreviewed variables",
         )
 
