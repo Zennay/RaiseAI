@@ -720,7 +720,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Shell syntax": [
                 "set -euo pipefail",
-                "bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command",
+                "bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command",
             ],
             "Python syntax": [
                 "set -euo pipefail",
