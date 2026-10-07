@@ -40,6 +40,14 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
 
+    def test_python_runtime_is_explicitly_pinned(self):
+        command = (
+            '          python3 -c \'import platform, sys; '
+            'assert platform.python_implementation() == "CPython"; '
+            'assert sys.version_info[:2] == (3, 12), sys.version\''
+        )
+        self.assertEqual(self.text.count(command), 1)
+
     def test_explicit_py_compile_cannot_dirty_checkout(self):
         self.assertIn("python3 -m py_compile", self.text)
         self.assertEqual(
