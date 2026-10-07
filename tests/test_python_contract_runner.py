@@ -88,6 +88,38 @@ class PassingContract(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertNotIn("SKIPPED:", output)
 
+    def test_symlinked_contract_module_is_rejected_before_discovery(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-link-") as tmp:
+            root = Path(tmp)
+            tests_dir = root / "tests"
+            tests_dir.mkdir()
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+            target = root / "linked_contract.py"
+            target.write_text(
+                'raise RuntimeError("linked contract target must not be imported")\n',
+                encoding="utf-8",
+            )
+            (tests_dir / "test_linked_contract.py").symlink_to(target)
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("invalid test module entries", rendered)
+        self.assertIn(
+            "INVALID-CONTRACT-MODULE: test_linked_contract.py: symbolic links are forbidden",
+            rendered,
+        )
+        self.assertNotIn("linked contract target must not be imported", rendered)
+
     def test_named_contract_module_without_tests_returns_nonzero(self):
         exit_code, output = self.run_temporary_suite(
             """
