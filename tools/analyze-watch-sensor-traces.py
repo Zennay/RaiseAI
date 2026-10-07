@@ -109,6 +109,8 @@ def read_samples(path: Path) -> list[Sample]:
         samples: list[Sample] = []
         labels_by_session: dict[int, str] = {}
         for line, row in enumerate(reader, start=2):
+            if None in row:
+                raise TraceError(f"line {line}: row has surplus fields")
             label = (row.get("label") or "").strip()
             if label not in ALLOWED_LABELS:
                 raise TraceError(f"line {line}: unknown label {label!r}")
