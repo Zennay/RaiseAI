@@ -505,16 +505,23 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertFalse(self.fetch_marker.exists(), result.stdout)
         self.assertFalse(self.log.exists(), result.stdout)
 
-    def test_help_exits_without_profile_device_or_fetch_side_effects(self):
-        result = self.run_launcher(
-            {"FAKE_NO_DEVICES": "1"},
-            args=["--help"],
-        )
+    def test_all_help_aliases_exit_without_profile_device_or_fetch_side_effects(self):
+        for alias in ("-h", "--help", "help"):
+            with self.subTest(alias=alias):
+                adb_started = self.root / f"help-{alias.replace('-', 'dash')}-adb-started"
+                result = self.run_launcher(
+                    {
+                        "FAKE_NO_DEVICES": "1",
+                        "FAKE_ADB_START_MARKER": str(adb_started),
+                    },
+                    args=[alias],
+                )
 
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("Usage:", result.stdout)
-        self.assertFalse(self.fetch_marker.exists())
-        self.assertFalse(self.log.exists())
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn("Usage:", result.stdout)
+                self.assertFalse(adb_started.exists(), result.stdout)
+                self.assertFalse(self.fetch_marker.exists(), result.stdout)
+                self.assertFalse(self.log.exists(), result.stdout)
 
     def test_all_help_aliases_reject_surplus_arguments_before_side_effects(self):
         missing_profile = self.root / "missing.properties"
