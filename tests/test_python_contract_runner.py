@@ -120,6 +120,29 @@ class PassingContract(unittest.TestCase):
         )
         self.assertNotIn("linked contract target must not be imported", rendered)
 
+    def test_non_regular_contract_module_entry_is_rejected_before_discovery(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-nonregular-") as tmp:
+            tests_dir = Path(tmp)
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+            (tests_dir / "test_directory.py").mkdir()
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("unsafe test module entries", rendered)
+        self.assertIn(
+            "UNSAFE-CONTRACT-MODULE: test_directory.py: must be a regular file",
+            rendered,
+        )
+
     def test_symlinked_contract_package_is_rejected_before_discovery(self):
         with tempfile.TemporaryDirectory(prefix="raiseai-runner-package-link-") as tmp:
             root = Path(tmp)
