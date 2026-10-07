@@ -197,12 +197,14 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
     def test_checks_shell_syntax_for_all_command_entrypoints(self):
         self.assertIn("- name: Shell syntax", self.text)
-        self.assertIn("bash -n", self.text)
+        self.assertIn("bash -n -- *.command", self.text)
         self.assertEqual(self._trigger_paths("push")[0], "*.command")
         self.assertEqual(self._trigger_paths("pull_request")[0], "*.command")
-        for path in SHELL_SYNTAX_ENTRYPOINTS:
-            with self.subTest(path=path):
-                self.assertIn(path, self.text, f"{path} must be syntax-checked")
+        self.assertIn(
+            "bash -n -- *.command",
+            self.text,
+            "hosted shell syntax validation must cover the entire reviewed root command set",
+        )
 
     def test_strict_command_entrypoints_keep_bash_and_strict_mode(self):
         for path in STRICT_COMMAND_ENTRYPOINTS:
@@ -246,9 +248,16 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "System.Management.Automation.Language.Parser]::ParseFile",
             self.text,
         )
-        for path in POWERSHELL_SYNTAX_ENTRYPOINTS:
-            with self.subTest(path=path):
-                self.assertIn(path, self.text)
+        self.assertIn(
+            'Get-ChildItem -LiteralPath . -File -Filter "*.ps1" | Sort-Object Name',
+            self.text,
+        )
+        self.assertIn("if ($files.Count -eq 0)", self.text)
+        self.assertIn(
+            'Get-ChildItem -LiteralPath . -File -Filter "*.ps1" | Sort-Object Name',
+            self.text,
+            "hosted PowerShell syntax validation must discover every reviewed root entrypoint",
+        )
 
     def test_compiles_all_python_quality_tools(self):
         self.assertIn("tools/*.py", self._trigger_paths("push"))
@@ -770,7 +779,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Shell syntax": [
                 "set -euo pipefail",
-                "bash -n upgrade-watch.command watch-preflight.command login-from-mac.command open-in-android-studio.command setup-and-install-watch.command install-mac-adb-autoconnect.command pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command",
+                "bash -n -- *.command",
             ],
             "Python syntax": [
                 "set -euo pipefail",
@@ -779,7 +788,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "PowerShell syntax": [
                 "set -euo pipefail",
                 "command -v pwsh >/dev/null",
-                "pwsh -NoLogo -NoProfile -NonInteractive -Command '$tokens = $null; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path \"./install-watch-windows.ps1\"), [ref]$tokens, [ref]$errors); if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }'",
+                "pwsh -NoLogo -NoProfile -NonInteractive -Command '$files = @(Get-ChildItem -LiteralPath . -File -Filter \"*.ps1\" | Sort-Object Name); if ($files.Count -eq 0) { Write-Error \"No root PowerShell entrypoints found\"; exit 1 }; foreach ($file in $files) { $tokens = $null; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors); if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error \"$($file.Name): $($_.Message)\" }; exit 1 } }'",
             ],
             "Quality tooling regressions": [
                 "set -euo pipefail",
