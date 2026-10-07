@@ -44,7 +44,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
     def test_action_execution_surface_is_checkout_only(self):
         refs = re.findall(
-            r"^\\s*(?:-\\s*)?uses:\\s*([^@\\s]+)@([^\\s#]+)",
+            r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
             self.text,
             flags=re.MULTILINE,
         )
