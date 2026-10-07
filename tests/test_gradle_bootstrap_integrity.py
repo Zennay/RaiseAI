@@ -1,5 +1,7 @@
 from pathlib import Path
 import re
+import stat
+import tempfile
 import unittest
 
 
@@ -9,9 +11,43 @@ WORKFLOW = ROOT / ".github" / "workflows" / "gradle-bootstrap-integrity.yml"
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
+def read_contract_text(path: Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: contract input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: contract input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: contract input must be valid UTF-8") from exc
+
+
 class GradleBootstrapIntegrityTest(unittest.TestCase):
     def setUp(self):
-        self.script = GRADLEW.read_text(encoding="utf-8")
+        self.script = read_contract_text(GRADLEW)
+
+    def test_contract_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular = root / "regular.txt"
+            regular.write_text("safe\n", encoding="utf-8")
+            self.assertEqual(read_contract_text(regular), "safe\n")
+
+            linked = root / "linked.txt"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_contract_text(linked)
+
+            directory = root / "directory.txt"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_contract_text(directory)
+
+            invalid = root / "invalid.txt"
+            invalid.write_bytes(b"safe\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_contract_text(invalid)
 
     def test_pins_full_sha256_for_gradle_distribution(self):
         match = re.search(r'^GRADLE_BIN_SHA256="([0-9a-f]{64})"$', self.script, re.MULTILINE)
@@ -92,7 +128,7 @@ class GradleBootstrapIntegrityTest(unittest.TestCase):
 
 class GradleBootstrapWorkflowContractTest(unittest.TestCase):
     def setUp(self):
-        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.workflow = read_contract_text(WORKFLOW)
 
     def test_checkout_uses_audited_node24_release(self):
         expected = (
