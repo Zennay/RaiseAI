@@ -25,7 +25,7 @@ def production_text_paths() -> list[str]:
     names = [name.decode("utf-8", "strict") for name in raw.split(b"\0") if name]
     return [
         name for name in names
-        if not name.startswith(("tests/", "fixtures/", "docs/"))
+        if not name.startswith(("fixtures/", "docs/"))
         and pathlib.PurePosixPath(name).suffix.lower() in SOURCE_SUFFIXES
     ]
 
@@ -38,6 +38,10 @@ class MergeConflictMarkerTests(unittest.TestCase):
             with self.subTest(path=name):
                 source = (ROOT / name).read_text(encoding="utf-8")
                 validate_no_conflict_markers(source, name)
+
+    def test_tracked_test_sources_are_not_exempt(self):
+        paths = production_text_paths()
+        self.assertIn("tests/test_merge_conflict_markers.py", paths)
 
     def test_rejects_merge_and_diff3_markers(self):
         for marker in ("<<<<<<< HEAD", "=======", ">>>>>>> feature", "||||||| base"):
