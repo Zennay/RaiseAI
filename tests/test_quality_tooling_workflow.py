@@ -1,12 +1,21 @@
+import importlib.util
 import pathlib
 import re
 import unittest
 
-from tools.run_quality_tooling_contracts import QUALITY_MODULES
-
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-tooling-test.yml"
+RUNNER = ROOT / "tools" / "run_quality_tooling_contracts.py"
+RUNNER_SPEC = importlib.util.spec_from_file_location(
+    "raise_quality_tooling_runner_contract",
+    RUNNER,
+)
+if RUNNER_SPEC is None or RUNNER_SPEC.loader is None:
+    raise RuntimeError("could not load quality tooling contract runner")
+RUNNER_MODULE = importlib.util.module_from_spec(RUNNER_SPEC)
+RUNNER_SPEC.loader.exec_module(RUNNER_MODULE)
+QUALITY_MODULES = RUNNER_MODULE.QUALITY_MODULES
 STRICT_COMMAND_ENTRYPOINTS = [
     "pull-diagnostics.command",
     "pull-watch-data.command",
