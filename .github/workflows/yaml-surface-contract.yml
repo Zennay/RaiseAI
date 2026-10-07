@@ -60,6 +60,12 @@ jobs:
           command -v ruby >/dev/null
           ruby --disable-gems -e 'require "psych"; expected = ["3.2.3", "5.0.1"]; actual = [RUBY_VERSION, Psych::VERSION]; abort "unexpected Ruby/Psych runtime: #{actual.join(" / ")}" unless actual == expected; puts "Ruby #{RUBY_VERSION} / Psych #{Psych::VERSION}"'
 
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
       - name: Validate tracked YAML surface
         shell: bash
         run: |
