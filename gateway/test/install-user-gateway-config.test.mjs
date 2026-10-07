@@ -38,7 +38,7 @@ function writeExecutable(file, content) {
   fs.writeFileSync(file, content, { mode: 0o755 });
 }
 
-function runInstallerWithStubbedRuntime(host, { configDir, existingToken } = {}) {
+function runInstallerWithStubbedRuntime(host, { configDir, existingToken, nodeMajor = "22" } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-installer-san-"));
   const home = path.join(root, "home");
   const bin = path.join(root, "bin");
@@ -95,7 +95,17 @@ esac
 `
   );
   writeExecutable(path.join(bin, "systemctl"), "#!/usr/bin/env bash\nexit 0\n");
-  writeExecutable(path.join(bin, "node"), "#!/usr/bin/env bash\nexit 0\n");
+  writeExecutable(
+    path.join(bin, "node"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = "-p" ]; then
+  printf '%s\\n' "${FAKE_NODE_MAJOR:-22}"
+  exit 0
+fi
+exit 0
+`
+  );
 
   try {
     const result = spawnSync("bash", [installer], {
@@ -105,6 +115,7 @@ esac
         HOME: home,
         PATH: bin + path.delimiter + process.env.PATH,
         OPENSSL_LOG: opensslLog,
+        FAKE_NODE_MAJOR: nodeMajor,
         RAISE_DEPLOY_REVISION: "a".repeat(40),
         RAISE_PUBLIC_HOST: host,
         RAISE_PUBLIC_PORT: "8787",
@@ -135,6 +146,35 @@ esac
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
+
+test("installer requires Node.js 22+ before deployment side effects", () => {
+  for (const nodeMajor of ["", "not-a-number", "0", "21"]) {
+    const result = runInstallerWithStubbedRuntime("raise.example", { nodeMajor });
+    assert.notEqual(result.status, 0, JSON.stringify(nodeMajor));
+    assert.match(result.stderr, /Raise gateway requires Node\.js >= 22/);
+    assert.equal(result.envCreated, false, JSON.stringify(nodeMajor));
+    assert.equal(result.profileCreated, false, JSON.stringify(nodeMajor));
+    assert.equal(result.opensslLog, "", JSON.stringify(nodeMajor));
+  }
+
+  for (const nodeMajor of ["22", "24"]) {
+    const result = runInstallerWithStubbedRuntime("raise.example", { nodeMajor });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.envCreated, true);
+    assert.equal(result.profileCreated, true);
+  }
+});
+
+test("installer Node floor stays aligned with package engine contract", () => {
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.resolve(testDir, "../package.json"), "utf8")
+  );
+  const installerText = fs.readFileSync(installer, "utf8");
+  assert.equal(packageJson.engines?.node, ">=22");
+  assert.match(installerText, /^NODE_MIN_MAJOR=22$/m);
+  assert.match(installerText, /ExecStart=\$NODE_BIN \$INSTALL_DIR\/src\/server\.mjs/);
+  assert.match(installerText, /"\$NODE_BIN" "\$SCRIPT_DIR\/wait-for-live\.mjs"/);
+});
 
 test("installer uses a certificate SAN matching the public host identity", () => {
   for (const [host, expectedSan] of [
