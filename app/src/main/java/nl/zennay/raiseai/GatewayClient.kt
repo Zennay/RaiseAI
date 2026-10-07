@@ -5,6 +5,9 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import javax.net.ssl.HttpsURLConnection
 
 data class GatewayResponse(
@@ -38,9 +41,21 @@ internal object GatewayResponseBodyReader {
                 output.write(buffer, 0, read)
             }
 
-            output.toString(Charsets.UTF_8.name())
+            decodeUtf8(output.toByteArray())
         }
     }
+
+    private fun decodeUtf8(bytes: ByteArray): String =
+        try {
+            Charsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString()
+        } catch (error: CharacterCodingException) {
+            throw IOException("gateway_response_invalid_utf8", error)
+        }
 }
 
 class GatewayClient(private val settings: GatewaySettings) {
