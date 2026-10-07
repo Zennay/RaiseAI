@@ -65,6 +65,9 @@ class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
             "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
             self.workflow,
         )
+        exact_head = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        self.assertEqual(self.workflow.count(f"          ref: {exact_head}"), 1)
+        self.assertEqual(self.workflow.count(f"          EXPECTED_SHA: {exact_head}"), 1)
         self.assertIn("          persist-credentials: false", self.workflow)
         self.assertIn(
             '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
