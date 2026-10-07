@@ -256,8 +256,16 @@ PY
   exit 1
 }
 
-"$ADB" start-server >/dev/null
-DEVICES="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
+if ! "$ADB" start-server >/dev/null; then
+  echo "ADB server failed to start."
+  exit 1
+fi
+
+if ! DEVICE_LIST="$("$ADB" devices)"; then
+  echo "Failed to enumerate ADB devices before frozen acceptance."
+  exit 1
+fi
+DEVICES="$(printf '%s\n' "$DEVICE_LIST" | awk 'NR>1 && $2=="device" {print $1}')"
 COUNT="$(printf '%s\n' "$DEVICES" | awk 'NF {n++} END {print n+0}')"
 if [ "$COUNT" -ne 1 ]; then
   echo "Frozen acceptance requires exactly one active ADB device; found $COUNT."
@@ -307,7 +315,11 @@ rm -rf "$VERIFY_SOURCE"
 echo
 echo "Frozen handoff verified."
 
-POST_DEVICES="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
+if ! POST_DEVICE_LIST="$("$ADB" devices)"; then
+  echo "Failed to enumerate ADB devices after frozen handoff verification."
+  exit 1
+fi
+POST_DEVICES="$(printf '%s\n' "$POST_DEVICE_LIST" | awk 'NR>1 && $2=="device" {print $1}')"
 POST_COUNT="$(printf '%s\n' "$POST_DEVICES" | awk 'NF {n++} END {print n+0}')"
 if [ "$POST_COUNT" -ne 1 ] ||
    ! printf '%s\n' "$POST_DEVICES" | grep -Fxq "$TARGET"; then
