@@ -217,7 +217,7 @@ Run `pull-diagnostics.command` after a test session to export Raise AI logcat, p
 
 ## Next proof gate
 
-The current product gate is the **frozen v1.5.2 physical acceptance session** from merged-main revision `8f719bb273f9b997848864f342598e7df5f090e5`.
+The current product gate is the **frozen v1.5.2 physical acceptance session** from merged-main revision `8f719bb273f9b997848864f342598e7df5f090e5`, carried by GitHub Release tag `physical-handoff-v1.5.2-8f719bb`, Release asset id `611084738`, with archive digest `sha256:867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce`. Any different carrier or rebuilt APK is not acceptance evidence.
 
 Do not use the older Gemini-first checklist as the acceptance path. Follow [PHYSICAL-ACCEPTANCE.md](PHYSICAL-ACCEPTANCE.md) to verify the exact published handoff, install/provision it on the Galaxy Watch 7, prove one Watch → VPS → provider → Watch `quick_ai` round trip, and collect the provenance-bound 30 intentional / 100 non-trigger V1 reliability set.
 
