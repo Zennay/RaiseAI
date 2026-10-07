@@ -74,10 +74,12 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _load_evidence_file(path: Path) -> Any:
-    if not hasattr(os, "O_NOFOLLOW"):
-        raise EvidenceError("safe no-follow evidence reads are unavailable on this platform")
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+        raise EvidenceError(
+            "safe non-blocking no-follow evidence reads are unavailable on this platform"
+        )
 
-    flags = os.O_RDONLY | os.O_NOFOLLOW
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
 
