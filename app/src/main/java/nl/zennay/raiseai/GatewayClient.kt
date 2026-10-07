@@ -89,11 +89,19 @@ class GatewayClient(private val settings: GatewaySettings) {
             }
 
             val code = connection.responseCode
+            val successful = code in 200..299
+            if (successful) {
+                GatewayResponseMetadataPolicy.validateSuccessfulResponse(
+                    connection.contentType,
+                    connection.contentLengthLong
+                )
+            }
+
             val responseText = GatewayResponseBodyReader.read(
-                if (code in 200..299) connection.inputStream else connection.errorStream
+                if (successful) connection.inputStream else connection.errorStream
             )
 
-            if (code !in 200..299) {
+            if (!successful) {
                 throw IOException("gateway_http_$code")
             }
 
