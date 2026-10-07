@@ -18,7 +18,10 @@ object GatewayConfig {
 
         val properties = Properties()
         file.inputStream().use(properties::load)
+        return parse(properties)
+    }
 
+    internal fun parse(properties: Properties): GatewaySettings? {
         val baseUrl = properties.getProperty("url")?.trim()?.trimEnd('/') ?: return null
         val token = properties.getProperty("token")?.trim() ?: return null
         val rawPin = properties.getProperty("spki_sha256")?.trim().orEmpty()
