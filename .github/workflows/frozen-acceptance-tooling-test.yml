@@ -53,6 +53,12 @@ jobs:
           test "$revision" = "$expected"
           echo "Pinned frozen-tooling revision: $revision"
 
+      - name: Pin CPython 3.12 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; expected=(3, 12); actual=sys.version_info[:2]; assert platform.python_implementation()=="CPython" and actual == expected, f"expected CPython 3.12, got {platform.python_implementation()} {sys.version}"'
+
       - name: Syntax
         shell: bash
         run: |
