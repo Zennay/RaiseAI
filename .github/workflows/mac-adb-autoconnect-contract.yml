@@ -11,7 +11,7 @@ on:
   pull_request:
     paths:
       - "install-mac-adb-autoconnect.command"
-      - "tests/test_mac_adb-autoconnect-contract.py"
+      - "tests/test_mac_adb_autoconnect_contract.py"
       - ".github/workflows/mac-adb-autoconnect-contract.yml"
 
 permissions:
