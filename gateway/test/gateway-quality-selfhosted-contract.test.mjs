@@ -90,13 +90,15 @@ test("self-hosted gateway gate checks runtime, triggers and clean worktree", () 
   assert.ok(SELF_HOSTED.includes('          test "$(node --version)" = "v22.23.3"'));
   assert.ok(SELF_HOSTED.includes('          test "$(npm --version)" = "10.9.9"'));
   for (const requiredPath of [
-    '      - "gateway/**"',
     '      - ".github/workflows/gateway-test.yml"',
     '      - ".github/workflows/gateway-quality-selfhosted.yml"',
+    '      - "gateway/test/ci-workflow-contract.test.mjs"',
+    '      - "gateway/test/gateway-quality-selfhosted-contract.test.mjs"',
   ]) {
     assert.ok(SELF_HOSTED.includes(requiredPath), `missing trigger: ${requiredPath.trim()}`);
   }
   assert.ok(SELF_HOSTED.includes("  workflow_dispatch: {}"));
+  assert.equal(SELF_HOSTED.includes('      - "gateway/**"'), false);
   assert.ok(SELF_HOSTED.includes("  cancel-in-progress: true"));
   for (const command of [
     'git -C "$GITHUB_WORKSPACE" diff --exit-code -- .',
