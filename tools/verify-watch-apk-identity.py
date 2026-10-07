@@ -53,9 +53,11 @@ def verify_apk(
         else None
     )
 
-    if not hasattr(os, "O_NOFOLLOW"):
-        raise ApkIdentityError("safe no-follow APK reads are unavailable on this platform")
-    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+        raise ApkIdentityError(
+            "safe non-blocking no-follow APK reads are unavailable on this platform"
+        )
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
     try:
