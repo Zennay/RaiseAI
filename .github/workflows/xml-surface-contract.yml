@@ -61,6 +61,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import pathlib
+          import re
           import subprocess
           import xml.etree.ElementTree as ET
 
@@ -94,6 +95,16 @@ jobs:
                   text = data.decode("utf-8", errors="strict")
               except UnicodeDecodeError as exc:
                   raise SystemExit(f"{path}: XML source must be strict UTF-8: {exc}") from None
+              declaration = re.match(r'^<\\?xml\\s+([^?]+)\\?>', text)
+              if declaration:
+                  encoding = re.search(
+                      r'\\bencoding\\s*=\\s*(["\\\'])([^"\\\']+)\\1',
+                      declaration.group(1),
+                  )
+                  if encoding and encoding.group(2).lower() != "utf-8":
+                      raise SystemExit(
+                          f"{path}: XML encoding declaration must be UTF-8"
+                      )
               upper = text.upper()
               for declaration in FORBIDDEN_DECLARATIONS:
                   if declaration in upper:
