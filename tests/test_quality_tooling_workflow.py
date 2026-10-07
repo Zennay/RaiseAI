@@ -555,5 +555,49 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
 
 
+    def test_quality_step_mapping_surfaces_are_exact(self):
+        lines = self.text.splitlines()
+        step_starts = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("      - name:")
+        ]
+        self.assertEqual(
+            [lines[index].removeprefix("      - name: ") for index in step_starts],
+            [
+                "Checkout exact tested revision",
+                "Verify exact tested revision",
+                "Verify Python runtime",
+                "Shell syntax",
+                "Python syntax",
+                "Quality tooling regressions",
+            ],
+            "hosted quality step list must remain explicit and ordered",
+        )
+
+        expected_keys = {
+            "Checkout exact tested revision": ["name", "uses", "with"],
+            "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Verify Python runtime": ["name", "shell", "run"],
+            "Shell syntax": ["name", "shell", "run"],
+            "Python syntax": ["name", "shell", "run"],
+            "Quality tooling regressions": ["name", "shell", "run"],
+        }
+        for position, start in enumerate(step_starts):
+            end = step_starts[position + 1] if position + 1 < len(step_starts) else len(lines)
+            step = lines[start:end]
+            name = lines[start].removeprefix("      - name: ")
+            keys = []
+            for line in step:
+                match = re.fullmatch(r"        ([A-Za-z0-9_-]+):.*", line)
+                if match:
+                    keys.append(match.group(1))
+            self.assertEqual(
+                keys,
+                expected_keys[name],
+                f"{name} must not gain unreviewed step-level execution controls",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
