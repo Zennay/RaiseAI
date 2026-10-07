@@ -73,6 +73,13 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
 
+        runtime = (
+            '          python3 -c \'import platform, sys; '
+            'assert platform.python_implementation() == "CPython"; '
+            'assert sys.version_info[:2] == (3, 14), sys.version\''
+        )
+        self.assertEqual(self.text.count(runtime), 1)
+
         self.assertEqual(
             self.text.count(
                 "          python3 -m unittest tests.test_tracked_secret_hygiene "
