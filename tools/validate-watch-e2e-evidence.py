@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 KNOWN_ROUTES = {"quick_ai", "deep_ai", "current_info", "smart_home", "zcloud_task"}
+KNOWN_STATUSES = {"answered", "routed"}
 COMMON_KEYS = {
     "schema_version",
     "recorded_at_utc",
@@ -209,10 +210,14 @@ def validate_evidence(
     route = payload["route"]
     status = payload["status"]
     _require(isinstance(route, str) and route in KNOWN_ROUTES, f"unknown route: {route!r}")
-    _require(isinstance(status, str) and status and status != "unknown", "status must be a known non-empty value")
+    _require(isinstance(status, str) and status in KNOWN_STATUSES, f"unknown status: {status!r}")
     _require(input_length > 0, "successful evidence must record a non-empty input")
     for key in ("execution_enabled", "execution_reason_present", "answer_present"):
         _require(type(payload[key]) is bool, f"{key} must be boolean")
+    _require(
+        payload["answer_present"] == (status == "answered"),
+        "status and answer_present are inconsistent",
+    )
 
     if expect_route is not None:
         _require(route == expect_route, f"route {route!r} does not match expected {expect_route!r}")
@@ -240,7 +245,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("evidence", type=Path, help="watch-e2e-evidence.json")
     parser.add_argument("--expect-route", choices=sorted(KNOWN_ROUTES))
-    parser.add_argument("--expect-status")
+    parser.add_argument("--expect-status", choices=sorted(KNOWN_STATUSES))
     parser.add_argument("--max-latency-ms", type=int)
     parser.add_argument(
         "--max-age-seconds",
