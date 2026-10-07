@@ -5,6 +5,12 @@ on:
     branches:
       - main
     paths:
+      - "upgrade-watch.command"
+      - "watch-preflight.command"
+      - "login-from-mac.command"
+      - "open-in-android-studio.command"
+      - "setup-and-install-watch.command"
+      - "install-mac-adb-autoconnect.command"
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "install-watch-apk.command"
@@ -33,6 +39,12 @@ on:
       - ".github/workflows/quality-tooling-test.yml"
   pull_request:
     paths:
+      - "upgrade-watch.command"
+      - "watch-preflight.command"
+      - "login-from-mac.command"
+      - "open-in-android-studio.command"
+      - "setup-and-install-watch.command"
+      - "install-mac-adb-autoconnect.command"
       - "pull-diagnostics.command"
       - "pull-watch-data.command"
       - "install-watch-apk.command"
@@ -104,7 +116,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command
+          bash -n upgrade-watch.command watch-preflight.command login-from-mac.command open-in-android-studio.command setup-and-install-watch.command install-mac-adb-autoconnect.command pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command
 
       - name: Python syntax
         shell: bash
