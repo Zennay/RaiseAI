@@ -68,6 +68,35 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
             with self.assertRaisesRegex(generator.TemplateError, "session must be valid UTF-8"):
                 generator.load_session(path)
 
+    def test_loader_reads_the_same_inode_after_path_replacement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            path = root / "session.json"
+            original = session_payload(watch_serial="original-watch")
+            replacement = session_payload(watch_serial="replacement-watch")
+            path.write_text(json.dumps(original), encoding="utf-8")
+
+            real_fstat = generator.os.fstat
+            swapped = False
+
+            def swap_path_after_open(fd):
+                nonlocal swapped
+                metadata = real_fstat(fd)
+                if not swapped:
+                    swapped = True
+                    path.unlink()
+                    path.write_text(json.dumps(replacement), encoding="utf-8")
+                return metadata
+
+            with mock.patch.object(generator.os, "fstat", side_effect=swap_path_after_open):
+                loaded = generator.load_session(path)
+
+            self.assertEqual(loaded["watch_serial"], "original-watch")
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8"))["watch_serial"],
+                "replacement-watch",
+            )
+
     def test_loader_rejects_non_regular_session(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)

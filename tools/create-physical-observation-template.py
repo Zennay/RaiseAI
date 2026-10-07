@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import errno
 import json
 import os
 import stat
@@ -42,19 +43,47 @@ def _reject_duplicate_json_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any
     return result
 
 
-def load_session(path: Path) -> Any:
-    metadata = path.lstat()
-    _require(stat.S_ISREG(metadata.st_mode), "session must be a regular file")
-    _require(
-        metadata.st_size <= MAX_SESSION_JSON_BYTES,
-        f"session exceeds maximum size of {MAX_SESSION_JSON_BYTES} bytes",
-    )
+def _read_bounded_fd(fd: int, limit: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while total <= limit:
+        chunk = os.read(fd, min(64 * 1024, limit + 1 - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
 
-    raw = path.read_bytes()
-    _require(
-        len(raw) <= MAX_SESSION_JSON_BYTES,
-        f"session exceeds maximum size of {MAX_SESSION_JSON_BYTES} bytes",
-    )
+
+def load_session(path: Path) -> Any:
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    _require(nofollow != 0, "platform does not support safe no-follow session reads")
+
+    flags = os.O_RDONLY | nofollow
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise TemplateError("session must be a regular file") from exc
+        raise TemplateError(f"unable to open session safely: {exc}") from exc
+
+    try:
+        metadata = os.fstat(fd)
+        _require(stat.S_ISREG(metadata.st_mode), "session must be a regular file")
+        _require(
+            metadata.st_size <= MAX_SESSION_JSON_BYTES,
+            f"session exceeds maximum size of {MAX_SESSION_JSON_BYTES} bytes",
+        )
+
+        raw = _read_bounded_fd(fd, MAX_SESSION_JSON_BYTES)
+        _require(
+            len(raw) <= MAX_SESSION_JSON_BYTES,
+            f"session exceeds maximum size of {MAX_SESSION_JSON_BYTES} bytes",
+        )
+    finally:
+        os.close(fd)
+
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
