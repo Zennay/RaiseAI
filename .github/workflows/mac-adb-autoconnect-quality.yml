@@ -1,0 +1,66 @@
+name: macOS autoconnect quality CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "install-mac-adb-autoconnect.command"
+      - "tests/test_mac_adb_autoconnect_contract.py"
+      - "tests/test_mac_adb_autoconnect_quality_workflow.py"
+      - ".github/workflows/mac-adb-autoconnect-quality.yml"
+  pull_request:
+    paths:
+      - "install-mac-adb-autoconnect.command"
+      - "tests/test_mac_adb_autoconnect_contract.py"
+      - "tests/test_mac_adb_autoconnect_quality_workflow.py"
+      - ".github/workflows/mac-adb-autoconnect-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-mac-autoconnect-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify runner and exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_NAME" = "vps-bb300bba"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Validate autoconnect contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install-mac-adb-autoconnect.command
+          python3 -m unittest tests.test_mac_adb_autoconnect_contract tests.test_mac_adb_autoconnect_quality_workflow
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"

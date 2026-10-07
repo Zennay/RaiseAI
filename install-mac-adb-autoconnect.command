@@ -1,7 +1,27 @@
 #!/bin/bash
 set -euo pipefail
 
-QUIET="${1:-}"
+usage() {
+  echo "Usage: $0 [--quiet]" >&2
+}
+
+if [ "$#" -gt 1 ]; then
+  usage
+  exit 2
+fi
+
+case "${1:-}" in
+  "")
+    QUIET=""
+    ;;
+  --quiet)
+    QUIET="--quiet"
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
 STATE_DIR="$HOME/.raiseai"
 BIN_DIR="$STATE_DIR/bin"
 LOG_DIR="$STATE_DIR/logs"
@@ -117,8 +137,6 @@ launchctl bootout "$DOMAIN" "$PLIST" >/dev/null 2>&1 || true
 launchctl bootstrap "$DOMAIN" "$PLIST"
 launchctl kickstart -k "$DOMAIN/nl.zennay.raiseai.adb-autoconnect" >/dev/null 2>&1 || true
 
-touch "$STATE_DIR/autoconnect-installed"
-
 if [ -f "$HOME/.android/adbkey" ]; then
   mkdir -p "$STATE_DIR/adb-key-backup"
   cp -p "$HOME/.android/adbkey" "$STATE_DIR/adb-key-backup/adbkey"
@@ -126,6 +144,8 @@ if [ -f "$HOME/.android/adbkey" ]; then
     cp -p "$HOME/.android/adbkey.pub" "$STATE_DIR/adb-key-backup/adbkey.pub"
   chmod 600 "$STATE_DIR/adb-key-backup/adbkey" 2>/dev/null || true
 fi
+
+touch "$STATE_DIR/autoconnect-installed"
 
 if [ "$QUIET" != "--quiet" ]; then
   echo "Raise AI ADB auto-connect installed."
