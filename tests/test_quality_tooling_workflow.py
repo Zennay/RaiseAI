@@ -262,6 +262,26 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertRegex(self.text, r"timeout-minutes:\s*[1-9][0-9]*")
         self.assertIn("cancel-in-progress: true", self.text)
 
+    def test_job_timeout_stays_small_and_unique(self):
+        timeouts = [
+            int(value)
+            for value in re.findall(
+                r"(?m)^    timeout-minutes:\s*([0-9]+)\s*$",
+                self.text,
+            )
+        ]
+        self.assertEqual(
+            len(timeouts),
+            1,
+            "quality workflow must declare exactly one job timeout",
+        )
+        self.assertGreater(timeouts[0], 0)
+        self.assertLessEqual(
+            timeouts[0],
+            10,
+            "hosted quality lane must keep a short fail-closed time budget",
+        )
+
     def test_concurrency_is_namespaced_per_pull_request_or_ref(self):
         self.assertIn(
             "group: raise-quality-tooling-${{ github.event.pull_request.number || github.ref }}",
