@@ -154,6 +154,23 @@ async function readBoundedJsonResponse(response) {
   }
 }
 
+function responseCompletionState(response) {
+  if (
+    response === null ||
+    typeof response !== "object" ||
+    Array.isArray(response) ||
+    !Object.hasOwn(response, "status")
+  ) {
+    return "unspecified";
+  }
+
+  if (response.status === "completed") return "completed";
+  if (typeof response.status === "string" && response.status.length > 0) {
+    return "incomplete";
+  }
+  return "invalid";
+}
+
 function outputText(response) {
   const output = Array.isArray(response?.output) ? response.output : [];
   const textChunks = [];
@@ -276,6 +293,18 @@ export function createOpenAIExecutor({
     }
 
     const body = parsedBody.json;
+    const completionState = responseCompletionState(body);
+    if (completionState === "invalid") {
+      const error = new Error("openai_invalid_response");
+      error.statusCode = 502;
+      throw error;
+    }
+    if (completionState === "incomplete") {
+      const error = new Error("openai_incomplete_response");
+      error.statusCode = 502;
+      throw error;
+    }
+
     const answer = outputText(body);
     if (!answer) {
       const error = new Error("openai_empty_response");
