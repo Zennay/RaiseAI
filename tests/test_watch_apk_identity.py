@@ -1,6 +1,9 @@
 import hashlib
 import importlib.util
+import os
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -117,6 +120,30 @@ class WatchApkIdentityTests(unittest.TestCase):
                     path,
                     expected_source_revision=REVISION,
                 )
+
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking file opens unavailable",
+    )
+    def test_cli_rejects_fifo_apk_without_blocking_for_writer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            os.mkfifo(path)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    str(path),
+                    "--expect-source-revision",
+                    REVISION,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertIn("APK must be a regular file", result.stdout)
 
 
 if __name__ == "__main__":
