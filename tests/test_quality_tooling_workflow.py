@@ -205,8 +205,27 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                     "every run step must fail closed before executing commands",
                 )
 
-    def test_job_is_read_only_and_bounded(self):
-        self.assertIn("permissions:\n  contents: read", self.text)
+    def test_permissions_are_exactly_read_only(self):
+        permissions = re.search(
+            r"(?ms)^permissions:\n((?:  [^\n]+\n)+)",
+            self.text,
+        )
+        self.assertIsNotNone(
+            permissions,
+            "quality workflow must declare an explicit top-level permissions block",
+        )
+        self.assertEqual(
+            permissions.group(1).splitlines(),
+            ["  contents: read"],
+            "quality workflow must grant only contents: read",
+        )
+        self.assertNotRegex(
+            self.text,
+            r"(?m)^    permissions:",
+            "jobs must not override the workflow-level read-only permissions",
+        )
+
+    def test_job_is_bounded(self):
         self.assertRegex(self.text, r"timeout-minutes:\s*[1-9][0-9]*")
         self.assertIn("cancel-in-progress: true", self.text)
 
