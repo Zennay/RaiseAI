@@ -82,6 +82,12 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
+      - name: Shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command
+
       - name: Python syntax
         shell: bash
         run: |
