@@ -40,7 +40,7 @@ ABSOLUTE_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", flags=re.IGNORECASE)
 
 def extract_private_kotlin_string_constant(source, name):
     pattern = re.compile(
-        rf'(?m)^\\s*private const val {re.escape(name)} = "([^"\\n]+)"\\s*
+        rf'(?m)^\s*private const val {re.escape(name)} = "([^"\n]+)"\s*
     if not isinstance(value, str) or not value:
         raise ValueError(f"{kind} asset reference must be a non-empty string")
     if "\\" in value:
