@@ -121,8 +121,8 @@ class SensorTrialProgressTest {
         val progress = SensorTrialRecorder.progressFromLines(
             sequenceOf(
                 HEADER,
-                row(label = "mouth_raise", revision = REV_A),
-                row(label = "view_time", revision = REV_B)
+                row(label = "mouth_raise", revision = REV_A, sessionId = 1),
+                row(label = "view_time", revision = REV_B, sessionId = 2)
             )
         )
 
