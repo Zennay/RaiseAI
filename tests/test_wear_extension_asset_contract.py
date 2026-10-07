@@ -1,7 +1,9 @@
 import json
 import pathlib
 import re
+import stat
 import subprocess
+import tempfile
 import unittest
 
 
@@ -38,6 +40,44 @@ EXPECTED_CONTENT_SCRIPT_KEYS = {"matches", "css", "js", "run_at"}
 ABSOLUTE_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", flags=re.IGNORECASE)
 
 
+def _reject_duplicate_json_fields(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate manifest JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite_json(value):
+    raise ValueError(f"non-finite manifest JSON number: {value}")
+
+
+def load_manifest_text(text):
+    return json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_json_fields,
+        parse_constant=_reject_nonfinite_json,
+    )
+
+
+def load_manifest_path(path):
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError("Wear manifest must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError("Wear manifest must be a regular file")
+    try:
+        text = path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Wear manifest must be valid UTF-8") from exc
+    return load_manifest_text(text)
+
+
+def load_manifest():
+    return load_manifest_path(MANIFEST_PATH)
+
+
 def extract_private_kotlin_string_constant(source, name):
     pattern = re.compile(
         rf'(?m)^\s*private const val {re.escape(name)} = "([^"\n]+)"\s*$'
@@ -71,7 +111,7 @@ def validate_asset_reference(value, *, kind):
 
 class WearExtensionAssetContractTests(unittest.TestCase):
     def test_content_script_assets_are_local_regular_tracked_files(self):
-        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest = load_manifest()
         scripts = manifest.get("content_scripts")
         self.assertIsInstance(scripts, list)
         self.assertTrue(scripts, "Wear extension must declare at least one content script")
@@ -128,7 +168,7 @@ class WearExtensionAssetContractTests(unittest.TestCase):
             )
 
     def test_manifest_keeps_exact_injection_and_native_permission_scope(self):
-        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest = load_manifest()
 
         permissions = manifest.get("permissions")
         self.assertIsInstance(permissions, list)
@@ -159,7 +199,7 @@ class WearExtensionAssetContractTests(unittest.TestCase):
         self.assertEqual(script.get("run_at"), "document_idle")
 
     def test_android_extension_identity_and_asset_uri_match_packaged_manifest(self):
-        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest = load_manifest()
         activity = CHATGPT_ACTIVITY.read_text(encoding="utf-8")
 
         gecko = manifest.get("browser_specific_settings", {}).get("gecko", {})
@@ -184,6 +224,34 @@ class WearExtensionAssetContractTests(unittest.TestCase):
             f"resource://android/assets/{asset_root}/",
             "Android extension URI must resolve to the actual packaged asset directory",
         )
+
+    def test_manifest_loader_rejects_duplicate_fields_and_nonfinite_numbers(self):
+        with self.assertRaisesRegex(ValueError, "duplicate manifest JSON field: name"):
+            load_manifest_text('{"name":"one","name":"two"}')
+        for token in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "non-finite manifest JSON number"):
+                    load_manifest_text(f'{{"value":{token}}}')
+
+    def test_manifest_loader_rejects_symlink_nonregular_and_invalid_utf8_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            regular = root / "regular.json"
+            regular.write_text('{"name":"Raise"}', encoding="utf-8")
+            symlink = root / "manifest-link.json"
+            symlink.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                load_manifest_path(symlink)
+
+            directory = root / "manifest-dir.json"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                load_manifest_path(directory)
+
+            invalid = root / "invalid.json"
+            invalid.write_bytes(b'{"name":"Raise"}\xff')
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                load_manifest_path(invalid)
 
     def test_kotlin_constant_extractor_rejects_missing_or_duplicate_identity(self):
         with self.assertRaisesRegex(ValueError, "exactly once"):
