@@ -10,25 +10,53 @@ import org.junit.Test
 
 class GatewayResponseFieldPolicyTest {
     @Test
-    fun missingStringUsesDefault() {
+    fun missingTokenUsesDefault() {
         assertEquals(
             "unknown",
-            GatewayResponseFieldPolicy.stringOrDefault(null, "unknown")
+            GatewayResponseFieldPolicy.tokenOrDefault(null, "unknown")
         )
     }
 
     @Test
-    fun stringValueIsPreserved() {
+    fun canonicalTokenIsPreserved() {
         assertEquals(
             "quick_ai",
-            GatewayResponseFieldPolicy.stringOrDefault("quick_ai", "unknown")
+            GatewayResponseFieldPolicy.tokenOrDefault("quick_ai", "unknown")
         )
     }
 
     @Test
-    fun nonStringValueIsRejected() {
+    fun nonStringTokenIsRejected() {
         val error = assertThrows(IOException::class.java) {
-            GatewayResponseFieldPolicy.stringOrDefault(123, "unknown")
+            GatewayResponseFieldPolicy.tokenOrDefault(123, "unknown")
+        }
+
+        assertEquals("gateway_response_invalid_schema", error.message)
+    }
+
+    @Test
+    fun malformedTokensAreRejected() {
+        for (value in listOf("", " quick_ai", "quick ai", "quick_ai\n", "a".repeat(257))) {
+            val error = assertThrows(IOException::class.java) {
+                GatewayResponseFieldPolicy.tokenOrDefault(value, "unknown")
+            }
+            assertEquals("gateway_response_invalid_schema", error.message)
+        }
+    }
+
+    @Test
+    fun optionalTokenHandlesMissingAndCanonicalValues() {
+        assertNull(GatewayResponseFieldPolicy.optionalToken(null))
+        assertEquals(
+            "connector_not_configured",
+            GatewayResponseFieldPolicy.optionalToken("connector_not_configured")
+        )
+    }
+
+    @Test
+    fun optionalMalformedTokenIsRejected() {
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseFieldPolicy.optionalToken("bad reason")
         }
 
         assertEquals("gateway_response_invalid_schema", error.message)
@@ -55,19 +83,35 @@ class GatewayResponseFieldPolicyTest {
     }
 
     @Test
-    fun optionalStringNormalizesMissingAndBlankValues() {
-        assertNull(GatewayResponseFieldPolicy.optionalNonBlankString(null))
-        assertNull(GatewayResponseFieldPolicy.optionalNonBlankString("   "))
+    fun optionalAnswerNormalizesMissingAndBlankValues() {
+        assertNull(GatewayResponseFieldPolicy.optionalAnswer(null))
+        assertNull(GatewayResponseFieldPolicy.optionalAnswer("   "))
         assertEquals(
             "antwoord",
-            GatewayResponseFieldPolicy.optionalNonBlankString("antwoord")
+            GatewayResponseFieldPolicy.optionalAnswer("antwoord")
         )
     }
 
     @Test
-    fun optionalNonStringValueIsRejected() {
+    fun answerAtMaximumLengthIsAccepted() {
+        val answer = "a".repeat(4_096)
+
+        assertEquals(answer, GatewayResponseFieldPolicy.optionalAnswer(answer))
+    }
+
+    @Test
+    fun oversizedAnswerIsRejected() {
         val error = assertThrows(IOException::class.java) {
-            GatewayResponseFieldPolicy.optionalNonBlankString(42)
+            GatewayResponseFieldPolicy.optionalAnswer("a".repeat(4_097))
+        }
+
+        assertEquals("gateway_response_invalid_schema", error.message)
+    }
+
+    @Test
+    fun optionalNonStringAnswerIsRejected() {
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseFieldPolicy.optionalAnswer(42)
         }
 
         assertEquals("gateway_response_invalid_schema", error.message)
