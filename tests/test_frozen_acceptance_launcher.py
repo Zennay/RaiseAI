@@ -155,9 +155,23 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                   if [ "${FAKE_ADB_START_DELAY:-0}" != "0" ]; then
                     sleep "$FAKE_ADB_START_DELAY"
                   fi
+                  if [ "${FAKE_ADB_START_FAIL:-0}" = "1" ]; then
+                    echo "simulated adb start-server failure" >&2
+                    exit 95
+                  fi
                   exit 0
                 fi
                 if [ "${1:-}" = "devices" ]; then
+                  if [ "${FAKE_ADB_DEVICES_FAIL:-0}" = "1" ]; then
+                    echo "simulated adb devices failure" >&2
+                    exit 96
+                  fi
+                  if [ "${FAKE_ADB_POST_FETCH_DEVICES_FAIL:-0}" = "1" ] &&
+                     [ -n "${FAKE_FETCH_MARKER:-}" ] &&
+                     [ -f "$FAKE_FETCH_MARKER" ]; then
+                    echo "simulated post-fetch adb devices failure" >&2
+                    exit 97
+                  fi
                   printf 'List of devices attached\n'
                   if [ "${FAKE_NO_DEVICES:-0}" = "1" ]; then
                     :
@@ -665,6 +679,42 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         lines = self.log.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 2)
         self.assertTrue(lines[1].startswith("run:watch-1:"))
+
+    def test_rejects_adb_start_server_failure_before_fetch(self):
+        result = self.run_launcher({"FAKE_ADB_START_FAIL": "1"})
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("ADB server failed to start.", result.stdout)
+        self.assertFalse(self.fetch_marker.exists(), result.stdout)
+        self.assertFalse(self.log.exists(), result.stdout)
+
+    def test_rejects_adb_device_enumeration_failure_before_fetch(self):
+        result = self.run_launcher({"FAKE_ADB_DEVICES_FAIL": "1"})
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            "Failed to enumerate ADB devices before frozen acceptance.",
+            result.stdout,
+        )
+        self.assertFalse(self.fetch_marker.exists(), result.stdout)
+        self.assertFalse(self.log.exists(), result.stdout)
+
+    def test_rejects_adb_device_enumeration_failure_after_handoff_verification(self):
+        result = self.run_launcher(
+            {"FAKE_ADB_POST_FETCH_DEVICES_FAIL": "1"},
+            args=["--preflight-only", str(self.profile)],
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(self.fetch_marker.exists(), result.stdout)
+        self.assertIn(
+            "Failed to enumerate ADB devices after frozen handoff verification.",
+            result.stdout,
+        )
+        self.assertNotIn("FROZEN-ACCEPTANCE PREFLIGHT PASS", result.stdout)
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("verify:"))
 
     def test_rejects_no_active_adb_device_before_fetch(self):
         result = self.run_launcher({"FAKE_NO_DEVICES": "1"})
