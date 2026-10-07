@@ -8,6 +8,7 @@ import datetime as dt
 import errno
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_SESSION_JSON_BYTES = 64 * 1024
+APP_VERSION_RE = re.compile(r"^\\d+\\.\\d+\\.\\d+$")
 
 REQUIRED_SESSION_KEYS = {
     "schema_version",
@@ -123,7 +125,10 @@ def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[
     source_revision = session["source_revision"]
     apk_sha256 = session["apk_sha256"]
     _require(isinstance(watch_serial, str) and watch_serial.strip(), "session watch_serial must be non-empty")
-    _require(isinstance(app_version, str) and app_version.strip(), "session app_version must be non-empty")
+    _require(
+        isinstance(app_version, str) and APP_VERSION_RE.fullmatch(app_version) is not None,
+        "session app_version must be canonical MAJOR.MINOR.PATCH",
+    )
     _require(
         isinstance(source_revision, str)
         and len(source_revision) == 40
