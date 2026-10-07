@@ -256,7 +256,8 @@ class PhysicalShareBundleTests(unittest.TestCase):
             bundle.validate_summaries(e2e_payload(), lowered, quality_payload())
 
         weak_rate = v1_payload()
-        weak_rate["results"]["detection_rate"] = 0.89
+        weak_rate["results"]["mouth_raise_detected"] = 26
+        weak_rate["results"]["detection_rate"] = round(26 / 30, 6)
         with self.assertRaisesRegex(bundle.ShareBundleError, "detection rate"):
             bundle.validate_summaries(e2e_payload(), weak_rate, quality_payload())
 
