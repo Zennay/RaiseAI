@@ -1,6 +1,6 @@
 # Watch 7 test checklist — V0.3
 
-> **Historical fallback checklist only.** Do not use this V0.3 Gemini-first checklist for the current physical acceptance gate. The canonical gate is the preserved Raise AI v1.5.2 handoff from source `8f719bb273f9b997848864f342598e7df5f090e5`; start it with `bash ./start-frozen-acceptance.command [gateway-profile]` as documented in `START-HERE.md` and `PHYSICAL-ACCEPTANCE.md`.
+> **Historical fallback checklist only.** Do not use this V0.3 Gemini-first checklist for the current physical acceptance gate. The only valid acceptance carrier is the preserved Raise AI v1.5.2 handoff from source `8f719bb273f9b997848864f342598e7df5f090e5`, GitHub Release tag `physical-handoff-v1.5.2-8f719bb`, Release asset id `611084738`, archive digest `sha256:867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce`. Start it with `bash ./start-frozen-acceptance.command [gateway-profile]` as documented in `START-HERE.md` and `PHYSICAL-ACCEPTANCE.md`. Any different carrier or rebuilt APK is not acceptance evidence.
 
 Record facts, not guesses.
 
@@ -71,7 +71,7 @@ False triggers: ___ / ___ movements
 - [ ] Haptic occurs / trigger count increases.
 - [ ] Gemini opens automatically and listens.
 
-If the trigger count increases but Gemini does not open, the gesture works and the remaining blocker is Android's background assistant-launch bridge. Tap the persistent notification's **Gemini** action as the fallback.
+If the trigger count increases but Gemini does not open, the gesture worked and the remaining blocker is Android's background assistant-launch bridge. Tap the persistent notification's **Gemini** action as the fallback.
 
 ## H. Sensor evidence
 

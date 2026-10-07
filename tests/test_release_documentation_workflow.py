@@ -72,6 +72,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
             "README.md",
             "START-HERE.md",
             "PHYSICAL-ACCEPTANCE.md",
+            "DEVICE-TEST.md",
             "tests/test_release_documentation_identity.py",
             "tests/test_release_documentation_workflow.py",
             ".github/workflows/release-documentation-identity.yml",
