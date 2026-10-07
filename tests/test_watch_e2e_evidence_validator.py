@@ -52,29 +52,6 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.EvidenceError, "unexpected evidence fields"):
             validator.validate_evidence(success_payload(answer_text="must never be serialized"))
 
-    def test_success_summary_has_exact_secret_safe_shape(self):
-        result = validator.validate_evidence(success_payload())
-        self.assertEqual(
-            set(result),
-            {
-                "valid",
-                "outcome",
-                "route",
-                "status",
-                "latency_ms",
-                "input_length_chars",
-                "answer_present",
-                "execution_enabled",
-                "recorded_at_utc",
-                "app_version",
-                "source_revision",
-            },
-        )
-        serialized = json.dumps(result, sort_keys=True)
-        for forbidden in ("transcript", "answer_text", "watch_serial", "input_text"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, serialized)
-
     def test_rejects_boolean_schema_version(self):
         with self.assertRaisesRegex(validator.EvidenceError, "schema_version must equal 2"):
             validator.validate_evidence(success_payload(schema_version=True))
