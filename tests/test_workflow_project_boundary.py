@@ -33,7 +33,7 @@ ON_KEY = r"""(?:"on"|'on'|on)"""
 PULL_REQUEST_KEY = r"""(?:"pull_request(?:_target)?"|\'pull_request(?:_target)?\'|pull_request(?:_target)?)"""
 PULL_REQUEST_BLOCK_RE = re.compile(rf"(?m)^\s{{0,2}}{PULL_REQUEST_KEY}\s*:")
 PULL_REQUEST_FLOW_MAP_RE = re.compile(
-    rf"(?m)^\s{{0,2}}{ON_KEY}\s*:\s*\{{[^}}\n]*{PULL_REQUEST_KEY}\s*:"
+    rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\{{[^}}]*{PULL_REQUEST_KEY}\s*:"
 )
 PULL_REQUEST_FLOW_SEQUENCE_RE = re.compile(
     rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\[[^\]]*{PULL_REQUEST_KEY}(?:\s+#[^\n]*)?\s*(?:,|\])"
@@ -110,19 +110,21 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
     def test_pull_request_detection_covers_block_map_and_sequence_variants(self):
         for text in (
             "on:\n  pull_request:\n",
-            "on:\\n  pull_request_target:\\n",
+            "on:\n  pull_request_target:\n",
             "on:\n  \"pull_request\":\n",
             "on:\n  'pull_request':\n",
             "on: {pull_request: null, workflow_dispatch: null}\n",
             'on: {"pull_request": null, workflow_dispatch: null}\n',
             "'on': {'pull_request': null, workflow_dispatch: null}\n",
             '"on": {pull_request: null, workflow_dispatch: null}\n',
+            "on: {\n    push: null,\n    pull_request: null\n}\n",
+            "'on': {\n    workflow_dispatch: null,\n    'pull_request_target': null\n}\n",
             "on: pull_request\n",
-            "on: pull_request_target\\n",
+            "on: pull_request_target\n",
             '"on": "pull_request"\n',
             "'on': 'pull_request' # legacy scalar trigger\n",
             "on: [push, pull_request]\n",
-            "on: [push, pull_request_target]\\n",
+            "on: [push, pull_request_target]\n",
             "on: [\n  push,\n  pull_request,\n]\n",
             "on: [\n  push,\n  pull_request # guarded legacy trigger\n]\n",
             '"on": [\n  workflow_dispatch,\n  "pull_request",\n]\n',
