@@ -75,7 +75,7 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 self.assertFalse(parsed.fragment)
 
     def test_repository_sources_are_explicitly_allowlisted(self):
-        custom_urls = re.findall(r'maven\\("([^"]+)"\\)', self.settings)
+        custom_urls = re.findall(r'maven\("([^"]+)"\)', self.settings)
         self.assertEqual(
             custom_urls,
             ["https://maven.mozilla.org/maven2/"],
@@ -96,10 +96,10 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 )
 
         for forbidden_form in (
-            r"(?m)^\\s*maven\\s*\\{",
-            r"\\bmaven\\s*\\(\\s*url\\s*=",
-            r"\\bmaven\\s*\\(\\s*uri\\s*\\(",
-            r"(?m)^\\s*ivy\\s*(?:\\(|\\{)",
+            r"(?m)^\s*maven\s*\{",
+            r"\bmaven\s*\(\s*url\s*=",
+            r"\bmaven\s*\(\s*uri\s*\(",
+            r"(?m)^\s*ivy\s*(?:\(|\{)",
         ):
             with self.subTest(forbidden_form=forbidden_form):
                 self.assertNotRegex(
