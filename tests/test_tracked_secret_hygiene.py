@@ -54,6 +54,7 @@ HIGH_CONFIDENCE_SECRET_PATTERNS = (
     r"AIza[0-9A-Za-z_-]{35}",
     r"AKIA[0-9A-Z]{16}",
     r"ASIA[0-9A-Z]{16}",
+    r"RAISE_GATEWAY_TOKEN=[0-9A-Fa-f]{64}",
 )
 
 
@@ -189,6 +190,7 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             "AI" + "za" + ("E" * 35),
             "AK" + "IA" + ("F" * 16),
             "AS" + "IA" + ("G" * 16),
+            "RAISE_" + "GATEWAY_TOKEN=" + ("A1" * 32),
         )
         combined = re.compile("|".join(f"(?:{pattern})" for pattern in HIGH_CONFIDENCE_SECRET_PATTERNS))
         for token in synthetic_tokens:
@@ -203,6 +205,8 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             "AI" + "zaEXAMPLE",
             "AK" + "IAEXAMPLE",
             "AS" + "IAEXAMPLE",
+            "RAISE_GATEWAY_TOKEN=...",
+            "RAISE_GATEWAY_TOKEN=${TOKEN}",
         ):
             with self.subTest(placeholder=placeholder):
                 self.assertIsNone(combined.search(placeholder))
