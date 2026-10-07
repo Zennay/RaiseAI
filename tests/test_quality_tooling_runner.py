@@ -32,6 +32,7 @@ EXPECTED_MODULES = (
     "tests.test_watch_data_analyzer",
     "tests.test_watch_apk_identity",
     "tests.test_watch_e2e_evidence_validator",
+    "tests.test_wear_extension_asset_contract",
     "tests.test_watch_sensor_trace_analyzer",
     "tests.test_watch_sensor_trial_analyzer",
 )
