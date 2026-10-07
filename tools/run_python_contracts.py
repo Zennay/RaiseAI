@@ -75,6 +75,17 @@ def discovered_test_modules(suite: unittest.TestSuite) -> set[str]:
 
 
 def run_contracts() -> int:
+    invalid_packages = invalid_contract_package_links()
+    if invalid_packages:
+        print(
+            "ERROR: aggregate Python contract discovery found invalid package entries; "
+            "test package directories may not use symlinks.",
+            file=sys.stderr,
+        )
+        for violation in invalid_packages:
+            print(f"INVALID-CONTRACT-PACKAGE: {violation}", file=sys.stderr)
+        return 1
+
     module_paths = contract_module_paths()
     unsafe_modules = unsafe_contract_module_paths(module_paths)
     if unsafe_modules:
