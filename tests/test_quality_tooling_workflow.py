@@ -19,13 +19,27 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
     def setUp(self):
         self.text = WORKFLOW.read_text(encoding="utf-8")
 
-    def test_uses_immutable_checkout_without_persisted_credentials(self):
-        self.assertRegex(
+    def test_uses_only_immutable_external_actions(self):
+        refs = re.findall(
+            r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
             self.text,
-            r"uses: actions/checkout@[0-9a-f]{40}(?:\s+#.*)?",
+            flags=re.MULTILINE,
         )
+        self.assertTrue(refs, "quality workflow must use at least checkout")
+        self.assertTrue(
+            any(action == "actions/checkout" for action, _ in refs),
+            "quality workflow must retain actions/checkout",
+        )
+        for action, ref in refs:
+            if action.startswith("./"):
+                continue
+            with self.subTest(action=action, ref=ref):
+                self.assertRegex(
+                    ref,
+                    r"^[0-9a-f]{40}$",
+                    f"{action} must use an immutable 40-char commit SHA",
+                )
         self.assertIn("persist-credentials: false", self.text)
-        self.assertNotIn("actions/checkout@v", self.text)
         self.assertNotIn("pull_request_target:", self.text)
 
     def test_verifies_exact_requested_revision(self):
