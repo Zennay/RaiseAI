@@ -73,7 +73,7 @@ object SensorTrialRecorder {
         var falseTriggers = 0
         var rejectedTrials = 0
         val identities = mutableSetOf<String>()
-        val acceptedSessionIds = mutableSetOf<Long>()
+        val acceptedSessionIdentities = mutableMapOf<Long, String>()
 
         lines.drop(1).forEach { line ->
                 val fields = line.split(',', limit = 9)
@@ -121,12 +121,17 @@ object SensorTrialRecorder {
                     }
                 }
 
-                if (!acceptedSessionIds.add(sessionId)) {
+                val evidenceIdentity = "$appVersion|$sourceRevision|$detectorConfig"
+                val previousIdentity = acceptedSessionIdentities.putIfAbsent(sessionId, evidenceIdentity)
+                if (previousIdentity != null) {
+                    if (previousIdentity != evidenceIdentity) {
+                        identities += evidenceIdentity
+                    }
                     rejectedTrials++
                     return@forEach
                 }
 
-                identities += "$appVersion|$sourceRevision|$detectorConfig"
+                identities += evidenceIdentity
                 if (acceptedLabel) {
                     mouthTrials++
                     if (triggered) mouthDetections++
