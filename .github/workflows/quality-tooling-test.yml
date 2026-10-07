@@ -7,6 +7,7 @@ on:
     paths:
       - "*.command"
       - "*.py"
+      - "*.ps1"
       - "tools/*.py"
       - "tests/test_adb_device_binding.py"
       - "tests/test_frozen_acceptance_launcher.py"
@@ -24,6 +25,7 @@ on:
     paths:
       - "*.command"
       - "*.py"
+      - "*.ps1"
       - "tools/*.py"
       - "tests/test_adb_device_binding.py"
       - "tests/test_frozen_acceptance_launcher.py"
@@ -89,6 +91,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile *.py tools/*.py
+
+      - name: PowerShell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v pwsh >/dev/null
+          pwsh -NoLogo -NoProfile -NonInteractive -Command '$tokens = $null; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "./install-watch-windows.ps1"), [ref]$tokens, [ref]$errors); if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }'
 
       - name: Quality tooling regressions
         shell: bash
