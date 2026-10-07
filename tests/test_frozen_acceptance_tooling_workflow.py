@@ -63,6 +63,31 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.text.count(command), 1)
 
+    def test_release_carrier_token_scope_is_exact(self):
+        token_lines = [
+            line
+            for line in self.text.splitlines()
+            if "GITHUB_TOKEN:" in line
+        ]
+        self.assertEqual(
+            token_lines,
+            ["          GITHUB_TOKEN: ${{ github.token }}"],
+            "only the frozen release-carrier step may receive the read-only GitHub token",
+        )
+        self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")
+
+        lines = self.text.splitlines()
+        start = lines.index("      - name: Frozen release carrier")
+        following = [
+            index
+            for index, line in enumerate(lines)
+            if index > start and line.startswith("      - name:")
+        ]
+        end = min(following) if following else len(lines)
+        carrier_step = lines[start:end]
+        self.assertIn("        env:", carrier_step)
+        self.assertIn("          GITHUB_TOKEN: ${{ github.token }}", carrier_step)
+
     def test_permissions_are_read_only(self):
         self.assertRegex(
             self.text,
