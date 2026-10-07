@@ -150,6 +150,90 @@ class JsonSurfaceContractTests(unittest.TestCase):
             1,
         )
 
+    def test_workflow_trigger_concurrency_and_nested_mappings_are_exact(self):
+        lines = self.workflow.splitlines()
+
+        on_start = lines.index("on:") + 1
+        permissions_start = lines.index("permissions:")
+        events = [
+            match.group(1)
+            for line in lines[on_start:permissions_start]
+            if (match := re.fullmatch(r"  ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(events, ["push", "pull_request"])
+
+        def event_block(event):
+            start = lines.index(f"  {event}:") + 1
+            block = []
+            for line in lines[start:]:
+                if line and not line.startswith("    "):
+                    break
+                block.append(line)
+            return block
+
+        push = event_block("push")
+        push_keys = [
+            match.group(1)
+            for line in push
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(push_keys, ["branches", "paths"])
+        branches_start = push.index("    branches:") + 1
+        self.assertEqual(push[branches_start], "      - main")
+
+        pull_request = event_block("pull_request")
+        pr_keys = [
+            match.group(1)
+            for line in pull_request
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(
+            pr_keys,
+            ["paths"],
+            "pull_request must not gain branch/type filters that can skip synchronize validation",
+        )
+
+        concurrency_start = lines.index("concurrency:") + 1
+        jobs_start = lines.index("jobs:")
+        concurrency_keys = [
+            match.group(1)
+            for line in lines[concurrency_start:jobs_start]
+            if (match := re.fullmatch(r"  ([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(concurrency_keys, ["group", "cancel-in-progress"])
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index
+                for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        checkout = step_named("Checkout exact tested revision")
+        with_start = checkout.index("        with:") + 1
+        checkout_keys = []
+        for line in checkout[with_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                checkout_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(checkout_keys, ["ref", "persist-credentials"])
+
+        verifier = step_named("Verify exact tested revision")
+        env_start = verifier.index("        env:") + 1
+        verifier_keys = []
+        for line in verifier[env_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                verifier_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(verifier_keys, ["EXPECTED_SHA"])
+
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
