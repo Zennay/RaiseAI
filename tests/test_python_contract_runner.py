@@ -67,6 +67,17 @@ class FailingContract(unittest.TestCase):
         )
         self.assertEqual(exit_code, 1)
 
+    def test_discovery_system_exit_zero_returns_nonzero(self):
+        exit_code, output = self.run_temporary_suite(
+            """
+raise SystemExit(0)
+""",
+            "test_runner_import_exit_case.py",
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("discovery terminated via SystemExit(0)", output)
+        self.assertIn("fail closed", output)
+
     def test_expected_failure_returns_nonzero_and_reports_test_identity(self):
         exit_code, output = self.run_temporary_suite(
             """
