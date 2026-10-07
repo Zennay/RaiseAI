@@ -7,6 +7,11 @@ import org.junit.Test
 
 class RaiseGestureDetectorTest {
     @Test
+    fun configurationIdMarksHardenedDetectorRevision() {
+        assertTrue(RaiseGestureDetector().configurationId().startsWith("raise-detector-v2;"))
+    }
+
+    @Test
     fun configurationIdChangesWhenDetectionThresholdChanges() {
         val baseline = RaiseGestureDetector()
         val tuned = RaiseGestureDetector().apply {
