@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n upgrade-watch.command watch-preflight.command login-from-mac.command open-in-android-studio.command setup-and-install-watch.command install-mac-adb-autoconnect.command pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command
+          bash -n -- *.command
 
       - name: Python syntax
         shell: bash
@@ -97,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v pwsh >/dev/null
-          pwsh -NoLogo -NoProfile -NonInteractive -Command '$tokens = $null; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "./install-watch-windows.ps1"), [ref]$tokens, [ref]$errors); if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }'
+          pwsh -NoLogo -NoProfile -NonInteractive -Command '$files = @(Get-ChildItem -LiteralPath . -File -Filter "*.ps1" | Sort-Object Name); if ($files.Count -eq 0) { Write-Error "No root PowerShell entrypoints found"; exit 1 }; foreach ($file in $files) { $tokens = $null; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors); if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error "$($file.Name): $($_.Message)" }; exit 1 } }'
 
       - name: Quality tooling regressions
         shell: bash
