@@ -8,10 +8,14 @@ import android.util.Log
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val action = intent.action ?: return
-        if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        if (!CalibrationStore.isMonitoringEnabled(context)) return
-        if (CalibrationStore.loadPose(context) == null) return
+        val monitoringEnabled = CalibrationStore.isMonitoringEnabled(context)
+        val hasCalibration = if (monitoringEnabled) {
+            CalibrationStore.loadPose(context) != null
+        } else {
+            false
+        }
+
+        if (!BootStartPolicy.shouldStart(intent.action, monitoringEnabled, hasCalibration)) return
 
         val service = Intent(context, GestureMonitorService::class.java)
         runCatching {
@@ -21,7 +25,7 @@ class BootReceiver : BroadcastReceiver() {
                 context.startService(service)
             }
         }.onFailure {
-            Log.w(TAG, "Could not auto-start Raise AI after $action", it)
+            Log.w(TAG, "Could not auto-start Raise AI after " + intent.action, it)
         }
     }
 
