@@ -262,6 +262,13 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertRegex(self.text, r"timeout-minutes:\s*[1-9][0-9]*")
         self.assertIn("cancel-in-progress: true", self.text)
 
+    def test_quality_execution_is_unconditional(self):
+        self.assertNotRegex(
+            self.text,
+            r"(?m)^\s+if:\s*",
+            "dedicated quality jobs and steps must not be conditionally skipped",
+        )
+
     def test_job_timeout_stays_small_and_unique(self):
         timeouts = [
             int(value)
