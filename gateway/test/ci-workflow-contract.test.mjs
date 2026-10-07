@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+const CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
 const TEST_WORKFLOW = fs.readFileSync(
@@ -42,6 +43,25 @@ test("gateway test CI pins external actions and exact PR-head checkout", () => {
   assertReadOnlyPermissions(TEST_WORKFLOW);
   assert.doesNotMatch(TEST_WORKFLOW, /^\s*pull_request_target\s*:/m);
   assert.match(TEST_WORKFLOW, /persist-credentials:\s*false\b/);
+  assert.ok(
+    TEST_WORKFLOW.includes(
+      `uses: actions/checkout@${CHECKOUT_SHA} # v7.0.1 (node24)`,
+    ),
+    "gateway test checkout must stay on the audited Node 24 release",
+  );
+  assert.match(TEST_WORKFLOW, /runs-on:\s*ubuntu-24\.04\b/);
+  assert.doesNotMatch(TEST_WORKFLOW, /ubuntu-latest/);
+  for (const line of [
+    "      LANG: C.UTF-8",
+    "      LC_ALL: C.UTF-8",
+    "      TZ: UTC",
+  ]) {
+    assert.equal(
+      TEST_WORKFLOW.split(line).length - 1,
+      1,
+      `expected deterministic gateway test env line: ${line}`,
+    );
+  }
 
   const exactHead = "\${{ github.event.pull_request.head.sha || github.sha }}";
   assert.ok(
@@ -74,6 +94,12 @@ test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () 
   ]);
   assertReadOnlyPermissions(DEPLOY_WORKFLOW);
   assert.match(DEPLOY_WORKFLOW, /persist-credentials:\s*false\b/);
+  assert.ok(
+    DEPLOY_WORKFLOW.includes(
+      `uses: actions/checkout@${CHECKOUT_SHA} # v7.0.1 (node24)`,
+    ),
+    "gateway deploy checkout must stay on the audited Node 24 release",
+  );
   assert.doesNotMatch(
     DEPLOY_WORKFLOW,
     /^\s*pull_request(?:_target)?\s*:/m,
