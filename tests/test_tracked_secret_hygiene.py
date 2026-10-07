@@ -15,10 +15,16 @@ FORBIDDEN_BASENAMES = {
     "credentials.json",
     "gateway.env",
     "watch-gateway.properties",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
 }
 FORBIDDEN_SUFFIXES = {
     ".jks",
+    ".ks",
     ".keystore",
+    ".pk8",
     ".p12",
     ".pfx",
     ".pem",
@@ -193,11 +199,17 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             "signing.properties",
             "credentials.json",
             "*.jks",
+            "*.ks",
             "*.keystore",
+            "*.pk8",
             "*.p12",
             "*.pfx",
             "*.pem",
             "*.key",
+            "id_rsa",
+            "id_dsa",
+            "id_ecdsa",
+            "id_ed25519",
         )
         for pattern in required:
             with self.subTest(pattern=pattern):
