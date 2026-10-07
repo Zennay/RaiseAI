@@ -53,7 +53,7 @@ test("self-hosted gateway quality gate is exact-head and VPS-bound", () => {
   assert.ok(SELF_HOSTED.includes(`uses: actions/checkout@${CHECKOUT_SHA} # v7.0.1 (node24)`));
   assert.ok(SELF_HOSTED.includes(`uses: actions/setup-node@${SETUP_NODE_SHA} # v7.0.0 (node24)`));
   assert.ok(SELF_HOSTED.includes("          persist-credentials: false"));
-  assert.ok(SELF_HOSTED.includes('          node-version: "22"'));
+  assert.ok(SELF_HOSTED.includes('          node-version: "22.23.3"'));
   assert.ok(SELF_HOSTED.includes("          package-manager-cache: false"));
 
   const exactHead = "${{ github.event.pull_request.head.sha || github.sha }}";
@@ -87,7 +87,8 @@ test("self-hosted gateway gate runs full tests with strict Bash", () => {
 });
 
 test("self-hosted gateway gate checks runtime, triggers and clean worktree", () => {
-  assert.ok(SELF_HOSTED.includes("process.versions.node.split('.')[0]"));
+  assert.ok(SELF_HOSTED.includes('          test "$(node --version)" = "v22.23.3"'));
+  assert.ok(SELF_HOSTED.includes('          test "$(npm --version)" = "10.9.9"'));
   for (const requiredPath of [
     '      - "gateway/**"',
     '      - ".github/workflows/gateway-test.yml"',
