@@ -63,7 +63,10 @@ object SensorTrialRecorder {
     fun trialCount(context: Context): Int {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return 0
-        return (file.useLines { it.count() } - 1).coerceAtLeast(0)
+
+        val lines = file.readLines()
+        if (lines.isEmpty() || !SensorTrialCsvPolicy.hasCanonicalHeader(lines.first())) return 0
+        return lines.drop(1).count { SensorTrialCsvPolicy.parseRow(it) != null }
     }
 
     fun progress(context: Context): SensorTrialProgress {
