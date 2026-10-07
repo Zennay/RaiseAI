@@ -5,7 +5,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-tooling-test.yml"
-COMMAND_ENTRYPOINTS = [
+STRICT_COMMAND_ENTRYPOINTS = [
     "pull-diagnostics.command",
     "pull-watch-data.command",
     "install-watch-apk.command",
@@ -13,6 +13,15 @@ COMMAND_ENTRYPOINTS = [
     "physical-validation.command",
     "start-frozen-acceptance.command",
     "start-physical-handoff.command",
+]
+SHELL_SYNTAX_ENTRYPOINTS = [
+    "upgrade-watch.command",
+    "watch-preflight.command",
+    "login-from-mac.command",
+    "open-in-android-studio.command",
+    "setup-and-install-watch.command",
+    "install-mac-adb-autoconnect.command",
+    *STRICT_COMMAND_ENTRYPOINTS,
 ]
 
 
@@ -151,7 +160,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
     def test_push_and_pull_request_filters_cover_quality_surface(self):
         expected_paths = [
-            *COMMAND_ENTRYPOINTS,
+            "*.command",
             "tools/analyze-watch-sensor-traces.py",
             "tools/analyze-watch-sensor-trials.py",
             "tools/create-physical-observation-template.py",
@@ -181,19 +190,25 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                     f"{event} quality paths must be complete, ordered and duplicate-free",
                 )
 
+    def test_shell_syntax_surface_matches_every_root_command_entrypoint(self):
+        discovered = sorted(path.name for path in ROOT.glob("*.command"))
+        self.assertEqual(
+            sorted(SHELL_SYNTAX_ENTRYPOINTS),
+            discovered,
+            "every root .command entrypoint must be covered by hosted syntax validation",
+        )
+
     def test_checks_shell_syntax_for_all_command_entrypoints(self):
         self.assertIn("- name: Shell syntax", self.text)
         self.assertIn("bash -n", self.text)
-        for path in COMMAND_ENTRYPOINTS:
+        self.assertEqual(self._trigger_paths("push")[0], "*.command")
+        self.assertEqual(self._trigger_paths("pull_request")[0], "*.command")
+        for path in SHELL_SYNTAX_ENTRYPOINTS:
             with self.subTest(path=path):
-                self.assertGreaterEqual(
-                    self.text.count(path),
-                    3,
-                    f"{path} must be trigger-covered and syntax-checked",
-                )
+                self.assertIn(path, self.text, f"{path} must be syntax-checked")
 
-    def test_command_entrypoints_keep_bash_and_strict_mode(self):
-        for path in COMMAND_ENTRYPOINTS:
+    def test_strict_command_entrypoints_keep_bash_and_strict_mode(self):
+        for path in STRICT_COMMAND_ENTRYPOINTS:
             with self.subTest(path=path):
                 lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
                 self.assertGreaterEqual(len(lines), 2)
@@ -730,7 +745,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Shell syntax": [
                 "set -euo pipefail",
-                "bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command",
+                "bash -n upgrade-watch.command watch-preflight.command login-from-mac.command open-in-android-studio.command setup-and-install-watch.command install-mac-adb-autoconnect.command pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command start-physical-handoff.command",
             ],
             "Python syntax": [
                 "set -euo pipefail",
