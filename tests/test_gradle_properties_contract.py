@@ -11,6 +11,24 @@ EXPECTED = {
     "android.useAndroidX": "true",
     "kotlin.code.style": "official",
 }
+UTF8_BOM = b"\xef\xbb\xbf"
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def decode_canonical_properties(data: bytes) -> str:
+    if data.startswith(UTF8_BOM):
+        raise ValueError("gradle.properties must not start with a UTF-8 BOM")
+    if b"\x00" in data:
+        raise ValueError("gradle.properties must not contain NUL bytes")
+    if b"\r" in data:
+        raise ValueError("gradle.properties must use LF-only line endings")
+    try:
+        text = data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("gradle.properties must be strict UTF-8") from exc
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError("gradle.properties must not contain bidirectional control characters")
+    return text
 
 
 def parse_properties(text):
@@ -38,9 +56,24 @@ class GradlePropertiesContractTests(unittest.TestCase):
         self.assertFalse(PROPERTIES.is_symlink())
         self.assertTrue(PROPERTIES.is_file())
         raw = PROPERTIES.read_bytes()
-        self.assertNotIn(b"\x00", raw)
-        text = raw.decode("utf-8")
+        text = decode_canonical_properties(raw)
         self.assertEqual(parse_properties(text), EXPECTED)
+
+    def test_canonical_decoder_rejects_ambiguous_source_bytes(self):
+        cases = (
+            (UTF8_BOM + b"android.useAndroidX=true\n", "UTF-8 BOM"),
+            (b"android.useAndroidX=true\r\n", "LF-only line endings"),
+            (b"android.useAndroidX=true\x00\n", "NUL bytes"),
+            (b"android.useAndroidX=\xff\n", "strict UTF-8"),
+            (
+                "android.useAndroidX=true\n# safe\u202eunsafe\n".encode("utf-8"),
+                "bidirectional control",
+            ),
+        )
+        for payload, expected in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    decode_canonical_properties(payload)
 
     def test_parser_rejects_duplicate_key(self):
         with self.assertRaisesRegex(ValueError, "duplicate key android.useAndroidX"):
@@ -209,8 +242,11 @@ class GradlePropertiesContractTests(unittest.TestCase):
             'path = pathlib.Path("gradle.properties")',
             "path.is_symlink()",
             "path.is_file()",
-            'path.read_bytes().decode("utf-8")',
-            'if "\\x00" in text:',
+            'UTF8_BOM = b"\\xef\\xbb\\xbf"',
+            'if data.startswith(UTF8_BOM):',
+            'if b"\\x00" in data:',
+            'if b"\\r" in data:',
+            "BIDI_CONTROL_RE.search(text)",
             '"org.gradle.jvmargs": "-Xmx2048m -Dfile.encoding=UTF-8"',
             '"android.useAndroidX": "true"',
             '"kotlin.code.style": "official"',
