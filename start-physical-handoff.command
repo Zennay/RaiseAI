@@ -2,9 +2,20 @@
 set -euo pipefail
 
 ARTIFACT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROFILE="${1:-}"
+
+usage() {
+  echo "Usage: bash ./start-physical-handoff.command /path/to/watch-gateway.properties"
+  echo "       bash ./start-physical-handoff.command --verify-only"
+}
+
+if [ "$#" -ne 1 ]; then
+  usage
+  exit 2
+fi
+
+PROFILE="$1"
 VERIFY_ONLY=0
-if [ "${1:-}" = "--verify-only" ]; then
+if [ "$1" = "--verify-only" ]; then
   VERIFY_ONLY=1
   PROFILE=""
 fi
@@ -41,8 +52,7 @@ bundle_version="${bundle_version%-source.bundle}"
 
 if [ "$VERIFY_ONLY" -eq 0 ]; then
   if [ -z "$PROFILE" ] || [ ! -f "$PROFILE" ]; then
-    echo "Usage: bash ./start-physical-handoff.command /path/to/watch-gateway.properties"
-    echo "       bash ./start-physical-handoff.command --verify-only"
+    usage
     exit 2
   fi
 fi

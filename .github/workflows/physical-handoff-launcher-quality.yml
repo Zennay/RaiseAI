@@ -1,0 +1,58 @@
+name: Physical handoff launcher quality CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "start-physical-handoff.command"
+      - "tests/test_physical_handoff_launcher_cli.py"
+      - ".github/workflows/physical-handoff-launcher-quality.yml"
+  pull_request:
+    paths:
+      - "start-physical-handoff.command"
+      - "tests/test_physical_handoff_launcher_cli.py"
+      - ".github/workflows/physical-handoff-launcher-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: physical-handoff-launcher-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Validate handoff launcher CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n start-physical-handoff.command
+          python3 -m unittest tests.test_physical_handoff_launcher_cli -v
+
+      - name: Verify clean worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
