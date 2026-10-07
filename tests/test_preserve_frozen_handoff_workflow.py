@@ -90,9 +90,9 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
         self.assertEqual(
             token_lines,
             [
-                "          GITHUB_TOKEN: \${{ github.token }}",
-                "          GITHUB_TOKEN: \${{ github.token }}",
-                "          GITHUB_TOKEN: \${{ github.token }}",
+                "          GITHUB_TOKEN: ${{ github.token }}",
+                "          GITHUB_TOKEN: ${{ github.token }}",
+                "          GITHUB_TOKEN: ${{ github.token }}",
             ],
         )
         self.assertNotIn("persist-credentials:", self.text)
