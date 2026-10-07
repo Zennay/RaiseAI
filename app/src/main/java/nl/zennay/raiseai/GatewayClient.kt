@@ -109,6 +109,8 @@ class GatewayClient(private val settings: GatewaySettings) {
                     connection.contentType,
                     contentLength
                 )
+            } else {
+                GatewayResponseMetadataPolicy.validateBodyLength(contentLength)
             }
 
             val responseText = GatewayResponseBodyReader.read(
