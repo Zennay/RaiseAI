@@ -20,6 +20,7 @@ class PythonContractRunnerTests(unittest.TestCase):
     def run_temporary_suite(self, source: str, filename: str) -> tuple[int, str]:
         with tempfile.TemporaryDirectory() as tmp:
             tests_dir = Path(tmp)
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
             (tests_dir / filename).write_text(source, encoding="utf-8")
             previous = MODULE.TESTS_DIR
             MODULE.TESTS_DIR = tests_dir
