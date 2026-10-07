@@ -1,7 +1,9 @@
 import json
 import pathlib
 import re
+import stat
 import subprocess
+import tempfile
 import unittest
 
 
@@ -59,8 +61,21 @@ def load_manifest_text(text):
     )
 
 
+def load_manifest_path(path):
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError("Wear manifest must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError("Wear manifest must be a regular file")
+    try:
+        text = path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Wear manifest must be valid UTF-8") from exc
+    return load_manifest_text(text)
+
+
 def load_manifest():
-    return load_manifest_text(MANIFEST_PATH.read_text(encoding="utf-8"))
+    return load_manifest_path(MANIFEST_PATH)
 
 
 def extract_private_kotlin_string_constant(source, name):
@@ -217,6 +232,26 @@ class WearExtensionAssetContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 with self.assertRaisesRegex(ValueError, "non-finite manifest JSON number"):
                     load_manifest_text(f'{{"value":{token}}}')
+
+    def test_manifest_loader_rejects_symlink_nonregular_and_invalid_utf8_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            regular = root / "regular.json"
+            regular.write_text('{"name":"Raise"}', encoding="utf-8")
+            symlink = root / "manifest-link.json"
+            symlink.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                load_manifest_path(symlink)
+
+            directory = root / "manifest-dir.json"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                load_manifest_path(directory)
+
+            invalid = root / "invalid.json"
+            invalid.write_bytes(b'{"name":"Raise"}\xff')
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                load_manifest_path(invalid)
 
     def test_kotlin_constant_extractor_rejects_missing_or_duplicate_identity(self):
         with self.assertRaisesRegex(ValueError, "exactly once"):
