@@ -69,14 +69,29 @@ else
 end
 
 environments = []
+external_actions = []
 if jobs_node
   abort("workflow jobs must be a mapping") unless jobs_node.is_a?(Psych::Nodes::Mapping)
   jobs_node.children.each_slice(2) do |job_name_node, job_node|
     abort("workflow job names must be scalars") unless job_name_node.is_a?(Psych::Nodes::Scalar)
     abort("workflow jobs must be mappings") unless job_node.is_a?(Psych::Nodes::Mapping)
-    job_node.children.each_slice(2) do |key_node, _value_node|
+    job_node.children.each_slice(2) do |key_node, value_node|
       next unless key_node.is_a?(Psych::Nodes::Scalar)
       environments << job_name_node.value if key_node.value == "environment"
+      if key_node.value == "uses"
+        abort("workflow uses values must be scalars") unless value_node.is_a?(Psych::Nodes::Scalar)
+        external_actions << value_node.value
+      end
+      next unless key_node.value == "steps"
+      abort("workflow steps must be a sequence") unless value_node.is_a?(Psych::Nodes::Sequence)
+      value_node.children.each do |step_node|
+        abort("workflow steps must be mappings") unless step_node.is_a?(Psych::Nodes::Mapping)
+        step_node.children.each_slice(2) do |step_key_node, step_value_node|
+          next unless step_key_node.is_a?(Psych::Nodes::Scalar) && step_key_node.value == "uses"
+          abort("workflow uses values must be scalars") unless step_value_node.is_a?(Psych::Nodes::Scalar)
+          external_actions << step_value_node.value
+        end
+      end
     end
   end
 end
@@ -84,7 +99,6 @@ end
 writes = []
 secret_expressions = []
 inherited_secrets = []
-external_actions = []
 walk = nil
 walk = lambda do |node|
   if node.is_a?(Psych::Nodes::Scalar)
@@ -100,10 +114,6 @@ walk = lambda do |node|
         if value_node.is_a?(Psych::Nodes::Scalar) && value_node.value == "inherit"
           inherited_secrets << "inherit"
         end
-      end
-      if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "uses"
-        abort("workflow uses values must be scalars") unless value_node.is_a?(Psych::Nodes::Scalar)
-        external_actions << value_node.value
       end
       if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "permissions"
         case value_node
@@ -407,6 +417,10 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                 "on: pull_request\njobs: {verify: {steps: "
                 "[{uses: docker://alpine:3.20}]}}\n"
             ),
+            "env-uses.yml": (
+                "on: pull_request\njobs: {verify: {env: "
+                "{uses: owner/action@v1}, steps: [{run: echo safe}]}}\n"
+            ),
             "comment.yml": (
                 "on: pull_request\njobs:\n  verify:\n    steps:\n"
                 "      # uses: owner/action@v1\n"
@@ -420,6 +434,7 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             "reusable.yml": [("owner/repo/.github/workflows/reuse.yml", sha)],
             "local.yml": [],
             "docker.yml": [],
+            "env-uses.yml": [],
             "comment.yml": [],
         }
 
