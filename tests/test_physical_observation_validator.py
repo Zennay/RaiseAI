@@ -118,6 +118,16 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 validator.load_json_document(path, "session")
 
+    def test_loader_rejects_fifo_without_blocking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "session.json"
+            pathlib.os.mkfifo(path)
+            with self.assertRaisesRegex(
+                validator.ObservationError,
+                "session must be a regular file",
+            ):
+                validator.load_json_document(path, "session")
+
     def test_accepts_explicit_ux_failures_without_turning_them_into_a_fake_pass(self):
         result = validator.validate_observations(
             session_payload(),
