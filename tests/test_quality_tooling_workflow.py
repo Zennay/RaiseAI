@@ -241,7 +241,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         for event in ("push", "pull_request"):
             with self.subTest(event=event):
                 self.assertEqual(self._trigger_paths(event)[:2], ["*.command", "*.py"])
-        self.assertIn("python3 -m py_compile *.py ", self.text)
+        self.assertIn("python3 -I -m py_compile *.py ", self.text)
         discovered = sorted(path.name for path in ROOT.glob("*.py"))
         self.assertTrue(discovered, "repository must retain at least one root Python entrypoint")
         for path in discovered:
@@ -281,7 +281,12 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
     def test_compiles_all_python_quality_tools(self):
         self.assertIn("tools/*.py", self._trigger_paths("push"))
         self.assertIn("tools/*.py", self._trigger_paths("pull_request"))
-        self.assertIn("python3 -m py_compile *.py tools/*.py", self.text)
+        self.assertIn("python3 -I -m py_compile *.py tools/*.py", self.text)
+        self.assertNotIn(
+            "python3 -m py_compile",
+            self.text,
+            "hosted Python syntax validation must not allow ambient import-path customization",
+        )
         discovered = sorted(path.name for path in (ROOT / "tools").glob("*.py"))
         self.assertTrue(discovered, "tools/ must retain Python quality tooling")
 
@@ -427,6 +432,15 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc", self.text)
         self.assertIn("TZ: UTC", self.text)
         self.assertIn("- name: Verify Python runtime", self.text)
+        self.assertIn(
+            "python3 -I -c 'import platform, sys;",
+            self.text,
+        )
+        self.assertNotIn(
+            "python3 -c 'import platform, sys;",
+            self.text,
+            "runtime verification must not allow ambient import-path customization",
+        )
         self.assertIn('platform.python_implementation() == "CPython"', self.text)
         self.assertIn("sys.version_info[:2] == (3, 12)", self.text)
 
@@ -805,7 +819,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Verify Python runtime": [
                 "set -euo pipefail",
-                "python3 -c 'import platform, sys; assert platform.python_implementation() == \"CPython\"; assert sys.version_info[:2] == (3, 12), sys.version'",
+                "python3 -I -c 'import platform, sys; assert platform.python_implementation() == \"CPython\"; assert sys.version_info[:2] == (3, 12), sys.version'",
             ],
             "Shell syntax": [
                 "set -euo pipefail",
@@ -813,7 +827,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Python syntax": [
                 "set -euo pipefail",
-                "python3 -m py_compile *.py tools/*.py",
+                "python3 -I -m py_compile *.py tools/*.py",
             ],
             "PowerShell syntax": [
                 "set -euo pipefail",
