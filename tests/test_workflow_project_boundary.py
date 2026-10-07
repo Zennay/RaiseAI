@@ -33,6 +33,8 @@ FOREIGN_PREFIXES = (
     "cancel-stale-zcloud-",
 )
 
+FOREIGN_MARKER_RE = re.compile(r"(?i)\b(?:ftmo|lightup|zcloud)\b")
+
 
 def foreign_workflows() -> list[Path]:
     return sorted(
@@ -75,6 +77,22 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             inspected,
             0,
             "project-boundary contract must inspect the remaining legacy foreign workflows",
+        )
+
+    def test_nonlegacy_workflows_do_not_hide_foreign_project_markers(self):
+        offenders = []
+        for path in sorted(WORKFLOWS.glob("*.y*ml")):
+            if path.name in LEGACY_FOREIGN_WORKFLOWS:
+                continue
+            text = path.read_text(encoding="utf-8")
+            if FOREIGN_MARKER_RE.search(text):
+                offenders.append(path.name)
+
+        self.assertEqual(
+            offenders,
+            [],
+            "RaiseAI workflow files outside the legacy allowlist must not embed "
+            f"FTMO/LightUp/zCloud orchestration markers: {offenders}",
         )
 
     def test_allowlist_is_cleanup_friendly(self):
