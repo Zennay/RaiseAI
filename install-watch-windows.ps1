@@ -15,6 +15,29 @@ function Require-Command([string]$Name) {
     }
 }
 
+function Get-SingleApkCandidate([string]$Root) {
+    $versioned = @(
+        Get-ChildItem $Root -Recurse -File |
+            Where-Object { $_.Name -match '^RaiseAI-v.+-debug\.apk$' }
+    )
+    if ($versioned.Count -gt 1) {
+        throw "Meerdere Raise AI APK-kandidaten gevonden in de build artifacts; installatie wordt geweigerd."
+    }
+    if ($versioned.Count -eq 1) {
+        return $versioned[0]
+    }
+
+    $fallback = @(Get-ChildItem $Root -Recurse -Filter "app-debug.apk" -File)
+    if ($fallback.Count -gt 1) {
+        throw "Meerdere app-debug.apk-kandidaten gevonden in de build artifacts; installatie wordt geweigerd."
+    }
+    if ($fallback.Count -eq 1) {
+        return $fallback[0]
+    }
+
+    throw "Geen Raise AI APK gevonden in de build artifacts."
+}
+
 Require-Command "gh"
 Require-Command "adb"
 
@@ -54,22 +77,30 @@ if ($LASTEXITCODE -ne 0) {
     throw "Artifact-download mislukt."
 }
 
-$apk = Get-ChildItem $WorkDir -Recurse -File | Where-Object { $_.Name -match '^RaiseAI-v.+-debug\.apk$' } | Select-Object -First 1
-if (-not $apk) {
-    $apk = Get-ChildItem $WorkDir -Recurse -Filter "app-debug.apk" -File | Select-Object -First 1
-}
-if (-not $apk) {
-    throw "Geen Raise AI APK gevonden in de build artifacts."
-}
+$apk = Get-SingleApkCandidate $WorkDir
 
 if ($Watch) {
     Write-Host "ADB connect $Watch"
     adb connect $Watch | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "ADB connect naar $Watch is mislukt."
+    }
 }
 
-$deviceLines = adb devices | Select-String "\tdevice$" | ForEach-Object { ($_.Line -split "\s+")[0] }
+$deviceOutput = @(adb devices)
+if ($LASTEXITCODE -ne 0) {
+    throw "Kon de ADB device-lijst niet lezen."
+}
+$deviceLines = @(
+    $deviceOutput |
+        Select-String "\tdevice$" |
+        ForEach-Object { ($_.Line -split "\s+")[0] }
+)
 
 if ($Watch) {
+    if ($deviceLines -notcontains $Watch) {
+        throw "Het expliciete Watch-target $Watch staat niet als verbonden device in adb devices."
+    }
     $serial = $Watch
 } elseif ($deviceLines.Count -eq 1) {
     $serial = $deviceLines[0]
@@ -78,11 +109,14 @@ if ($Watch) {
 }
 
 $watchFeature = adb -s $serial shell pm list features | Select-String "android.hardware.type.watch"
-if (-not $watchFeature) {
-    throw "ADB target $serial meldt zich niet als Wear OS watch."
+if ($LASTEXITCODE -ne 0 -or -not $watchFeature) {
+    throw "ADB target $serial meldt zich niet als verbonden Wear OS watch."
 }
 
 $abi = (adb -s $serial shell getprop ro.product.cpu.abi).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $abi) {
+    throw "Kon de ABI van ADB target $serial niet bepalen."
+}
 Write-Host "Watch ABI: $abi"
 if ($abi -ne "armeabi-v7a") {
     throw "Onverwachte Watch ABI: $abi (verwacht armeabi-v7a)."
@@ -95,10 +129,16 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 adb -s $serial shell monkey -p $Package -c android.intent.category.LAUNCHER 1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Raise AI kon na installatie niet worden gestart."
+}
 
 Write-Host ""
 Write-Host "Geinstalleerde Raise AI versie:"
 adb -s $serial shell dumpsys package $Package | Select-String "versionName=|versionCode=" | Select-Object -First 2 | ForEach-Object { $_.Line.Trim() }
+if ($LASTEXITCODE -ne 0) {
+    throw "Kon de geinstalleerde Raise AI pakketstatus niet uitlezen."
+}
 
 Write-Host ""
 Write-Host "Klaar. Raise AI is geinstalleerd en geopend op de Watch."
