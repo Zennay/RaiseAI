@@ -17,6 +17,28 @@ class GradleBootstrapIntegrityTest(unittest.TestCase):
         match = re.search(r'^GRADLE_BIN_SHA256="([0-9a-f]{64})"$', self.script, re.MULTILINE)
         self.assertIsNotNone(match, "gradlew must pin a full lowercase SHA-256 digest")
 
+    def test_distribution_download_is_network_bounded(self):
+        for name, value in (
+            ("CURL_CONNECT_TIMEOUT_SECONDS", "10"),
+            ("CURL_MAX_TIME_SECONDS", "120"),
+            ("CURL_RETRY_MAX_TIME_SECONDS", "120"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    self.script.count(f'{name}="{value}"'),
+                    1,
+                )
+
+        for fragment in (
+            '--connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS"',
+            '--max-time "$CURL_MAX_TIME_SECONDS"',
+            '--retry 3',
+            '--retry-max-time "$CURL_RETRY_MAX_TIME_SECONDS"',
+            '--location --fail',
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertEqual(self.script.count(fragment), 1)
+
     def test_verifies_download_before_install(self):
         digest = self.script.index('actual_sha256="$(sha256sum "$ZIP.part"')
         compare = self.script.index('if [ "$actual_sha256" != "$GRADLE_BIN_SHA256" ]')
