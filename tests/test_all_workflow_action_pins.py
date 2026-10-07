@@ -5,6 +5,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+ACTIONS = ROOT / ".github" / "actions"
 
 
 def immutable_uses_error(value):
@@ -37,10 +38,16 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
     def test_every_remote_uses_ref_is_immutable(self):
         workflows = sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
         self.assertTrue(workflows, "repository must retain GitHub Actions workflows")
+        action_manifests = sorted(
+            [
+                *ACTIONS.glob("**/action.yml"),
+                *ACTIONS.glob("**/action.yaml"),
+            ]
+        )
 
         remote_refs = []
-        for workflow in workflows:
-            text = workflow.read_text(encoding="utf-8")
+        for document in [*workflows, *action_manifests]:
+            text = document.read_text(encoding="utf-8")
             for match in re.finditer(
                 r"^\s*(?:-\s*)?uses:\s*([^\s#]+)",
                 text,
@@ -49,14 +56,14 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                 value = match.group(1)
                 if value.startswith("./"):
                     continue
-                remote_refs.append((workflow.name, value))
+                remote_refs.append((str(document.relative_to(ROOT)), value))
 
         self.assertTrue(remote_refs, "repository must retain at least one remote action")
-        for workflow, value in remote_refs:
-            with self.subTest(workflow=workflow, uses=value):
+        for document, value in remote_refs:
+            with self.subTest(document=document, uses=value):
                 self.assertIsNone(
                     immutable_uses_error(value),
-                    f"{workflow}: {immutable_uses_error(value)}",
+                    f"{document}: {immutable_uses_error(value)}",
                 )
 
     def test_docker_uses_requires_sha256_digest(self):
