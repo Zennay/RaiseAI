@@ -63,7 +63,10 @@ object SensorTrialRecorder {
     fun progress(context: Context): SensorTrialProgress {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return SensorTrialProgress()
+        return file.useLines(::progressFromLines)
+    }
 
+    internal fun progressFromLines(lines: Sequence<String>): SensorTrialProgress {
         var mouthTrials = 0
         var mouthDetections = 0
         var nonTriggerTrials = 0
@@ -71,8 +74,7 @@ object SensorTrialRecorder {
         var rejectedTrials = 0
         val identities = mutableSetOf<String>()
 
-        file.useLines { lines ->
-            lines.drop(1).forEach { line ->
+        lines.drop(1).forEach { line ->
                 val fields = line.split(',', limit = 9)
                 if (fields.size != 9) {
                     rejectedTrials++
@@ -105,20 +107,20 @@ object SensorTrialRecorder {
                     return@forEach
                 }
 
-                identities += "$appVersion|$sourceRevision|$detectorConfig"
                 when (label) {
                     "mouth_raise" -> {
+                        identities += "$appVersion|$sourceRevision|$detectorConfig"
                         mouthTrials++
                         if (triggered) mouthDetections++
                     }
                     "view_time", "normal_move" -> {
+                        identities += "$appVersion|$sourceRevision|$detectorConfig"
                         nonTriggerTrials++
                         if (triggered) falseTriggers++
                     }
                     else -> rejectedTrials++
                 }
             }
-        }
 
         return SensorTrialProgress(
             mouthTrials = mouthTrials,
