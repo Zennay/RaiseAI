@@ -101,6 +101,18 @@ test("deployment state parser rejects malformed UTF-8", () => {
   });
 });
 
+test("deployment state parser rejects NUL bytes", () => {
+  withTempDir(root => {
+    const file = path.join(root, "gateway.env");
+    fs.writeFileSync(file, Buffer.from("RAISE_PORT=8787\0shadow\n", "utf8"));
+
+    assert.throws(
+      () => readKeyValueFile(file),
+      /contains NUL bytes/
+    );
+  });
+});
+
 test("missing state is only tolerated when explicitly requested", () => {
   withTempDir(root => {
     const missing = path.join(root, "missing.env");
