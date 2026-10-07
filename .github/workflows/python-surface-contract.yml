@@ -77,7 +77,10 @@ jobs:
               if not candidate.is_file():
                   raise SystemExit(f"{path}: tracked Python path must be a regular file")
               try:
-                  compile(candidate.read_bytes(), path, "exec", dont_inherit=True)
+                  source = candidate.read_bytes().decode("utf-8")
+                  compile(source, path, "exec", dont_inherit=True)
+              except UnicodeDecodeError as exc:
+                  raise SystemExit(f"{path}: Python source must be strict UTF-8: {exc}") from None
               except (SyntaxError, ValueError) as exc:
                   raise SystemExit(f"{path}: invalid Python syntax: {exc.__class__.__name__}") from None
 
