@@ -53,10 +53,21 @@ class GatewayResponseMetadataPolicyTest {
     }
 
     @Test
-    fun rejectsDeclaredBodyAboveLimitBeforeReading() {
+    fun rejectsDeclaredSuccessBodyAboveLimitBeforeReading() {
         val error = assertThrows(IOException::class.java) {
             GatewayResponseMetadataPolicy.validateSuccessfulResponse(
                 "application/json; charset=utf-8",
+                GatewayResponseBodyReader.MAX_RESPONSE_BYTES.toLong() + 1L
+            )
+        }
+
+        assertEquals("gateway_response_too_large", error.message)
+    }
+
+    @Test
+    fun rejectsDeclaredErrorBodyAboveLimitBeforeReading() {
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseMetadataPolicy.validateBodyLength(
                 GatewayResponseBodyReader.MAX_RESPONSE_BYTES.toLong() + 1L
             )
         }
