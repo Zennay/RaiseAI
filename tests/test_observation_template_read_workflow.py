@@ -60,16 +60,34 @@ class ObservationTemplateReadWorkflowTests(unittest.TestCase):
             self.text,
         )
 
+    def _event_paths(self, event):
+        lines = self.text.splitlines()
+        start = lines.index(f"  {event}:") + 1
+        body = []
+        for line in lines[start:]:
+            if line and not line.startswith("    "):
+                break
+            body.append(line)
+        self.assertIn("    paths:", body)
+        paths_start = body.index("    paths:") + 1
+        paths = []
+        for line in body[paths_start:]:
+            match = re.fullmatch(r'      - "([^"]+)"', line)
+            if not match:
+                break
+            paths.append(match.group(1))
+        return paths
+
     def test_dependencies_and_regressions_are_complete(self):
-        expected_paths = (
+        expected_paths = [
             "tools/create-physical-observation-template.py",
             "tests/test_physical_observation_template.py",
             "tests/test_observation_template_read_workflow.py",
             ".github/workflows/observation-template-read-integrity.yml",
-        )
-        for path in expected_paths:
-            with self.subTest(path=path):
-                self.assertEqual(self.text.count(f'      - "{path}"'), 2)
+        ]
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                self.assertEqual(self._event_paths(event), expected_paths)
         self.assertEqual(
             self.text.count(
                 "python3 -m unittest tests.test_physical_observation_template "
