@@ -48,6 +48,8 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
             raise TrialError("trial CSV has no header")
+        if len(reader.fieldnames) != len(set(reader.fieldnames)):
+            raise TrialError("trial CSV has duplicate column names")
         columns = set(reader.fieldnames)
         missing = REQUIRED_COLUMNS - columns
         unexpected = columns - REQUIRED_COLUMNS
