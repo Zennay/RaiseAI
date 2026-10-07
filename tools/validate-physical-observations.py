@@ -17,6 +17,7 @@ import datetime as dt
 import json
 import os
 import re
+import secrets
 import stat
 import sys
 import tempfile
@@ -224,37 +225,73 @@ def validate_observations(
 
 def write_new_json_atomically(path: Path, payload: dict[str, Any]) -> None:
     serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    temp_path: Path | None = None
+    _require(path.name not in {"", ".", ".."}, "quality result path must name a file")
+    _require(
+        hasattr(os, "O_DIRECTORY") and hasattr(os, "O_NOFOLLOW"),
+        "quality result directory cannot be verified safely on this platform",
+    )
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    if hasattr(os, "O_CLOEXEC"):
+        directory_flags |= os.O_CLOEXEC
+
+    directory_fd = os.open(path.parent, directory_flags)
+    temp_name: str | None = None
     published = False
     try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as output_file:
-            temp_path = Path(output_file.name)
-            os.fchmod(output_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
+        metadata = os.fstat(directory_fd)
+        _require(stat.S_ISDIR(metadata.st_mode), "quality result parent must be a directory")
+
+        create_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_CLOEXEC"):
+            create_flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            create_flags |= os.O_NOFOLLOW
+
+        for _ in range(32):
+            candidate = f".{path.name}.{secrets.token_hex(8)}.tmp"
+            try:
+                output_fd = os.open(
+                    candidate,
+                    create_flags,
+                    stat.S_IRUSR | stat.S_IWUSR,
+                    dir_fd=directory_fd,
+                )
+            except FileExistsError:
+                continue
+            temp_name = candidate
+            break
+        else:
+            raise ObservationError("could not allocate a secure temporary quality result")
+
+        with os.fdopen(output_fd, "w", encoding="utf-8") as output_file:
             output_file.write(serialized)
             output_file.flush()
             os.fsync(output_file.fileno())
 
         try:
-            os.link(temp_path, path)
+            os.link(
+                temp_name,
+                path.name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
         except FileExistsError as exc:
             raise ObservationError(
                 f"refusing to overwrite existing quality result: {path}"
             ) from exc
         published = True
     finally:
-        if temp_path is not None:
+        if temp_name is not None:
             try:
-                temp_path.unlink(missing_ok=True)
+                os.unlink(temp_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
             except OSError:
                 if not published:
                     raise
+        os.close(directory_fd)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
