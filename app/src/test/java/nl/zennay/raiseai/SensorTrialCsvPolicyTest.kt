@@ -77,6 +77,47 @@ class SensorTrialCsvPolicyTest {
     }
 
     @Test
+    fun appendPolicyRejectsDuplicateSessionAndMixedIdentity() {
+        val candidate = requireNotNull(
+            SensorTrialCsvPolicy.parseRow(
+                "normal_move,2,4000,40,false,0.88,1.5.2," + revision + "," + detector
+            )
+        )
+        val existing = listOf(
+            SensorTrialCsvPolicy.HEADER,
+            "mouth_raise,1,4000,40,true,0.98,1.5.2," + revision + "," + detector
+        )
+
+        assertTrue(SensorTrialCsvPolicy.canAppend(existing, candidate))
+        assertFalse(
+            SensorTrialCsvPolicy.canAppend(
+                existing,
+                requireNotNull(
+                    SensorTrialCsvPolicy.parseRow(
+                        "normal_move,1,4000,40,false,0.88,1.5.2," + revision + "," + detector
+                    )
+                )
+            )
+        )
+        assertFalse(
+            SensorTrialCsvPolicy.canAppend(
+                existing,
+                requireNotNull(
+                    SensorTrialCsvPolicy.parseRow(
+                        "normal_move,2,4000,40,false,0.88,1.5.3," + revision + "," + detector
+                    )
+                )
+            )
+        )
+        assertFalse(
+            SensorTrialCsvPolicy.canAppend(
+                existing + "malformed,row",
+                candidate
+            )
+        )
+    }
+
+    @Test
     fun rejectsNonFiniteSimilarityAndMalformedRevision() {
         assertNull(
             SensorTrialCsvPolicy.parseRow(
