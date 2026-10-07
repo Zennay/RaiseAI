@@ -32,11 +32,10 @@ def reject_duplicate_mapping_keys(node)
   if node.is_a?(Psych::Nodes::Mapping)
     seen = {}
     node.children.each_slice(2) do |key, value|
-      if key.is_a?(Psych::Nodes::Scalar)
-        label = key.value
-        abort("duplicate YAML mapping key: #{label}") if seen.key?(label)
-        seen[label] = true
-      end
+      abort("YAML mapping keys must be scalar") unless key.is_a?(Psych::Nodes::Scalar)
+      label = key.value
+      abort("duplicate YAML mapping key: #{label}") if seen.key?(label)
+      seen[label] = true
       reject_duplicate_mapping_keys(key)
       reject_duplicate_mapping_keys(value)
     end
@@ -123,6 +122,17 @@ class YamlSurfaceContractTests(unittest.TestCase):
                 parsed.stderr,
             )
 
+    def test_parser_rejects_non_scalar_mapping_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "complex-key.yml"
+            path.write_text("? [alpha, beta]\n: value\n", encoding="utf-8")
+            parsed = parse_yaml_with_psych(path)
+            self.assertNotEqual(parsed.returncode, 0)
+            self.assertIn(
+                "YAML mapping keys must be scalar",
+                parsed.stderr,
+            )
+
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
         start = lines.index(f"  {event}:") + 1
@@ -191,6 +201,7 @@ class YamlSurfaceContractTests(unittest.TestCase):
             "tracked YAML files must not be symlinks",
             'subprocess.run(["ruby", "--disable-gems", "-e", ruby_parser, path], check=True)',
             "duplicate YAML mapping key",
+            "YAML mapping keys must be scalar",
             "YAML stream must contain exactly one document",
             "python3 -m unittest tests.test_yaml_surface_contract",
             "git diff --exit-code -- .",
