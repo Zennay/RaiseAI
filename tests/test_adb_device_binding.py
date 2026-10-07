@@ -60,14 +60,16 @@ exit 2
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_script(self, script_name, serial):
+    def run_script(self, script_name, serial, args=None):
         env = os.environ.copy()
         env["PATH"] = f"{self.bin}:{env['PATH']}"
         env["ANDROID_SERIAL"] = serial
         env["ADB_LOG"] = str(self.log)
         env["RAISE_OUTPUT_DIR"] = str(self.root / "out")
+        command = ["bash", str(ROOT / script_name)]
+        command.extend([] if args is None else args)
         return subprocess.run(
-            ["bash", str(ROOT / script_name)],
+            command,
             cwd=ROOT,
             env=env,
             text=True,
@@ -83,6 +85,18 @@ exit 2
             for line in self.log.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
+
+    def test_pull_helpers_reject_arguments_before_adb_or_output(self):
+        for script_name in ("pull-diagnostics.command", "pull-watch-data.command"):
+            with self.subTest(script_name=script_name):
+                self.log.unlink(missing_ok=True)
+                shutil.rmtree(self.root / "out", ignore_errors=True)
+                result = self.run_script(script_name, "watch-b", args=["unexpected"])
+
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn(f"Usage: ./{script_name}", result.stdout)
+                self.assertFalse(self.log.exists())
+                self.assertFalse((self.root / "out").exists())
 
     def test_pull_diagnostics_uses_bound_android_serial(self):
         result = self.run_script("pull-diagnostics.command", "watch-b")
