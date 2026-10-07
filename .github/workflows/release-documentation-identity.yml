@@ -1,0 +1,54 @@
+name: Release documentation identity contract
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "VERSION.txt"
+      - "README.md"
+      - "START-HERE.md"
+      - "tests/test_release_documentation_identity.py"
+      - ".github/workflows/release-documentation-identity.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-documentation-identity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TZ: UTC
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Run release documentation identity contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_release_documentation_identity
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
