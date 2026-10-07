@@ -208,6 +208,19 @@ class KotlinSourceContractTests(unittest.TestCase):
                 "TZ",
             ],
         )
+        expected_env_lines = [
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ]
+        self.assertEqual(
+            lines[env_start : env_start + len(expected_env_lines)],
+            expected_env_lines,
+            "Kotlin workflow environment values must remain deterministic",
+        )
 
     def test_workflow_step_and_nested_mapping_surfaces_are_exact(self):
         lines = self.workflow.splitlines()
