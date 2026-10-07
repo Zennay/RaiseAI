@@ -48,6 +48,7 @@ def reject_duplicate_mapping_keys(node)
 end
 
 tree = Psych.parse_stream(raw)
+abort("YAML stream must contain exactly one document") unless tree.children.length == 1
 reject_duplicate_mapping_keys(tree)
 """
     return subprocess.run(
@@ -103,6 +104,22 @@ class YamlSurfaceContractTests(unittest.TestCase):
             self.assertNotEqual(parsed.returncode, 0)
             self.assertIn(
                 "duplicate YAML mapping key: runs-on",
+                parsed.stderr,
+            )
+
+    def test_parser_rejects_multiple_yaml_documents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "multiple.yml"
+            path.write_text(
+                "name: primary\\n"
+                "---\\n"
+                "name: hidden-secondary\\n",
+                encoding="utf-8",
+            )
+            parsed = parse_yaml_with_psych(path)
+            self.assertNotEqual(parsed.returncode, 0)
+            self.assertIn(
+                "YAML stream must contain exactly one document",
                 parsed.stderr,
             )
 
@@ -174,6 +191,7 @@ class YamlSurfaceContractTests(unittest.TestCase):
             "tracked YAML files must not be symlinks",
             'subprocess.run(["ruby", "--disable-gems", "-e", ruby_parser, path], check=True)',
             "duplicate YAML mapping key",
+            "YAML stream must contain exactly one document",
             "python3 -m unittest tests.test_yaml_surface_contract",
             "git diff --exit-code -- .",
             'test -z "$(git ls-files --others --exclude-standard)"',
