@@ -97,6 +97,13 @@ def run_contracts(modules: tuple[str, ...] = QUALITY_MODULES) -> int:
 
 
 def main() -> int:
+    if sys.flags.isolated != 1:
+        print(
+            "ERROR: quality tooling runner requires CPython isolated mode (-I).",
+            file=sys.stderr,
+        )
+        return 1
+
     root = str(ROOT)
     if root not in sys.path:
         sys.path.insert(0, root)
