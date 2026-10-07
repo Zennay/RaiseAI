@@ -1,0 +1,40 @@
+name: Cancel superseded analyzer run 37677920508
+
+on:
+  push:
+    branches:
+      - qa/watch-data-fork-pr-guard-20261007
+    paths:
+      - ".github/workflows/cancel-superseded-analyzer-37677920508.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Cancel exact superseded run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STALE_RUN_ID: "37677920508"
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${STALE_RUN_ID}" --jq '.status')"
+          echo "stale_run=${STALE_RUN_ID} status=${status}"
+          case "$status" in
+            queued|pending|in_progress|waiting)
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${STALE_RUN_ID}/cancel" >/dev/null
+              echo "SUPERSEDED_ANALYZER_CANCEL_REQUESTED=1"
+              ;;
+            completed)
+              echo "SUPERSEDED_ANALYZER_ALREADY_COMPLETE=1"
+              ;;
+            *)
+              echo "Unexpected workflow status: $status" >&2
+              exit 1
+              ;;
+          esac
