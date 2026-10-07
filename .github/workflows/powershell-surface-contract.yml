@@ -61,6 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import os
           import pathlib
           import subprocess
 
@@ -76,7 +77,7 @@ jobs:
           parser = (
               '$tokens = $null; $errors = $null; '
               '[void][System.Management.Automation.Language.Parser]::ParseFile('
-              '$args[0], [ref]$tokens, [ref]$errors); '
+              '$env:RAISE_PS_FILE, [ref]$tokens, [ref]$errors); '
               'if ($errors.Count -ne 0) { '
               '$errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 }'
           )
@@ -91,8 +92,9 @@ jobs:
               except UnicodeDecodeError as exc:
                   raise SystemExit(f"{path}: invalid UTF-8: {exc}") from None
               subprocess.run(
-                  ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", parser, path],
+                  ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", parser],
                   check=True,
+                  env={**os.environ, "RAISE_PS_FILE": path},
               )
 
           print(f"validated {len(paths)} tracked PowerShell files")
