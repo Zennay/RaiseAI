@@ -50,6 +50,21 @@ def declares_pull_request(text: str) -> bool:
     return re.search(r"(?m)^\s{0,2}pull_request\s*:", text) is not None
 
 
+def push_section(text: str) -> list[str]:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line == "  push:":
+            section = []
+            for candidate in lines[index + 1 :]:
+                if candidate and not candidate.startswith(" "):
+                    break
+                if re.match(r"^  [A-Za-z_][A-Za-z0-9_-]*:\\s*$", candidate):
+                    break
+                section.append(candidate)
+            return section
+    return []
+
+
 class WorkflowProjectBoundaryTests(unittest.TestCase):
     def test_no_new_foreign_project_workflows_are_added_to_raiseai(self):
         current = {path.name for path in foreign_workflows()}
@@ -78,6 +93,22 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             0,
             "project-boundary contract must inspect the remaining legacy foreign workflows",
         )
+
+
+    def test_legacy_push_triggers_are_self_scoped_to_main(self):
+        for path in foreign_workflows():
+            text = path.read_text(encoding="utf-8")
+            section = push_section(text)
+            with self.subTest(workflow=path.name):
+                self.assertTrue(section, f"{path.name}: legacy workflow must keep an explicit push block")
+                self.assertIn("    branches: [main]", section)
+                self.assertIn("    paths:", section)
+                path_entries = [line.strip() for line in section if line.lstrip().startswith("- ")]
+                self.assertEqual(
+                    path_entries,
+                    [f'- ".github/workflows/{path.name}"'],
+                    f"{path.name}: push must be scoped only to its own workflow file",
+                )
 
     def test_nonlegacy_workflows_do_not_hide_foreign_project_markers(self):
         offenders = []
