@@ -17,11 +17,18 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PythonContractRunnerTests(unittest.TestCase):
-    def run_temporary_suite(self, source: str, filename: str) -> tuple[int, str]:
+    def run_temporary_suite(
+        self,
+        source: str,
+        filename: str,
+        extra_files: dict[str, str] | None = None,
+    ) -> tuple[int, str]:
         with tempfile.TemporaryDirectory() as tmp:
             tests_dir = Path(tmp)
             (tests_dir / "__init__.py").write_text("", encoding="utf-8")
             (tests_dir / filename).write_text(source, encoding="utf-8")
+            for extra_filename, extra_source in (extra_files or {}).items():
+                (tests_dir / extra_filename).write_text(extra_source, encoding="utf-8")
             previous = MODULE.TESTS_DIR
             MODULE.TESTS_DIR = tests_dir
             output = StringIO()
@@ -53,6 +60,27 @@ class PassingContract(unittest.TestCase):
         )
         self.assertEqual(exit_code, 0)
         self.assertNotIn("SKIPPED:", output)
+
+    def test_named_contract_module_without_tests_returns_nonzero(self):
+        exit_code, output = self.run_temporary_suite(
+            """
+import unittest
+
+class PassingContract(unittest.TestCase):
+    def test_passes(self):
+        self.assertTrue(True)
+""",
+            "test_runner_module_coverage_case.py",
+            extra_files={
+                "test_runner_empty_contract_case.py": "CONTRACT_SENTINEL = True\n",
+            },
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("contributed zero tests", output)
+        self.assertIn(
+            "EMPTY-CONTRACT-MODULE: test_runner_empty_contract_case",
+            output,
+        )
 
     def test_failing_suite_returns_nonzero(self):
         exit_code, _ = self.run_temporary_suite(
