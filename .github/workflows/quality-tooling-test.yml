@@ -106,7 +106,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile *.py tools/*.py
+          python3 -I -m py_compile *.py tools/*.py
 
       - name: PowerShell syntax
         shell: bash
