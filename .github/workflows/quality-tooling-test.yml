@@ -10,6 +10,7 @@ on:
       - "*.ps1"
       - "tools/*.py"
       - "tests/test_adb_device_binding.py"
+      - "tests/test_all_workflow_action_pins.py"
       - "tests/test_frozen_acceptance_launcher.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
       - "tests/test_physical_observation_template.py"
@@ -21,9 +22,8 @@ on:
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
-      - ".github/workflows/physical-quality-evidence-test.yml"
-      - ".github/workflows/quality-tooling-test.yml"
-      - ".github/workflows/watch-app-test.yml"
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
   pull_request:
     paths:
       - "*.command"
@@ -31,6 +31,7 @@ on:
       - "*.ps1"
       - "tools/*.py"
       - "tests/test_adb_device_binding.py"
+      - "tests/test_all_workflow_action_pins.py"
       - "tests/test_frozen_acceptance_launcher.py"
       - "tests/test_frozen_physical_handoff_fetcher.py"
       - "tests/test_physical_observation_template.py"
@@ -42,9 +43,8 @@ on:
       - "tests/test_watch_e2e_evidence_validator.py"
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
-      - ".github/workflows/physical-quality-evidence-test.yml"
-      - ".github/workflows/quality-tooling-test.yml"
-      - ".github/workflows/watch-app-test.yml"
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
 
 permissions:
   contents: read
@@ -109,7 +109,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest tests.test_adb_device_binding tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_physical_validation_cli tests.test_quality_tooling_workflow tests.test_quality_workflow_action_pinning tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer
+          python3 -m unittest tests.test_adb_device_binding tests.test_all_workflow_action_pins tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_physical_validation_cli tests.test_quality_tooling_workflow tests.test_quality_workflow_action_pinning tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer
 
       - name: Verify worktree remains clean
         shell: bash
