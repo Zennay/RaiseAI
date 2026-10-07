@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ OBSERVATION_KEYS = {
     "ux_failures_reviewed",
     "visible_ux_failures",
 }
+MAX_JSON_BYTES = 64 * 1024
 
 
 class ObservationError(ValueError):
@@ -42,6 +44,35 @@ class ObservationError(ValueError):
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ObservationError(message)
+
+
+def _reject_duplicate_json_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        _require(key not in result, f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def load_json_document(path: Path, label: str) -> Any:
+    metadata = path.lstat()
+    _require(stat.S_ISREG(metadata.st_mode), f"{label} must be a regular file")
+    _require(
+        metadata.st_size <= MAX_JSON_BYTES,
+        f"{label} exceeds maximum size of {MAX_JSON_BYTES} bytes",
+    )
+
+    raw = path.read_bytes()
+    _require(
+        len(raw) <= MAX_JSON_BYTES,
+        f"{label} exceeds maximum size of {MAX_JSON_BYTES} bytes",
+    )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ObservationError(f"{label} must be valid UTF-8") from exc
+
+    return json.loads(text, object_pairs_hook=_reject_duplicate_json_fields)
 
 
 def _parse_timestamp(value: Any, field: str) -> dt.datetime:
@@ -157,8 +188,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        session = json.loads(args.session.read_text(encoding="utf-8"))
-        observations = json.loads(args.observations.read_text(encoding="utf-8"))
+        session = load_json_document(args.session, "session")
+        observations = load_json_document(args.observations, "observations")
         result = validate_observations(session, observations)
         if args.output is not None:
             try:

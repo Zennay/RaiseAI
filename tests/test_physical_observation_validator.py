@@ -59,6 +59,27 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
         self.assertTrue(result["quality_evidence_complete"])
         self.assertEqual(result["visible_ux_failure_count"], 0)
 
+    def test_loader_rejects_duplicate_observation_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "operator-observations.json"
+            path.write_text('{"schema_version":1,"schema_version":1}', encoding="utf-8")
+            with self.assertRaisesRegex(validator.ObservationError, "duplicate JSON field: schema_version"):
+                validator.load_json_document(path, "observations")
+
+    def test_loader_rejects_oversized_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "session.json"
+            path.write_bytes(b" " * (validator.MAX_JSON_BYTES + 1))
+            with self.assertRaisesRegex(validator.ObservationError, "session exceeds maximum size"):
+                validator.load_json_document(path, "session")
+
+    def test_loader_rejects_invalid_utf8_observations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "operator-observations.json"
+            path.write_bytes(bytes((0x7B, 0xFF, 0x7D)))
+            with self.assertRaisesRegex(validator.ObservationError, "observations must be valid UTF-8"):
+                validator.load_json_document(path, "observations")
+
     def test_accepts_explicit_ux_failures_without_turning_them_into_a_fake_pass(self):
         result = validator.validate_observations(
             session_payload(),
