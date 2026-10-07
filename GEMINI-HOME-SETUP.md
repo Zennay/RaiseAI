@@ -1,6 +1,6 @@
 # Gemini + Google Home setup
 
-> **Fallback integration only.** This Gemini/Home setup is not the current physical acceptance path. For GitHub issue #34, use the preserved Raise AI v1.5.2 handoff from source `8f719bb273f9b997848864f342598e7df5f090e5` through `bash ./start-frozen-acceptance.command [gateway-profile]` as documented in `START-HERE.md`.
+> **Fallback integration only.** This Gemini/Home setup is not the current physical acceptance path. For GitHub issue #34, use only the preserved Raise AI v1.5.2 handoff through `bash ./start-frozen-acceptance.command [gateway-profile]`; the complete canonical carrier identity and verification steps live in `START-HERE.md`.
 
 Raise AI does **not** replace Gemini. It triggers the real Gemini / Android voice assistant that is already connected to your Google account.
 
