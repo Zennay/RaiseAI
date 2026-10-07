@@ -29,7 +29,9 @@ TEXT_SUFFIXES = {
 EXACT_TEXT_PATHS = {".gitignore", "gradlew", "VERSION.txt"}
 FORBIDDEN_INVISIBLE_CODEPOINTS = {
     0x00AD: "SOFT HYPHEN",
+    0x034F: "COMBINING GRAPHEME JOINER",
     0x061C: "ARABIC LETTER MARK",
+    0x180E: "MONGOLIAN VOWEL SEPARATOR",
     0x200B: "ZERO WIDTH SPACE",
     0x200E: "LEFT-TO-RIGHT MARK",
     0x200F: "RIGHT-TO-LEFT MARK",
@@ -43,6 +45,12 @@ FORBIDDEN_INVISIBLE_CODEPOINTS = {
     0x2067: "RIGHT-TO-LEFT ISOLATE",
     0x2068: "FIRST STRONG ISOLATE",
     0x2069: "POP DIRECTIONAL ISOLATE",
+    0x206A: "INHIBIT SYMMETRIC SWAPPING",
+    0x206B: "ACTIVATE SYMMETRIC SWAPPING",
+    0x206C: "INHIBIT ARABIC FORM SHAPING",
+    0x206D: "ACTIVATE ARABIC FORM SHAPING",
+    0x206E: "NATIONAL DIGIT SHAPES",
+    0x206F: "NOMINAL DIGIT SHAPES",
     0xFEFF: "ZERO WIDTH NO-BREAK SPACE",
 }
 
@@ -124,6 +132,9 @@ class SourceTextReviewIntegrityTests(unittest.TestCase):
     def test_validator_rejects_non_utf8_bytes(self):
         with self.assertRaisesRegex(ValueError, "strict UTF-8"):
             validate_reviewable_text(b"safe \xff tail", "fixture.py")
+
+    def test_validator_preserves_joiner_controls_used_by_legitimate_text(self):
+        validate_reviewable_text("safe \u200c \u200d tail".encode("utf-8"), "fixture.md")
 
 
 if __name__ == "__main__":
