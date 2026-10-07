@@ -78,6 +78,8 @@ def _load_evidence_file(path: Path) -> Any:
         raise EvidenceError("safe no-follow evidence reads are unavailable on this platform")
 
     flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
 
