@@ -1,5 +1,8 @@
+import os
 import pathlib
 import re
+import subprocess
+import tempfile
 import unittest
 
 
@@ -10,6 +13,22 @@ SCRIPT = ROOT / "install-mac-adb-autoconnect.command"
 class MacAdbAutoconnectContractTests(unittest.TestCase):
     def setUp(self):
         self.script = SCRIPT.read_text(encoding="utf-8")
+
+    def _run(self, *args):
+        with tempfile.TemporaryDirectory() as home:
+            env = os.environ.copy()
+            env["HOME"] = home
+            result = subprocess.run(
+                ["bash", str(SCRIPT), *args],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            state_dir = pathlib.Path(home) / ".raiseai"
+            return result, state_dir.exists()
 
     def test_accepts_both_canonical_galaxy_watch_7_model_spellings(self):
         self.assertIn("SM-L315F|SM_L315F)", self.script)
@@ -65,6 +84,47 @@ class MacAdbAutoconnectContractTests(unittest.TestCase):
     def test_status_message_uses_raise_ai_name(self):
         self.assertIn('echo "Raise AI ADB auto-connect installed."', self.script)
         self.assertNotIn('echo "Race AI ADB auto-connect installed."', self.script)
+
+
+    def test_unknown_argument_fails_closed_before_state_creation(self):
+        result, created_state = self._run("--unexpected")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Usage:", result.stderr)
+        self.assertFalse(created_state)
+
+    def test_extra_arguments_fail_closed_before_state_creation(self):
+        result, created_state = self._run("--quiet", "extra")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Usage:", result.stderr)
+        self.assertFalse(created_state)
+
+    def test_default_non_macos_path_remains_side_effect_free(self):
+        result, created_state = self._run()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), "macOS only.")
+        self.assertEqual(result.stderr, "")
+        self.assertFalse(created_state)
+
+    def test_quiet_non_macos_path_remains_silent_and_side_effect_free(self):
+        result, created_state = self._run("--quiet")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
+        self.assertFalse(created_state)
+
+    def test_quiet_is_the_only_supported_option(self):
+        self.assertIn('case "${1:-}" in', self.script)
+        self.assertIn('--quiet)', self.script)
+        self.assertIn('exit 2', self.script)
+
+    def test_installed_marker_is_written_only_after_optional_key_backup(self):
+        backup_start = self.script.index('if [ -f "$HOME/.android/adbkey" ]; then')
+        backup_copy = self.script.index('cp -p "$HOME/.android/adbkey"')
+        backup_end = self.script.index('\nfi\n\ntouch "$STATE_DIR/autoconnect-installed"', backup_start)
+        marker = self.script.index('touch "$STATE_DIR/autoconnect-installed"')
+        self.assertLess(backup_start, backup_copy)
+        self.assertLess(backup_copy, backup_end)
+        self.assertGreater(marker, backup_end)
 
 
 if __name__ == "__main__":
