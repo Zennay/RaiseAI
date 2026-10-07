@@ -99,8 +99,8 @@ esac
     path.join(bin, "node"),
     `#!/usr/bin/env bash
 set -euo pipefail
-if [ "${1:-}" = "-p" ]; then
-  printf '%s\\n' "${FAKE_NODE_MAJOR:-22}"
+if [ "\${1:-}" = "-p" ]; then
+  printf '%s\\n' "\${FAKE_NODE_MAJOR:-22}"
   exit 0
 fi
 exit 0
