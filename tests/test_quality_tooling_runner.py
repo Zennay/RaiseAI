@@ -130,6 +130,44 @@ class QualityToolingRunnerTests(unittest.TestCase):
             output.getvalue(),
         )
 
+    def test_inherited_tests_do_not_mask_module_without_own_test_methods(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-inherited-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "source_contract.py").write_text(
+                "import unittest\n"
+                "class SourceContract(unittest.TestCase):\n"
+                "    def test_passes(self):\n"
+                "        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            (package / "inherited_contract.py").write_text(
+                "from .source_contract import SourceContract\n"
+                "class InheritedContract(SourceContract):\n"
+                "    pass\n",
+                encoding="utf-8",
+            )
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.inherited_contract",)
+                    )
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.inherited_contract", None)
+                sys.modules.pop("quality_fixture.source_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn(
+            "EMPTY-QUALITY-MODULE: quality_fixture.inherited_contract",
+            output.getvalue(),
+        )
+
     def test_import_failure_is_a_test_failure(self):
         output = StringIO()
         with redirect_stdout(output), redirect_stderr(output):
