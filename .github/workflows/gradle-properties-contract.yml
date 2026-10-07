@@ -47,6 +47,12 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
       - name: Validate Gradle properties contract
         shell: bash
         run: |
