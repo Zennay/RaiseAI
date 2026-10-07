@@ -46,8 +46,22 @@ object SensorTraceRecorder {
     fun sampleCount(context: Context): Int {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return 0
-        return (file.useLines { it.count() } - 1).coerceAtLeast(0)
+        return file.useLines(::validSampleLineCount)
     }
+
+    internal fun validSampleLineCount(lines: Sequence<String>): Int =
+        lines.drop(1).count { line ->
+            val fields = line.split(',')
+            if (fields.size != 6) return@count false
+
+            val sessionId = fields[1].toLongOrNull() ?: return@count false
+            val elapsedMs = fields[2].toLongOrNull() ?: return@count false
+            val x = fields[3].toFloatOrNull() ?: return@count false
+            val y = fields[4].toFloatOrNull() ?: return@count false
+            val z = fields[5].toFloatOrNull() ?: return@count false
+
+            isValidSample(fields[0], sessionId, elapsedMs, x, y, z)
+        }
 
     fun clear(context: Context) {
         File(context.filesDir, FILE_NAME).delete()
