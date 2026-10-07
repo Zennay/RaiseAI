@@ -3,9 +3,10 @@ name: Gateway self-hosted quality CI
 on:
   pull_request:
     paths:
-      - "gateway/**"
       - ".github/workflows/gateway-test.yml"
       - ".github/workflows/gateway-quality-selfhosted.yml"
+      - "gateway/test/ci-workflow-contract.test.mjs"
+      - "gateway/test/gateway-quality-selfhosted-contract.test.mjs"
   workflow_dispatch: {}
 
 permissions:
