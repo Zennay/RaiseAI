@@ -72,7 +72,14 @@ object WearBridge {
     }
 
     fun requestStart(reason: String): Boolean {
-        if (currentState in busyStates) return false
+        if (!WearBridgeStatePolicy.acceptsStartRequest(
+                state = currentState,
+                reason = reason,
+                active = currentState in busyStates
+            )
+        ) {
+            return false
+        }
         val currentPort = port
         if (currentPort == null) {
             pendingStartReason = reason
