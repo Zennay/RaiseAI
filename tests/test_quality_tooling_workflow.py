@@ -483,5 +483,58 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
 
 
+    def test_trigger_ref_scope_is_exact(self):
+        lines = self.text.splitlines()
+
+        def event_block(event):
+            event_line = f"  {event}:"
+            self.assertIn(event_line, lines, f"{event} trigger must exist")
+            start = lines.index(event_line) + 1
+            block = []
+            for line in lines[start:]:
+                if line and not line.startswith("    "):
+                    break
+                block.append(line)
+            return block
+
+        push = event_block("push")
+        push_keys = []
+        for line in push:
+            match = re.fullmatch(r"    ([A-Za-z0-9_-]+):", line)
+            if match:
+                push_keys.append(match.group(1))
+        self.assertEqual(
+            push_keys,
+            ["branches", "paths"],
+            "push must remain scoped only by the audited main branch and quality paths",
+        )
+
+        branches_start = push.index("    branches:") + 1
+        branches = []
+        for line in push[branches_start:]:
+            match = re.fullmatch(r"      - ([A-Za-z0-9_.-]+)", line)
+            if match:
+                branches.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            branches,
+            ["main"],
+            "hosted quality push validation must run only for main",
+        )
+
+        pull_request = event_block("pull_request")
+        pull_request_keys = []
+        for line in pull_request:
+            match = re.fullmatch(r"    ([A-Za-z0-9_-]+):", line)
+            if match:
+                pull_request_keys.append(match.group(1))
+        self.assertEqual(
+            pull_request_keys,
+            ["paths"],
+            "pull_request must not gain branch, type, or other filters that can skip quality validation",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
