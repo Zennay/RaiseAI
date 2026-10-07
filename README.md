@@ -173,13 +173,13 @@ Then run:
 
 It pulls `sensor-traces.csv` from the debug build into this folder. The CSV contains label, session id, elapsed milliseconds and x/y/z accelerometer values.
 
-Then run:
+Then run the canonical trace validator:
 
 ```bash
-python3 analyze-watch-data.py sensor-traces.csv
+python3 tools/analyze-watch-sensor-traces.py sensor-traces.csv
 ```
 
-It compares the end orientation of mouth raises with check-time and normal-movement sessions and suggests a Watch-specific similarity threshold when the data separates cleanly.
+It validates the exported CSV fail-closed, groups samples into capture sessions, rejects malformed/non-finite evidence, and reports progress toward the V1 dataset gate of 30 qualifying mouth raises plus 100 qualifying non-trigger sessions. Add `--require-v1-gate` when you want the command to exit non-zero until that evidence gate is complete.
 
 ## Project structure
 
