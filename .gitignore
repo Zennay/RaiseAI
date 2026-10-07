@@ -27,6 +27,7 @@ local.properties
 !.env.example
 !.env.sample
 .envrc
+.netrc
 .direnv/
 .raiseai/
 **/.config/raiseai/
