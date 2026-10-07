@@ -38,7 +38,7 @@ OBSERVATION_KEYS = {
     "visible_ux_failures",
 }
 MAX_JSON_BYTES = 64 * 1024
-APP_VERSION_RE = re.compile(r"^\\d+\\.\\d+\\.\\d+$")
+APP_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class ObservationError(ValueError):
