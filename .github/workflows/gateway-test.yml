@@ -63,15 +63,11 @@ jobs:
           set -euo pipefail
           bash -n deploy/install-user-gateway.sh
           bash -n deploy/assert-idempotent-redeploy.sh
-          node --check deploy/readiness-policy.mjs
-          node --check deploy/wait-for-live.mjs
-          node --check deploy/smoke-live.mjs
-          node --check deploy/attest-payload.mjs
-          node --check deploy/attest-runtime-wiring.mjs
-          node --check deploy/attest-watch-profile.mjs
-          node --check deploy/write-deploy-evidence.mjs
-          node --check deploy/validate-deploy-evidence.mjs
-          node --check src/server.mjs
+          mapfile -d '' node_files < <(find deploy src -type f -name '*.mjs' -print0 | sort -z)
+          test "${#node_files[@]}" -gt 0
+          for path in "${node_files[@]}"; do
+            node --check "$path"
+          done
 
       - name: Verify worktree remains clean
         shell: bash
