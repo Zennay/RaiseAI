@@ -68,17 +68,15 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(self.text.count(runtime), 1)
 
-    def test_discovers_every_python_contract(self):
+    def test_discovers_every_python_contract_through_zero_skip_runner(self):
         self.assertEqual(
-            self.text.count(
-                "          python3 -m unittest discover -s tests -p 'test_*.py' -v"
-            ),
+            self.text.count("          python3 tools/run_python_contracts.py"),
             1,
         )
         self.assertNotRegex(
             self.text,
-            r"python3 -m unittest\s+tests\.test_",
-            "aggregate lane must discover tests rather than enumerate a brittle subset",
+            r"python3 -m unittest(?:\s+discover|\s+tests\.)",
+            "aggregate lane must use the zero-skip discovery runner",
         )
 
     def test_all_run_steps_are_strict_bash_and_worktree_is_clean(self):
