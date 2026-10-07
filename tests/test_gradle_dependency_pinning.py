@@ -12,6 +12,28 @@ SETTINGS = ROOT / "settings.gradle.kts"
 DYNAMIC_VERSION_MARKERS = ("+", "latest.", "snapshot")
 
 
+def literal_custom_maven_urls(settings_text: str) -> list[str]:
+    return re.findall(r'maven\("([^"]+)"\)', settings_text)
+
+
+def dynamic_version_markers(version: str) -> list[str]:
+    lowered = version.lower()
+    markers = [
+        marker
+        for marker in DYNAMIC_VERSION_MARKERS
+        if marker in lowered
+    ]
+    stripped = version.strip()
+    if (
+        len(stripped) >= 3
+        and stripped[0] in "[("
+        and stripped[-1] in "])"
+        and "," in stripped
+    ):
+        markers.append("version-range")
+    return markers
+
+
 def literal_dependency_coordinates(build_text: str) -> list[str]:
     return re.findall(
         r'(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(\s*"'
@@ -93,7 +115,7 @@ dependencies {
             self.settings,
         )
 
-        custom_urls = re.findall(r'maven\\("([^"]+)"\\)', self.settings)
+        custom_urls = literal_custom_maven_urls(self.settings)
         for raw_url in custom_urls:
             with self.subTest(url=raw_url):
                 parsed = urlsplit(raw_url)
@@ -105,7 +127,7 @@ dependencies {
                 self.assertFalse(parsed.fragment)
 
     def test_repository_sources_are_explicitly_allowlisted(self):
-        custom_urls = re.findall(r'maven\("([^"]+)"\)', self.settings)
+        custom_urls = literal_custom_maven_urls(self.settings)
         self.assertEqual(
             custom_urls,
             ["https://maven.mozilla.org/maven2/"],
@@ -137,6 +159,36 @@ dependencies {
                     forbidden_form,
                     "repository declarations must use the reviewed canonical forms",
                 )
+
+    def test_custom_maven_repository_parser_covers_literal_urls(self):
+        fixture = """
+repositories {
+    maven("https://repo.example.test/releases/")
+    maven("http://repo.example.test/insecure/")
+}
+"""
+        self.assertEqual(
+            literal_custom_maven_urls(fixture),
+            [
+                "https://repo.example.test/releases/",
+                "http://repo.example.test/insecure/",
+            ],
+        )
+
+    def test_rejects_gradle_maven_version_ranges(self):
+        for version in (
+            "[1.0,2.0)",
+            "(,1.5]",
+            "[1.0,)",
+            "(1.0,2.0]",
+        ):
+            with self.subTest(version=version):
+                with self.assertRaises(AssertionError):
+                    self._assert_non_dynamic(version, "range fixture")
+
+        for version in ("1.2.3", "2026.10.0-alpha1"):
+            with self.subTest(version=version):
+                self._assert_non_dynamic(version, "fixed fixture")
 
     def test_mozilla_repository_is_scoped_to_geckoview_only(self):
         self.assertEqual(
@@ -172,12 +224,7 @@ dependencies {
                 self.assertNotIn(forbidden, combined)
 
     def _assert_non_dynamic(self, version: str, label: str):
-        lowered = version.lower()
-        markers = [
-            marker
-            for marker in DYNAMIC_VERSION_MARKERS
-            if marker in lowered
-        ]
+        markers = dynamic_version_markers(version)
         self.assertEqual(
             markers,
             [],
