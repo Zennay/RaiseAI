@@ -7,10 +7,13 @@ import argparse
 import datetime as dt
 import json
 import os
+import stat
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+MAX_SESSION_JSON_BYTES = 64 * 1024
 
 REQUIRED_SESSION_KEYS = {
     "schema_version",
@@ -29,6 +32,35 @@ class TemplateError(ValueError):
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise TemplateError(message)
+
+
+def _reject_duplicate_json_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        _require(key not in result, f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def load_session(path: Path) -> Any:
+    metadata = path.lstat()
+    _require(stat.S_ISREG(metadata.st_mode), "session must be a regular file")
+    _require(
+        metadata.st_size <= MAX_SESSION_JSON_BYTES,
+        f"session exceeds maximum size of {MAX_SESSION_JSON_BYTES} bytes",
+    )
+
+    raw = path.read_bytes()
+    _require(
+        len(raw) <= MAX_SESSION_JSON_BYTES,
+        f"session exceeds maximum size of {MAX_SESSION_JSON_BYTES} bytes",
+    )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise TemplateError("session must be valid UTF-8") from exc
+
+    return json.loads(text, object_pairs_hook=_reject_duplicate_json_fields)
 
 
 def _parse_timestamp(value: Any, field: str) -> dt.datetime:
@@ -140,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     output = args.output or args.session.with_name("operator-observations.json")
     try:
-        session = json.loads(args.session.read_text(encoding="utf-8"))
+        session = load_session(args.session)
         payload = build_template(session)
         _write_new_json_atomic(output, payload)
     except (OSError, json.JSONDecodeError, TemplateError) as exc:
