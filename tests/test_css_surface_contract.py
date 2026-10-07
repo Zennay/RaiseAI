@@ -81,6 +81,111 @@ def _visible_css_code(text: str, *, label: str) -> str:
     return "".join(visible)
 
 
+
+def _css_url_targets(text: str, *, label: str) -> list[str]:
+    targets: list[str] = []
+    index = 0
+    state = "code"
+    quote = ""
+
+    while index < len(text):
+        char = text[index]
+        nxt = text[index + 1] if index + 1 < len(text) else ""
+
+        if state == "comment":
+            if char == "*" and nxt == "/":
+                state = "code"
+                index += 2
+            else:
+                index += 1
+            continue
+
+        if state == "string":
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                state = "code"
+                quote = ""
+            index += 1
+            continue
+
+        if char == "/" and nxt == "*":
+            state = "comment"
+            index += 2
+            continue
+        if char in {'"', "'"}:
+            state = "string"
+            quote = char
+            index += 1
+            continue
+
+        if text[index:index + 3].lower() == "url":
+            before = text[index - 1] if index else ""
+            if before and (before.isalnum() or before in "_-"):
+                index += 1
+                continue
+
+            cursor = index + 3
+            while cursor < len(text) and text[cursor].isspace():
+                cursor += 1
+            if cursor >= len(text) or text[cursor] != "(":
+                index += 1
+                continue
+
+            cursor += 1
+            while cursor < len(text) and text[cursor].isspace():
+                cursor += 1
+            if cursor >= len(text):
+                raise ValueError(f"{label}: unterminated CSS url()")
+
+            if text[cursor] in {'"', "'"}:
+                arg_quote = text[cursor]
+                cursor += 1
+                value: list[str] = []
+                while cursor < len(text):
+                    current = text[cursor]
+                    if current == "\\":
+                        if cursor + 1 >= len(text):
+                            raise ValueError(
+                                f"{label}: unterminated escape in CSS url()"
+                            )
+                        value.append(text[cursor + 1])
+                        cursor += 2
+                        continue
+                    if current == arg_quote:
+                        cursor += 1
+                        break
+                    if current == "\n":
+                        raise ValueError(f"{label}: unescaped newline in CSS url()")
+                    value.append(current)
+                    cursor += 1
+                else:
+                    raise ValueError(f"{label}: unterminated quoted CSS url()")
+
+                while cursor < len(text) and text[cursor].isspace():
+                    cursor += 1
+                if cursor >= len(text) or text[cursor] != ")":
+                    raise ValueError(f"{label}: malformed quoted CSS url()")
+                targets.append("".join(value).strip())
+                index = cursor + 1
+                continue
+
+            start = cursor
+            while cursor < len(text) and text[cursor] != ")":
+                if text[cursor] in {'"', "'", "(", "\n"}:
+                    raise ValueError(f"{label}: malformed unquoted CSS url()")
+                cursor += 1
+            if cursor >= len(text):
+                raise ValueError(f"{label}: unterminated CSS url()")
+            targets.append(text[start:cursor].strip())
+            index = cursor + 1
+            continue
+
+        index += 1
+
+    return targets
+
 def validate_css_source(data: bytes, *, label: str) -> None:
     try:
         text = data.decode("utf-8", errors="strict")
@@ -97,6 +202,13 @@ def validate_css_source(data: bytes, *, label: str) -> None:
     visible = _visible_css_code(text, label=label)
     if re.search(r"(?i)(?<![-_a-z0-9])@import\b", visible):
         raise ValueError(f"{label}: CSS @import is forbidden; bundle assets locally")
+
+    for target in _css_url_targets(text, label=label):
+        lowered = target.lower()
+        if lowered.startswith(("http://", "https://", "//")):
+            raise ValueError(
+                f"{label}: remote CSS url() assets are forbidden; bundle assets locally"
+            )
 
     stack: list[tuple[str, int]] = []
     pairs = {"}": "{", ")": "(", "]": "["}
@@ -181,6 +293,27 @@ class CssSurfaceContractTests(unittest.TestCase):
             b'/* @import url("https://example.invalid/x.css"); */\n.a { content: "@import"; }\n',
             label="fixture.css",
         )
+
+    def test_validator_rejects_remote_url_assets_but_allows_local_and_data_targets(self):
+        for target in (
+            "https://example.invalid/font.woff2",
+            "http://example.invalid/image.png",
+            "//cdn.example.invalid/image.png",
+        ):
+            with self.subTest(target=target):
+                payload = f'.a {{ background: url("{target}"); }}\n'.encode("utf-8")
+                with self.assertRaisesRegex(ValueError, "remote CSS url"):
+                    validate_css_source(payload, label="fixture.css")
+
+        for payload in (
+            b'.a { background: url("local/icon.svg"); }\n',
+            b".a { background: url(../icon.svg); }\n",
+            b'.a { background: url("data:image/svg+xml,%3Csvg%3E"); }\n',
+            b'.a { content: "url(https://example.invalid/not-a-fetch)"; }\n',
+            b'/* url(https://example.invalid/not-a-fetch) */ .a {}\n',
+        ):
+            with self.subTest(payload=payload):
+                validate_css_source(payload, label="fixture.css")
 
     def _trigger_paths(self, event: str) -> list[str]:
         lines = self.workflow.splitlines()
