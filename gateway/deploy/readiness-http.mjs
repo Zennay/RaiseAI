@@ -1,6 +1,58 @@
 import { evaluateReadinessResponse } from "./readiness-policy.mjs";
 
 export const MAX_READINESS_BODY_BYTES = 64 * 1024;
+export const MAX_READINESS_REQUEST_MS = 5_000;
+
+export function readinessRequestBudget(remainingMs) {
+  if (!Number.isSafeInteger(remainingMs) || remainingMs < 1) {
+    throw new TypeError(
+      "readiness remaining budget must be a positive safe integer"
+    );
+  }
+
+  return Math.min(MAX_READINESS_REQUEST_MS, remainingMs);
+}
+
+export function armReadinessRequestDeadline(
+  request,
+  {
+    timeoutMs = MAX_READINESS_REQUEST_MS,
+    setTimeoutImpl = globalThis.setTimeout,
+    clearTimeoutImpl = globalThis.clearTimeout
+  } = {}
+) {
+  if (!request || typeof request.destroy !== "function") {
+    throw new TypeError("readiness request must expose destroy()");
+  }
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    throw new TypeError(
+      "readiness request timeout must be a positive safe integer"
+    );
+  }
+  if (
+    typeof setTimeoutImpl !== "function" ||
+    typeof clearTimeoutImpl !== "function"
+  ) {
+    throw new TypeError("readiness request timer functions must be callable");
+  }
+
+  let active = true;
+  const timer = setTimeoutImpl(() => {
+    if (!active) return;
+    active = false;
+    request.destroy(new Error("readiness_request_deadline_exceeded"));
+  }, timeoutMs);
+
+  return function cancelReadinessRequestDeadline() {
+    if (!active) return;
+    active = false;
+    try {
+      clearTimeoutImpl(timer);
+    } catch {
+      // Best-effort cleanup only after the request has already settled.
+    }
+  };
+}
 
 export async function readReadinessJson(
   readable,
