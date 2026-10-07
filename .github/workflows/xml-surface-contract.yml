@@ -64,7 +64,7 @@ jobs:
           import subprocess
           import xml.etree.ElementTree as ET
 
-          FORBIDDEN_DECLARATIONS = (b"<!DOCTYPE", b"<!ENTITY")
+          FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
 
           raw = subprocess.check_output(["git", "ls-files", "-z"])
           paths = sorted(
@@ -83,12 +83,16 @@ jobs:
                   raise SystemExit(f"{path}: tracked XML path must be a regular file")
 
               data = candidate.read_bytes()
-              upper = data.upper()
+              try:
+                  text = data.decode("utf-8")
+              except UnicodeDecodeError as exc:
+                  raise SystemExit(f"{path}: XML source must be strict UTF-8: {exc}") from None
+              upper = text.upper()
               for declaration in FORBIDDEN_DECLARATIONS:
                   if declaration in upper:
                       raise SystemExit(f"{path}: DTD/entity declarations are forbidden")
               try:
-                  ET.fromstring(data)
+                  ET.fromstring(text)
               except ET.ParseError as exc:
                   raise SystemExit(f"{path}: invalid XML syntax: {exc}") from None
 
