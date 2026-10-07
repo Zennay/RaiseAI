@@ -141,6 +141,7 @@ def _write_new_json_atomic(output: Path, payload: dict[str, Any]) -> None:
         dir=str(output.parent),
     )
     stage = Path(stage_name)
+    published = False
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as output_file:
             output_file.write(serialized)
@@ -153,8 +154,13 @@ def _write_new_json_atomic(output: Path, payload: dict[str, Any]) -> None:
             raise TemplateError(
                 f"refusing to overwrite existing observation file: {output}"
             ) from exc
+        published = True
     finally:
-        stage.unlink(missing_ok=True)
+        try:
+            stage.unlink(missing_ok=True)
+        except OSError:
+            if not published:
+                raise
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
