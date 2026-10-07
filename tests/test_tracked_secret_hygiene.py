@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 FORBIDDEN_BASENAMES = {
     ".envrc",
+    ".netrc",
     "local.properties",
     "secrets.properties",
     "keystore.properties",
@@ -220,6 +221,8 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             "nested/.env.local",
             ".envrc",
             "nested/.envrc",
+            ".netrc",
+            "nested/.netrc",
             ".direnv/allow",
             "nested/.direnv/cache",
             ".raiseai/evidence/session.json",
@@ -271,6 +274,7 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             ".env",
             ".env.*",
             ".envrc",
+            ".netrc",
             ".direnv/",
             ".raiseai/",
             "**/.config/raiseai/",
