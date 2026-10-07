@@ -12,6 +12,7 @@ on:
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
       - "tests/test_quality_workflow_action_pinning.py"
+      - "tests/test_physical_quality_workflow.py"
       - ".github/workflows/watch-app-test.yml"
       - ".github/workflows/physical-quality-evidence-test.yml"
   pull_request:
@@ -23,6 +24,7 @@ on:
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_observation_template.py"
       - "tests/test_quality_workflow_action_pinning.py"
+      - "tests/test_physical_quality_workflow.py"
       - ".github/workflows/watch-app-test.yml"
       - ".github/workflows/physical-quality-evidence-test.yml"
 
@@ -35,8 +37,16 @@ concurrency:
 
 jobs:
   physical-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/raise-physical-quality-pyc
+      TZ: UTC
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
         with:
@@ -52,14 +62,33 @@ jobs:
           test "$revision" = "$expected"
           echo "Pinned physical-quality revision: $revision"
 
-      - name: Compile evidence tooling
+      - name: Verify Python runtime
+        shell: bash
         run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
+      - name: Compile evidence tooling
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 -m py_compile \
             tools/validate-physical-observations.py \
             tools/create-physical-observation-template.py
 
       - name: Physical quality evidence regressions
+        shell: bash
         run: |
+          set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_physical_observation_validator.py'
           python3 -m unittest discover -s tests -p 'test_physical_observation_template.py'
           python3 -m unittest discover -s tests -p 'test_quality_workflow_action_pinning.py'
+          python3 -m unittest discover -s tests -p 'test_physical_quality_workflow.py'
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
