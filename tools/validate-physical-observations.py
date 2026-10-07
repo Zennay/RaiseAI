@@ -188,6 +188,7 @@ def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
         normalized_failures.append(text)
 
     return {
+        "schema_version": 1,
         "valid": True,
         "quality_evidence_complete": True,
         "recorded_at_utc": _format_utc(recorded_at),
