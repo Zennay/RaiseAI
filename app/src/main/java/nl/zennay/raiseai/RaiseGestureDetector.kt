@@ -15,6 +15,7 @@ class RaiseGestureDetector {
     private var gravityY = 0f
     private var gravityZ = 9.81f
     private var initialized = false
+    private var lastSampleTimeMs: Long? = null
     private var movingUntilMs = 0L
     private var movementBurstStartedMs = 0L
     private var movementHits = 0
@@ -56,7 +57,40 @@ class RaiseGestureDetector {
         "rearmHoldMs=$rearmHoldMs"
     ).joinToString(";")
 
+    private fun resetTemporalEvidence() {
+        movingUntilMs = 0L
+        movementBurstStartedMs = 0L
+        movementHits = 0
+        poseStartedMs = 0L
+        outsidePoseStartedMs = 0L
+        approachPrimedUntilMs = 0L
+        approachStartSimilarity = 1f
+    }
+
+    private fun rejectedSample(): DetectionDebug =
+        DetectionDebug(
+            triggered = false,
+            similarity = if (hasSimilarity) lastSimilarity else 0f,
+            dynamicAcceleration = 0f,
+            armed = armed
+        )
+
     fun onAccelerometer(x: Float, y: Float, z: Float, timeMs: Long, mouthPose: MouthPose?): DetectionDebug {
+        val invalidVector = !x.isFinite() || !y.isFinite() || !z.isFinite()
+        val invalidMouthPose = mouthPose != null &&
+            (!mouthPose.x.isFinite() || !mouthPose.y.isFinite() || !mouthPose.z.isFinite())
+        if (invalidVector || invalidMouthPose || timeMs < 0L) {
+            resetTemporalEvidence()
+            return rejectedSample()
+        }
+
+        val previousSampleTimeMs = lastSampleTimeMs
+        if (previousSampleTimeMs != null && timeMs <= previousSampleTimeMs) {
+            resetTemporalEvidence()
+            return rejectedSample()
+        }
+        lastSampleTimeMs = timeMs
+
         if (!initialized) {
             // Establish the current wrist orientation as the baseline. Do not count sensor
             // startup/filter settling as an intentional arm movement.
