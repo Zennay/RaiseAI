@@ -58,6 +58,7 @@ def observation_payload(**overrides):
 class PhysicalObservationValidatorTests(unittest.TestCase):
     def test_accepts_complete_provenance_bound_observations(self):
         result = validator.validate_observations(session_payload(), observation_payload())
+        self.assertEqual(result["schema_version"], 1)
         self.assertTrue(result["valid"])
         self.assertTrue(result["quality_evidence_complete"])
         self.assertEqual(result["visible_ux_failure_count"], 0)
@@ -239,6 +240,7 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
         self.assertEqual(
             set(result),
             {
+                "schema_version",
                 "valid",
                 "quality_evidence_complete",
                 "recorded_at_utc",
