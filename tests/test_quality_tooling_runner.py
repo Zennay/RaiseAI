@@ -103,7 +103,10 @@ class QualityToolingRunnerTests(unittest.TestCase):
             try:
                 output = StringIO()
                 with redirect_stdout(output), redirect_stderr(output):
-                    exit_code = runner.run_contracts(("quality_fixture.empty_contract",))
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.empty_contract",),
+                        module_root=root,
+                    )
             finally:
                 sys.path.remove(str(root))
                 sys.modules.pop("quality_fixture.empty_contract", None)
@@ -137,7 +140,8 @@ class QualityToolingRunnerTests(unittest.TestCase):
                 output = StringIO()
                 with redirect_stdout(output), redirect_stderr(output):
                     exit_code = runner.run_contracts(
-                        ("quality_fixture.reexport_contract",)
+                        ("quality_fixture.reexport_contract",),
+                        module_root=root,
                     )
             finally:
                 sys.path.remove(str(root))
@@ -175,7 +179,8 @@ class QualityToolingRunnerTests(unittest.TestCase):
                 output = StringIO()
                 with redirect_stdout(output), redirect_stderr(output):
                     exit_code = runner.run_contracts(
-                        ("quality_fixture.inherited_contract",)
+                        ("quality_fixture.inherited_contract",),
+                        module_root=root,
                     )
             finally:
                 sys.path.remove(str(root))
@@ -189,12 +194,205 @@ class QualityToolingRunnerTests(unittest.TestCase):
             output.getvalue(),
         )
 
-    def test_import_failure_is_a_test_failure(self):
-        output = StringIO()
-        with redirect_stdout(output), redirect_stderr(output):
-            exit_code = runner.run_contracts(("quality_fixture.does_not_exist",))
-        self.assertEqual(exit_code, 1)
-        self.assertIn("FAILED (errors=1)", output.getvalue())
+    def test_symlinked_module_is_rejected_before_import(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-link-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            target = root / "linked_contract.py"
+            target.write_text(
+                'raise RuntimeError("symlink target must not execute")\n',
+                encoding="utf-8",
+            )
+            (package / "linked_contract.py").symlink_to(target)
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.linked_contract",),
+                        module_root=root,
+                    )
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.linked_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn(
+            "UNSAFE-QUALITY-MODULE: quality_fixture.linked_contract: "
+            "symbolic links are forbidden",
+            rendered,
+        )
+        self.assertNotIn("symlink target must not execute", rendered)
+
+    def test_symlinked_package_is_rejected_before_import(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-package-link-") as tmp:
+            root = Path(tmp)
+            real_package = root / "real_quality_fixture"
+            real_package.mkdir()
+            (real_package / "__init__.py").write_text("", encoding="utf-8")
+            (real_package / "linked_contract.py").write_text(
+                'raise RuntimeError("symlinked package must not execute")\n',
+                encoding="utf-8",
+            )
+            (root / "quality_fixture").symlink_to(real_package, target_is_directory=True)
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.linked_contract",),
+                        module_root=root,
+                    )
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.linked_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn(
+            "UNSAFE-QUALITY-MODULE: quality_fixture/: "
+            "symbolic link directories are forbidden",
+            rendered,
+        )
+        self.assertNotIn("symlinked package must not execute", rendered)
+
+    def test_nonregular_module_entry_is_rejected_before_import(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-nonregular-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "directory_contract.py").mkdir()
+            output = StringIO()
+            with redirect_stdout(output), redirect_stderr(output):
+                exit_code = runner.run_contracts(
+                    ("quality_fixture.directory_contract",),
+                    module_root=root,
+                )
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn(
+            "UNSAFE-QUALITY-MODULE: quality_fixture.directory_contract: "
+            "must be a regular file",
+            rendered,
+        )
+
+    def test_missing_module_is_rejected_before_import_resolution(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-missing-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            output = StringIO()
+            with redirect_stdout(output), redirect_stderr(output):
+                exit_code = runner.run_contracts(
+                    ("quality_fixture.does_not_exist",),
+                    module_root=root,
+                )
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("unsafe module inputs", rendered)
+        self.assertIn(
+            "UNSAFE-QUALITY-MODULE: quality_fixture.does_not_exist: lstat failed:",
+            rendered,
+        )
+        self.assertNotIn("FAILED (errors=1)", rendered)
+
+    def test_existing_module_runtime_error_fails_closed_without_escaping(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-runtime-error-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "runtime_error_contract.py").write_text(
+                'raise RuntimeError("synthetic import failure")\n',
+                encoding="utf-8",
+            )
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.runtime_error_contract",),
+                        module_root=root,
+                    )
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.runtime_error_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn(
+            "LOAD-QUALITY-MODULE: quality_fixture.runtime_error_contract: RuntimeError",
+            rendered,
+        )
+        self.assertNotIn("synthetic import failure", rendered)
+
+    def test_existing_module_import_error_remains_a_unittest_failure(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-import-error-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "import_error_contract.py").write_text(
+                "import dependency_that_must_not_exist\n",
+                encoding="utf-8",
+            )
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.import_error_contract",),
+                        module_root=root,
+                    )
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.import_error_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("FAILED (errors=1)", rendered)
+        self.assertIn("dependency_that_must_not_exist", rendered)
+
+    def test_system_exit_zero_during_import_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-system-exit-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "system_exit_contract.py").write_text(
+                "raise SystemExit(0)\n",
+                encoding="utf-8",
+            )
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.system_exit_contract",),
+                        module_root=root,
+                    )
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.system_exit_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn(
+            "LOAD-QUALITY-MODULE: quality_fixture.system_exit_contract: SystemExit",
+            rendered,
+        )
 
     def test_skip_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix="raise-quality-skip-") as tmp:
@@ -214,7 +412,10 @@ class QualityToolingRunnerTests(unittest.TestCase):
             try:
                 output = StringIO()
                 with redirect_stdout(output), redirect_stderr(output):
-                    exit_code = runner.run_contracts(("quality_fixture.skip_contract",))
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.skip_contract",),
+                        module_root=root,
+                    )
             finally:
                 sys.path.remove(str(root))
                 sys.modules.pop("quality_fixture.skip_contract", None)
@@ -242,7 +443,10 @@ class QualityToolingRunnerTests(unittest.TestCase):
             try:
                 output = StringIO()
                 with redirect_stdout(output), redirect_stderr(output):
-                    exit_code = runner.run_contracts(("quality_fixture.xfail_contract",))
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.xfail_contract",),
+                        module_root=root,
+                    )
             finally:
                 sys.path.remove(str(root))
                 sys.modules.pop("quality_fixture.xfail_contract", None)
@@ -269,7 +473,10 @@ class QualityToolingRunnerTests(unittest.TestCase):
             try:
                 output = StringIO()
                 with redirect_stdout(output), redirect_stderr(output):
-                    exit_code = runner.run_contracts(("quality_fixture.xpass_contract",))
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.xpass_contract",),
+                        module_root=root,
+                    )
             finally:
                 sys.path.remove(str(root))
                 sys.modules.pop("quality_fixture.xpass_contract", None)
@@ -295,7 +502,10 @@ class QualityToolingRunnerTests(unittest.TestCase):
             try:
                 output = StringIO()
                 with redirect_stdout(output), redirect_stderr(output):
-                    exit_code = runner.run_contracts(("quality_fixture.pass_contract",))
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.pass_contract",),
+                        module_root=root,
+                    )
             finally:
                 sys.path.remove(str(root))
                 sys.modules.pop("quality_fixture.pass_contract", None)
