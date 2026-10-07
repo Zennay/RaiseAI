@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import io
 import os
 import sys
 import tempfile
@@ -98,6 +99,65 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
                 {},
                 "http://release-assets.githubusercontent.com/example/handoff.zip",
             )
+
+    def test_download_accepts_exact_frozen_asset_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = Path(tmp) / "handoff.zip"
+            opener = mock.Mock()
+            opener.open.return_value = io.BytesIO(b"test")
+
+            with mock.patch.object(
+                MODULE,
+                "EXPECTED_ARCHIVE_SIZE_BYTES",
+                4,
+            ), mock.patch.object(
+                urllib.request,
+                "build_opener",
+                return_value=opener,
+            ):
+                MODULE.download_release_asset(destination)
+
+            self.assertEqual(destination.read_bytes(), b"test")
+
+    def test_download_rejects_oversized_asset_and_removes_partial_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = Path(tmp) / "handoff.zip"
+            opener = mock.Mock()
+            opener.open.return_value = io.BytesIO(b"12345")
+
+            with mock.patch.object(
+                MODULE,
+                "EXPECTED_ARCHIVE_SIZE_BYTES",
+                4,
+            ), mock.patch.object(
+                urllib.request,
+                "build_opener",
+                return_value=opener,
+            ):
+                with self.assertRaisesRegex(MODULE.HandoffError, "exceeded expected size"):
+                    MODULE.download_release_asset(destination)
+
+            self.assertFalse(destination.exists())
+
+    def test_download_rejects_truncated_asset_and_removes_partial_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = Path(tmp) / "handoff.zip"
+            opener = mock.Mock()
+            opener.open.return_value = io.BytesIO(b"123")
+
+            with mock.patch.object(
+                MODULE,
+                "EXPECTED_ARCHIVE_SIZE_BYTES",
+                4,
+            ), mock.patch.object(
+                urllib.request,
+                "build_opener",
+                return_value=opener,
+            ):
+                with self.assertRaisesRegex(MODULE.HandoffError, "size mismatch"):
+                    MODULE.download_release_asset(destination)
+
+            self.assertFalse(destination.exists())
 
     def test_extracts_only_after_matching_archive_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
