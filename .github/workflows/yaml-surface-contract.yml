@@ -102,6 +102,7 @@ jobs:
           end
 
           tree = Psych.parse_stream(raw)
+          abort("YAML stream must contain exactly one document") unless tree.children.length == 1
           reject_duplicate_mapping_keys(tree)
           '''
           for path in paths:
