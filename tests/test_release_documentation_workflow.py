@@ -12,6 +12,28 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
     def setUp(self):
         self.text = WORKFLOW.read_text(encoding="utf-8")
 
+    def test_hosted_python_runtime_is_reproducible(self):
+        for line in (
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      PYTHONPYCACHEPREFIX: /tmp/raise-release-doc-pyc",
+            "      TZ: UTC",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.text.count(line), 1)
+
+        runtime = (
+            '          python3 -c \'import platform, sys; '
+            'assert platform.python_implementation() == "CPython"; '
+            'assert sys.version_info[:2] == (3, 12), sys.version\''
+        )
+        self.assertEqual(self.text.count(runtime), 1)
+        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
+        self.assertNotIn("ubuntu-latest", self.text)
+
     def test_external_action_surface_is_exact_and_immutable(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
