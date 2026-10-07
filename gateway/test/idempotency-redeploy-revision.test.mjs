@@ -20,7 +20,8 @@ function runIdempotencyCheck({
   beforeRevision,
   afterRevision,
   expectedRevision,
-  extraEnvLines = []
+  extraEnvLines = [],
+  bashEnv = null
 }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-idempotency-revision-"));
   const deployDir = path.join(root, "deploy");
@@ -28,6 +29,7 @@ function runIdempotencyCheck({
   const tlsDir = path.join(configDir, "tls");
   const binDir = path.join(root, "bin");
   const installerMarker = path.join(root, "installer-called");
+  const bashEnvFile = path.join(root, "bash-env");
 
   fs.mkdirSync(deployDir);
   fs.mkdirSync(tlsDir, { recursive: true });
@@ -106,6 +108,11 @@ mv "$tmp" "$env_file"
       FAKE_AFTER_REVISION: afterRevision
     };
     delete env.RAISE_DEPLOY_REVISION;
+    delete env.BASH_ENV;
+    if (bashEnv !== null) {
+      fs.writeFileSync(bashEnvFile, bashEnv, "utf8");
+      env.BASH_ENV = bashEnvFile;
+    }
     if (expectedRevision !== undefined) {
       env.RAISE_DEPLOY_REVISION = expectedRevision;
     }
@@ -186,4 +193,25 @@ test("ambiguous pre-redeploy revision is rejected before installer execution", (
     result.stderr,
     /Expected exactly one RAISE_DEPLOY_REVISION in gateway env/
   );
+});
+
+test("idempotency proof rejects shell-function dependency shadowing", () => {
+  const revision = "1".repeat(40);
+  for (const dependency of ["openssl", "awk"]) {
+    const result = runIdempotencyCheck({
+      beforeRevision: revision,
+      afterRevision: revision,
+      bashEnv: dependency + "() { :; }\n"
+    });
+
+    assert.notEqual(result.status, 0, dependency + ": " + result.stdout + result.stderr);
+    assert.equal(result.installerCalled, false, dependency);
+    assert.match(
+      result.stderr,
+      new RegExp(
+        "requires an absolute executable " + dependency + " binary"
+      ),
+      dependency
+    );
+  }
 });
