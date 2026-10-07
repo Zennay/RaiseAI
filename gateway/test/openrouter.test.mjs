@@ -495,6 +495,87 @@ test("OpenRouter rejects oversized declared response bodies before reading them"
   );
 });
 
+test("OpenRouter cancels response readers after stream failures", async () => {
+  let cancelCalls = 0;
+
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          if (name === "content-type") return "application/json";
+          return null;
+        }
+      },
+      body: {
+        getReader() {
+          return {
+            async read() {
+              throw new Error("broken_response_stream");
+            },
+            async cancel() {
+              cancelCalls += 1;
+            }
+          };
+        }
+      }
+    })
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openrouter_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+  assert.equal(cancelCalls, 1);
+});
+
+test("OpenRouter stream cleanup failures never mask the provider error", async () => {
+  let cancelCalls = 0;
+
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          if (name === "content-type") return "application/json";
+          return null;
+        }
+      },
+      body: {
+        getReader() {
+          return {
+            async read() {
+              throw new Error("broken_response_stream");
+            },
+            async cancel() {
+              cancelCalls += 1;
+              throw new Error("cleanup_failed");
+            }
+          };
+        }
+      }
+    })
+  });
+
+  await assert.rejects(
+    execute({ route: "quick_ai" }, "hoi"),
+    error => {
+      assert.equal(error.message, "openrouter_invalid_response");
+      assert.equal(error.statusCode, 502);
+      return true;
+    }
+  );
+  assert.equal(cancelCalls, 1);
+});
+
 test("OpenRouter rejects invalid UTF-8 even when replacement decoding would form JSON", async () => {
   const encoder = new TextEncoder();
   const prefix = encoder.encode(
