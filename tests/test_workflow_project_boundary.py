@@ -39,7 +39,7 @@ PULL_REQUEST_FLOW_SEQUENCE_RE = re.compile(
     rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\[[^\]]*{PULL_REQUEST_KEY}(?:\s+#[^\n]*)?\s*(?:,|\])"
 )
 PULL_REQUEST_SCALAR_RE = re.compile(
-    rf"(?m)^\\s{{0,2}}{ON_KEY}\\s*:\\s*{PULL_REQUEST_KEY}\\s*(?:#.*)?$"
+    rf"(?m)^\s{{0,2}}{ON_KEY}\s*:\s*{PULL_REQUEST_KEY}\s*(?:#.*)?$"
 )
 
 
@@ -116,9 +116,9 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             'on: {"pull_request": null, workflow_dispatch: null}\n',
             "'on': {'pull_request': null, workflow_dispatch: null}\n",
             '"on": {pull_request: null, workflow_dispatch: null}\n',
-            "on: pull_request\\n",
-            '"on": "pull_request"\\n',
-            "'on': 'pull_request' # legacy scalar trigger\\n",
+            "on: pull_request\n",
+            '"on": "pull_request"\n',
+            "'on': 'pull_request' # legacy scalar trigger\n",
             "on: [push, pull_request]\n",
             "on: [\n  push,\n  pull_request,\n]\n",
             "on: [\n  push,\n  pull_request # guarded legacy trigger\n]\n",
