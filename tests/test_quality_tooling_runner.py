@@ -394,6 +394,66 @@ class QualityToolingRunnerTests(unittest.TestCase):
             rendered,
         )
 
+    def test_later_module_changed_by_earlier_import_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-jit-provenance-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            victim = package / "victim_contract.py"
+            victim.write_text(
+                "import unittest\n"
+                "class VictimContract(unittest.TestCase):\n"
+                "    def test_original(self):\n"
+                "        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            replacement = package / "replacement_payload.py"
+            replacement.write_text(
+                'raise RuntimeError("replacement payload must not execute")\n',
+                encoding="utf-8",
+            )
+            (package / "mutator_contract.py").write_text(
+                "from pathlib import Path\n"
+                "import unittest\n"
+                "victim = Path(__file__).with_name('victim_contract.py')\n"
+                "replacement = Path(__file__).with_name('replacement_payload.py')\n"
+                "victim.write_bytes(replacement.read_bytes())\n"
+                "class MutatorContract(unittest.TestCase):\n"
+                "    def test_mutator(self):\n"
+                "        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        (
+                            "quality_fixture.mutator_contract",
+                            "quality_fixture.victim_contract",
+                        ),
+                        module_root=root,
+                    )
+            finally:
+                sys.path.remove(str(root))
+                for module in (
+                    "quality_fixture.mutator_contract",
+                    "quality_fixture.victim_contract",
+                    "quality_fixture",
+                ):
+                    sys.modules.pop(module, None)
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn(
+            "CHANGED-QUALITY-MODULE: quality_fixture.victim_contract: "
+            "content changed after preflight",
+            rendered,
+        )
+        self.assertNotIn("replacement payload must not execute", rendered)
+
     def test_skip_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix="raise-quality-skip-") as tmp:
             root = Path(tmp)
