@@ -1,15 +1,26 @@
 const API_URL = "https://api.openai.com/v1/responses";
 const REQUEST_BUDGET_MS = 7_000;
 const MAX_RESPONSE_BODY_BYTES = 64 * 1024;
+const MAX_MODEL_NAME_LENGTH = 256;
 
 function hasUsableApiKey(value) {
-  return typeof value === "string" && value.length > 0 && !/\s/u.test(value);
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    !/[\s\u0000-\u001f\u007f]/u.test(value)
+  );
 }
 
 function normalizeModelName(value) {
   if (typeof value !== "string") return null;
   const model = value.trim();
-  if (!model || /\s/u.test(model)) return null;
+  if (
+    !model ||
+    model.length > MAX_MODEL_NAME_LENGTH ||
+    /[\s\u0000-\u001f\u007f]/u.test(model)
+  ) {
+    return null;
+  }
   return model;
 }
 
@@ -32,7 +43,13 @@ function upstreamFailure(message, cause) {
 function hasJsonResponseType(response) {
   const value = response?.headers?.get?.("content-type");
   if (typeof value !== "string") return false;
-  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+
+  const parts = value.split(";").map(part => part.trim());
+  if (parts[0]?.toLowerCase() !== "application/json") return false;
+  if (parts.length === 1) return true;
+  if (parts.length !== 2) return false;
+
+  return /^charset\s*=\s*(?:"utf-8"|utf-8)$/iu.test(parts[1]);
 }
 
 async function cancelResponseBody(response) {
@@ -47,7 +64,12 @@ async function readBoundedJsonResponse(response) {
   const contentLength = response?.headers?.get?.("content-length");
   let declaredLength = null;
 
-  if (typeof contentLength === "string" && contentLength.trim()) {
+  if (contentLength !== null && contentLength !== undefined) {
+    if (typeof contentLength !== "string") {
+      await cancelResponseBody(response);
+      return { ok: false, json: null };
+    }
+
     const normalized = contentLength.trim();
     if (!/^\d+$/u.test(normalized)) {
       await cancelResponseBody(response);
