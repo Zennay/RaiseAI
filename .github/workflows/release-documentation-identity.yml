@@ -4,6 +4,24 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "VERSION.txt"
+      - "app/build.gradle.kts"
+      - "README.md"
+      - "START-HERE.md"
+      - "PHYSICAL-ACCEPTANCE.md"
+      - "start-frozen-acceptance.command"
+      - "start-physical-handoff.command"
+      - "tools/fetch-frozen-physical-handoff.py"
+      - "tools/create-physical-observation-template.py"
+      - "tools/validate-physical-observations.py"
+      - "DEVICE-TEST.md"
+      - "REMOTE-LOGIN.md"
+      - "GEMINI-HOME-SETUP.md"
+      - "CHATGPT-WEB-SETUP.md"
+      - "tests/test_release_documentation_identity.py"
+      - "tests/test_release_documentation_workflow.py"
+      - ".github/workflows/release-documentation-identity.yml"
   pull_request:
     paths:
       - "VERSION.txt"
