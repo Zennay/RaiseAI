@@ -599,5 +599,25 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             )
 
 
+    def test_workflow_top_level_surface_is_exact(self):
+        lines = self.text.splitlines()
+        top_level_keys = []
+        for line in lines:
+            match = re.fullmatch(r"([A-Za-z0-9_-]+):.*", line)
+            if match:
+                top_level_keys.append(match.group(1))
+
+        self.assertEqual(
+            top_level_keys,
+            ["name", "on", "permissions", "concurrency", "jobs"],
+            "hosted quality workflow must not gain global defaults, env, run-name, or other top-level controls",
+        )
+        self.assertEqual(
+            lines[0],
+            "name: Raise quality tooling CI",
+            "required-check identity must remain stable",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
