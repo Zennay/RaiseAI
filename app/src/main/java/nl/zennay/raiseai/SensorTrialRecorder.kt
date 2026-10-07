@@ -9,7 +9,8 @@ data class SensorTrialProgress(
     val nonTriggerTrials: Int = 0,
     val falseTriggers: Int = 0,
     val rejectedTrials: Int = 0,
-    val mixedEvidenceIdentity: Boolean = false
+    val mixedEvidenceIdentity: Boolean = false,
+    val invalidEvidenceStructure: Boolean = false
 ) {
     val detectionRate: Float
         get() = if (mouthTrials == 0) 0f else mouthDetections.toFloat() / mouthTrials
@@ -19,6 +20,7 @@ data class SensorTrialProgress(
 
     val v1GatePassed: Boolean
         get() = !mixedEvidenceIdentity &&
+            !invalidEvidenceStructure &&
             mouthTrials >= 30 &&
             nonTriggerTrials >= 100 &&
             detectionRate >= 0.90f &&
@@ -66,7 +68,15 @@ object SensorTrialRecorder {
 
         val lines = file.readLines()
         if (lines.isEmpty() || !SensorTrialCsvPolicy.hasCanonicalHeader(lines.first())) return 0
-        return lines.drop(1).count { SensorTrialCsvPolicy.parseRow(it) != null }
+
+        val seenSessions = mutableSetOf<Long>()
+        var count = 0
+        lines.drop(1).forEach { line ->
+            val parsed = SensorTrialCsvPolicy.parseRow(line) ?: return 0
+            if (!seenSessions.add(parsed.sessionId)) return 0
+            count++
+        }
+        return count
     }
 
     fun progress(context: Context): SensorTrialProgress {
@@ -77,7 +87,10 @@ object SensorTrialRecorder {
         if (lines.isEmpty()) return SensorTrialProgress()
 
         if (!SensorTrialCsvPolicy.hasCanonicalHeader(lines.first())) {
-            return SensorTrialProgress(rejectedTrials = (lines.size - 1).coerceAtLeast(0))
+            return SensorTrialProgress(
+                rejectedTrials = (lines.size - 1).coerceAtLeast(0),
+                invalidEvidenceStructure = true
+            )
         }
 
         var mouthTrials = 0
@@ -85,14 +98,24 @@ object SensorTrialRecorder {
         var nonTriggerTrials = 0
         var falseTriggers = 0
         var rejectedTrials = 0
+        var invalidEvidenceStructure = false
         val identities = mutableSetOf<String>()
+        val seenSessions = mutableSetOf<Long>()
 
         lines.drop(1).forEach { line ->
             val parsed = SensorTrialCsvPolicy.parseRow(line)
             if (parsed == null) {
                 rejectedTrials++
+                invalidEvidenceStructure = true
                 return@forEach
             }
+            if (!seenSessions.add(parsed.sessionId)) {
+                rejectedTrials++
+                invalidEvidenceStructure = true
+                return@forEach
+            }
+
+            identities += "${parsed.appVersion}|${parsed.sourceRevision}|${parsed.detectorConfig}"
 
             if (parsed.durationMs < MIN_QUALIFYING_DURATION_MS ||
                 parsed.sampleCount < MIN_QUALIFYING_SAMPLES
@@ -101,7 +124,6 @@ object SensorTrialRecorder {
                 return@forEach
             }
 
-            identities += "${parsed.appVersion}|${parsed.sourceRevision}|${parsed.detectorConfig}"
             when (parsed.label) {
                 "mouth_raise" -> {
                     mouthTrials++
@@ -120,7 +142,8 @@ object SensorTrialRecorder {
             nonTriggerTrials = nonTriggerTrials,
             falseTriggers = falseTriggers,
             rejectedTrials = rejectedTrials,
-            mixedEvidenceIdentity = identities.size > 1
+            mixedEvidenceIdentity = identities.size > 1,
+            invalidEvidenceStructure = invalidEvidenceStructure
         )
     }
 
