@@ -5,6 +5,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "preserve-frozen-physical-handoff.yml"
+CONTRACT_WORKFLOW = ROOT / ".github" / "workflows" / "frozen-preserve-contract-test.yml"
+CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 EXPECTED_ENV = {
     "ARTIFACT_ID": "11317304352",
@@ -105,6 +107,67 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
             self.text.count("EXPECTED_ARTIFACT_DIGEST"),
             3,
         )
+
+
+class FrozenPreserveContractWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.text = CONTRACT_WORKFLOW.read_text(encoding="utf-8")
+
+    def test_contract_lane_runtime_and_checkout_are_pinned(self):
+        self.assertIn("    runs-on: ubuntu-24.04", self.text)
+        self.assertNotIn("ubuntu-latest", self.text)
+        for line in (
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.text.count(line), 1)
+
+        refs = re.findall(
+            r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
+            self.text,
+            flags=re.MULTILINE,
+        )
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertIn(
+            f"uses: actions/checkout@{CHECKOUT_SHA} # v7.0.1 (node24)",
+            self.text,
+        )
+        self.assertEqual(self.text.count("          persist-credentials: false"), 1)
+
+    def test_contract_lane_pins_cpython_312_and_exact_head(self):
+        self.assertIn(
+            'python3 -c \'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version\'',
+            self.text,
+        )
+        expression = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        self.assertEqual(self.text.count(f"          ref: {expression}"), 1)
+        self.assertEqual(self.text.count(f"          EXPECTED_SHA: {expression}"), 1)
+        self.assertIn('          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', self.text)
+
+    def test_contract_lane_is_read_only_strict_and_self_guarding(self):
+        self.assertRegex(
+            self.text,
+            r"(?ms)^permissions:\n  contents: read\n\nconcurrency:",
+        )
+        self.assertNotIn("continue-on-error: true", self.text)
+        self.assertNotIn("secrets.", self.text)
+        for path in (
+            ".github/workflows/preserve-frozen-physical-handoff.yml",
+            ".github/workflows/frozen-preserve-contract-test.yml",
+            "tests/test_preserve_frozen_handoff_workflow.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.text.count(f'      - "{path}"'), 2)
+
+        lines = self.text.splitlines()
+        run_indices = [i for i, line in enumerate(lines) if line == "        run: |"]
+        self.assertEqual(len(run_indices), 2)
+        for index in run_indices:
+            self.assertEqual(lines[index + 1], "          set -euo pipefail")
 
 
 if __name__ == "__main__":
