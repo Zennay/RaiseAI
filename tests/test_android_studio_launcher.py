@@ -42,9 +42,18 @@ class AndroidStudioLauncherContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("Android Studio was not found", result.stdout)
 
-    def test_success_path_propagates_open_exit_status(self):
-        self.assertIn('exec open -a "Android Studio" "$SCRIPT_DIR"', self.source)
-        self.assertNotIn('open -a "Android Studio" "$PWD"', self.source)
+    def test_success_path_launches_exact_bundle_and_propagates_open_exit_status(self):
+        self.assertEqual(
+            self.source.count('ANDROID_STUDIO_APP="/Applications/Android Studio.app"'),
+            1,
+        )
+        self.assertIn('if [ -d "$ANDROID_STUDIO_APP" ]; then', self.source)
+        self.assertIn(
+            'exec open -a "$ANDROID_STUDIO_APP" "$SCRIPT_DIR"',
+            self.source,
+        )
+        self.assertNotIn('exec open -a "Android Studio"', self.source)
+        self.assertNotIn('open -a "$ANDROID_STUDIO_APP" "$PWD"', self.source)
 
 
 class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
