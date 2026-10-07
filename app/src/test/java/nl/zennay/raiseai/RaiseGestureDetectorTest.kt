@@ -96,6 +96,39 @@ class RaiseGestureDetectorTest {
     }
 
     @Test
+    fun nonFiniteMouthPoseDoesNotPoisonDetectorState() {
+        val detector = RaiseGestureDetector().apply {
+            similarityThreshold = 0.94f
+            movementThreshold = 0.7f
+            approachStartSimilarityThreshold = 0.94f
+            minimumApproachRise = 0.02f
+            requiredMovementHits = 2
+            holdMs = 100
+            cooldownMs = 1_000
+        }
+        val mouth = MouthPose(0f, 0f, 1f)
+
+        for (t in 0L..300L step 50L) detector.onAccelerometer(9.81f, 0f, 0f, t, mouth)
+        val invalid = detector.onAccelerometer(
+            9.81f,
+            0f,
+            0f,
+            325L,
+            MouthPose(Float.NaN, 0f, 1f)
+        )
+        assertFalse(invalid.triggered)
+
+        detector.onAccelerometer(7f, 0f, 7f, 350L, mouth)
+        detector.onAccelerometer(4f, 0f, 10f, 400L, mouth)
+        var triggered = false
+        for (t in 450L..1_400L step 50L) {
+            triggered = triggered || detector.onAccelerometer(0f, 0f, 9.81f, t, mouth).triggered
+        }
+
+        assertTrue(triggered)
+    }
+
+    @Test
     fun outOfOrderSampleDoesNotRewindDetectorTiming() {
         val detector = RaiseGestureDetector().apply {
             similarityThreshold = 0.94f
