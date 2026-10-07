@@ -10,6 +10,24 @@ WORKFLOW = ROOT / ".github" / "workflows" / "powershell-surface-contract.yml"
 EXPECTED_CRITICAL = {
     "install-watch-windows.ps1",
 }
+UTF8_BOM = b"\xef\xbb\xbf"
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def decode_canonical_powershell_source(data: bytes, *, label: str) -> str:
+    if data.startswith(UTF8_BOM):
+        raise ValueError(f"{label} must not start with a UTF-8 BOM")
+    if b"\x00" in data:
+        raise ValueError(f"{label} must not contain NUL bytes")
+    if b"\r" in data:
+        raise ValueError(f"{label} must use LF-only line endings")
+    try:
+        text = data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{label} must be strict UTF-8") from exc
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError(f"{label} must not contain bidirectional control characters")
+    return text
 
 
 def tracked_powershell_paths():
@@ -61,13 +79,26 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
                     f"{relative} must be a regular repository file, not a symlink",
                 )
                 self.assertTrue(path.is_file(), f"{relative} must resolve to a regular file")
-                path.read_bytes().decode("utf-8")
+                decode_canonical_powershell_source(path.read_bytes(), label=relative)
                 parsed = parse_powershell(path)
                 self.assertEqual(
                     parsed.returncode,
                     0,
                     f"{relative} must parse as PowerShell: {parsed.stderr}",
                 )
+
+    def test_canonical_decoder_rejects_ambiguous_source_bytes(self):
+        cases = (
+            (UTF8_BOM + b'Write-Host "ok"\n', "UTF-8 BOM"),
+            (b'Write-Host "ok"\r\n', "LF-only line endings"),
+            (b'Write-Host "ok"\x00\n', "NUL bytes"),
+            (b'Write-Host "\xff"\n', "strict UTF-8"),
+            ('Write-Host "safe\u202eunsafe"\n'.encode("utf-8"), "bidirectional control"),
+        )
+        for payload, expected in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    decode_canonical_powershell_source(payload, label="fixture.ps1")
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -299,6 +330,11 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
             "candidate.is_symlink()",
             "tracked PowerShell files must not be symlinks",
             "System.Management.Automation.Language.Parser",
+            'UTF8_BOM = b"\\xef\\xbb\\xbf"',
+            'if data.startswith(UTF8_BOM):',
+            'if b"\\x00" in data:',
+            'if b"\\r" in data:',
+            "BIDI_CONTROL_RE.search(text)",
             "python3 -m unittest tests.test_powershell_surface_contract",
             "git diff --exit-code -- .",
             'test -z "$(git ls-files --others --exclude-standard)"',
