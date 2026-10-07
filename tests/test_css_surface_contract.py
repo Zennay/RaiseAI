@@ -1,0 +1,270 @@
+import pathlib
+import re
+import subprocess
+import unittest
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+WORKFLOW = ROOT / ".github" / "workflows" / "css-surface-contract.yml"
+EXPECTED_CRITICAL = {"app/src/main/assets/raiseai_wear/wear.css"}
+
+
+def tracked_css_paths() -> list[str]:
+    raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
+    return sorted(
+        item
+        for item in raw.decode("utf-8").split("\0")
+        if item and pathlib.PurePosixPath(item).suffix.lower() == ".css"
+    )
+
+
+def _visible_css_code(text: str, *, label: str) -> str:
+    visible: list[str] = []
+    index = 0
+    state = "code"
+    quote = ""
+
+    while index < len(text):
+        char = text[index]
+        nxt = text[index + 1] if index + 1 < len(text) else ""
+
+        if state == "comment":
+            if char == "*" and nxt == "/":
+                visible.extend((" ", " "))
+                state = "code"
+                index += 2
+                continue
+            visible.append("\n" if char == "\n" else " ")
+            index += 1
+            continue
+
+        if state == "string":
+            if char == "\\":
+                visible.append(" ")
+                if index + 1 >= len(text):
+                    raise ValueError(f"{label}: unterminated escape in CSS string")
+                visible.append("\n" if nxt == "\n" else " ")
+                index += 2
+                continue
+            if char == quote:
+                visible.append(" ")
+                state = "code"
+                quote = ""
+                index += 1
+                continue
+            if char == "\n":
+                raise ValueError(f"{label}: unescaped newline in CSS string")
+            visible.append(" ")
+            index += 1
+            continue
+
+        if char == "/" and nxt == "*":
+            visible.extend((" ", " "))
+            state = "comment"
+            index += 2
+            continue
+        if char in {'"', "'"}:
+            visible.append(" ")
+            state = "string"
+            quote = char
+            index += 1
+            continue
+
+        visible.append(char)
+        index += 1
+
+    if state == "comment":
+        raise ValueError(f"{label}: unterminated CSS comment")
+    if state == "string":
+        raise ValueError(f"{label}: unterminated CSS string")
+
+    return "".join(visible)
+
+
+def validate_css_source(data: bytes, *, label: str) -> None:
+    try:
+        text = data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{label}: CSS source must be strict UTF-8") from exc
+
+    if text.startswith("\ufeff"):
+        raise ValueError(f"{label}: CSS source must not start with a UTF-8 BOM")
+    if "\x00" in text:
+        raise ValueError(f"{label}: CSS source must not contain NUL characters")
+    if "\r" in text:
+        raise ValueError(f"{label}: CSS source must use LF line endings")
+
+    visible = _visible_css_code(text, label=label)
+    if re.search(r"(?i)(?<![-_a-z0-9])@import\b", visible):
+        raise ValueError(f"{label}: CSS @import is forbidden; bundle assets locally")
+
+    stack: list[tuple[str, int]] = []
+    pairs = {"}": "{", ")": "(", "]": "["}
+    for index, char in enumerate(visible):
+        if char in "{([":
+            stack.append((char, index))
+        elif char in "})]":
+            expected = pairs[char]
+            if not stack or stack[-1][0] != expected:
+                raise ValueError(
+                    f"{label}: unmatched CSS delimiter {char!r} at character {index}"
+                )
+            stack.pop()
+
+    if stack:
+        opener, index = stack[-1]
+        raise ValueError(
+            f"{label}: unclosed CSS delimiter {opener!r} at character {index}"
+        )
+
+
+class CssSurfaceContractTests(unittest.TestCase):
+    def setUp(self):
+        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    def test_tracked_css_surface_is_nonempty_and_includes_wear_asset(self):
+        paths = tracked_css_paths()
+        self.assertTrue(paths, "tracked CSS discovery must find files")
+        self.assertTrue(
+            EXPECTED_CRITICAL.issubset(paths),
+            f"critical CSS missing from discovery: {sorted(EXPECTED_CRITICAL - set(paths))}",
+        )
+
+    def test_every_tracked_css_file_is_regular_canonical_and_structurally_valid(self):
+        for relative in tracked_css_paths():
+            with self.subTest(path=relative):
+                path = ROOT / relative
+                self.assertFalse(
+                    path.is_symlink(),
+                    f"{relative} must be a regular repository file, not a symlink",
+                )
+                self.assertTrue(path.is_file(), f"{relative} must resolve to a regular file")
+                validate_css_source(path.read_bytes(), label=relative)
+
+    def test_validator_accepts_balanced_local_css(self):
+        validate_css_source(
+            b'/* ok */\n.a[data-x="]"] { width: calc(100% - 2px); background: url("data:image/svg+xml,%3Csvg%3E"); }\n',
+            label="fixture.css",
+        )
+
+    def test_validator_rejects_encoding_and_line_ending_ambiguity(self):
+        cases = (
+            (b"safe \xff", "strict UTF-8"),
+            ("\ufeff.a {}".encode("utf-8"), "UTF-8 BOM"),
+            (b".a {\r\n  color: red;\r\n}\r\n", "LF line endings"),
+            (b".a { color: red;\x00 }", "NUL"),
+        )
+        for payload, expected in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    validate_css_source(payload, label="fixture.css")
+
+    def test_validator_rejects_unbalanced_or_unterminated_css(self):
+        cases = (
+            (b".a { color: red;", "unclosed CSS delimiter"),
+            (b".a { color: red; }}", "unmatched CSS delimiter"),
+            (b".a { content: \"oops; }", "unterminated CSS string"),
+            (b".a { /* oops", "unterminated CSS comment"),
+        )
+        for payload, expected in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    validate_css_source(payload, label="fixture.css")
+
+    def test_validator_rejects_remote_import_surface_but_ignores_comments_and_strings(self):
+        with self.assertRaisesRegex(ValueError, "@import"):
+            validate_css_source(
+                b'@import url("https://example.invalid/remote.css");\n.a {}\n',
+                label="fixture.css",
+            )
+        validate_css_source(
+            b'/* @import url("https://example.invalid/x.css"); */\n.a { content: "@import"; }\n',
+            label="fixture.css",
+        )
+
+    def _trigger_paths(self, event: str) -> list[str]:
+        lines = self.workflow.splitlines()
+        start = lines.index(f"  {event}:") + 1
+        body = []
+        for line in lines[start:]:
+            if line and not line.startswith("    "):
+                break
+            body.append(line)
+        self.assertIn("    paths:", body)
+        index = body.index("    paths:") + 1
+        paths = []
+        for line in body[index:]:
+            match = re.fullmatch(r'      - "([^"]+)"', line)
+            if not match:
+                break
+            paths.append(match.group(1))
+        return paths
+
+    def test_workflow_triggers_cover_current_and_future_css_surfaces(self):
+        expected = [
+            "*.css",
+            "**/*.css",
+            "tests/test_css_surface_contract.py",
+            ".github/workflows/css-surface-contract.yml",
+        ]
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                self.assertEqual(self._trigger_paths(event), expected)
+
+    def test_workflow_is_hosted_read_only_exact_head_bounded_and_secret_free(self):
+        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
+        self.assertNotIn("self-hosted", self.workflow)
+        self.assertIn("permissions:\n  contents: read\n", self.workflow)
+        self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
+        self.assertNotIn("pull_request_target:", self.workflow)
+        self.assertNotIn("continue-on-error: true", self.workflow)
+        self.assertIn("timeout-minutes: 5", self.workflow)
+        self.assertIn("cancel-in-progress: true", self.workflow)
+        expression = (
+            "${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}"
+        )
+        self.assertEqual(self.workflow.count(expression), 2)
+        self.assertIn("persist-credentials: false", self.workflow)
+
+    def test_workflow_uses_only_immutable_checkout_action(self):
+        refs = re.findall(
+            r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
+            self.workflow,
+            flags=re.MULTILINE,
+        )
+        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
+        self.assertIn(
+            "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            self.workflow,
+        )
+
+    def test_workflow_runs_contract_and_keeps_worktree_clean(self):
+        for token in (
+            "python3 -m unittest tests.test_css_surface_contract",
+            "git diff --exit-code -- .",
+            'test -z "$(git ls-files --others --exclude-standard)"',
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, self.workflow)
+
+    def test_all_run_steps_are_explicit_strict_bash(self):
+        lines = self.workflow.splitlines()
+        run_indices = [index for index, line in enumerate(lines) if line == "        run: |"]
+        self.assertTrue(run_indices)
+        step_starts = [
+            index for index, line in enumerate(lines) if line.startswith("      - name:")
+        ]
+        for run_index in run_indices:
+            with self.subTest(line=run_index + 1):
+                step_start = max(index for index in step_starts if index < run_index)
+                following = [index for index in step_starts if index > step_start]
+                step_end = min(following) if following else len(lines)
+                step = lines[step_start:step_end]
+                self.assertIn("        shell: bash", step)
+                self.assertEqual(lines[run_index + 1], "          set -euo pipefail")
+
+
+if __name__ == "__main__":
+    unittest.main()
