@@ -59,6 +59,7 @@ jobs:
           set -euo pipefail
           bash -n start-frozen-acceptance.command
           bash start-frozen-acceptance.command --help >/dev/null
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
           python3 -m py_compile tools/fetch-frozen-physical-handoff.py
 
       - name: Frozen acceptance regressions
