@@ -86,11 +86,10 @@ jobs:
             if node.is_a?(Psych::Nodes::Mapping)
               seen = {}
               node.children.each_slice(2) do |key, value|
-                if key.is_a?(Psych::Nodes::Scalar)
-                  label = key.value
-                  abort("duplicate YAML mapping key: #{label}") if seen.key?(label)
-                  seen[label] = true
-                end
+                abort("YAML mapping keys must be scalar") unless key.is_a?(Psych::Nodes::Scalar)
+                label = key.value
+                abort("duplicate YAML mapping key: #{label}") if seen.key?(label)
+                seen[label] = true
                 reject_duplicate_mapping_keys(key)
                 reject_duplicate_mapping_keys(value)
               end
