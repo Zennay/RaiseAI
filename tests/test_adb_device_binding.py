@@ -87,7 +87,12 @@ exit 2
         ]
 
     def test_pull_helpers_reject_arguments_before_adb_or_output(self):
-        for script_name in ("pull-diagnostics.command", "pull-watch-data.command"):
+        for script_name in (
+            "pull-diagnostics.command",
+            "pull-watch-data.command",
+            "upgrade-watch.command",
+            "watch-preflight.command",
+        ):
             with self.subTest(script_name=script_name):
                 self.log.unlink(missing_ok=True)
                 shutil.rmtree(self.root / "out", ignore_errors=True)
