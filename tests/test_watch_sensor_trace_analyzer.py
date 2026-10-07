@@ -93,6 +93,17 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
             with self.assertRaisesRegex(analyzer.TraceError, "duplicate column names"):
                 analyzer.read_samples(path)
 
+    def test_read_samples_rejects_surplus_row_fields(self):
+        content = (
+            "label,session_id,elapsed_ms,x,y,z\n"
+            "mouth_raise,1,0,0.1,0.2,9.7,unexpected\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "traces.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(analyzer.TraceError, "surplus fields"):
+                analyzer.read_samples(path)
+
     def test_read_samples_rejects_unknown_columns(self):
         content = "label,session_id,elapsed_ms,x,y,z,secret\nmouth_raise,1,0,0,0,9.8,nope\n"
         with tempfile.TemporaryDirectory() as tmp:
