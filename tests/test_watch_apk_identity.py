@@ -4,6 +4,7 @@ import pathlib
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "verify-watch-apk-identity.py"
 SPEC = importlib.util.spec_from_file_location("watch_apk_identity", MODULE_PATH)
@@ -72,6 +73,46 @@ class WatchApkIdentityTests(unittest.TestCase):
             path = pathlib.Path(tmp) / "RaiseAI.apk"
             path.write_text("not an apk", encoding="utf-8")
             with self.assertRaisesRegex(verifier.ApkIdentityError, "valid ZIP"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    def test_hash_and_archive_inspection_use_same_open_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            path = root / "RaiseAI.apk"
+            replacement = root / "replacement.apk"
+            digest = make_apk(path)
+            make_apk(replacement, revision="f" * 40)
+
+            real_hash = verifier._sha256_open_file
+
+            def hash_then_replace(apk_file):
+                result = real_hash(apk_file)
+                path.unlink()
+                replacement.rename(path)
+                return result
+
+            with mock.patch.object(verifier, "_sha256_open_file", side_effect=hash_then_replace):
+                report = verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                    expected_sha256=digest,
+                )
+
+            self.assertEqual(report["apk_sha256"], digest)
+            with zipfile.ZipFile(path) as archive:
+                self.assertIn(("f" * 40).encode("ascii"), archive.read("classes.dex"))
+
+    def test_rejects_symlink_apk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            target = root / "real.apk"
+            make_apk(target)
+            path = root / "RaiseAI.apk"
+            path.symlink_to(target)
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "opened safely"):
                 verifier.verify_apk(
                     path,
                     expected_source_revision=REVISION,
