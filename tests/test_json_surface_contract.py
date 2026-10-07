@@ -180,6 +180,96 @@ class JsonSurfaceContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, self.workflow)
 
+    def test_job_environment_surface_is_exact(self):
+        lines = self.workflow.splitlines()
+        env_start = lines.index("    env:") + 1
+        env_keys = []
+        for line in lines[env_start:]:
+            match = re.fullmatch(r"      ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                env_keys.append(match.group(1))
+                continue
+            break
+
+        self.assertEqual(
+            env_keys,
+            [
+                "LANG",
+                "LC_ALL",
+                "PYTHONHASHSEED",
+                "PYTHONNOUSERSITE",
+                "PYTHONDONTWRITEBYTECODE",
+                "TZ",
+            ],
+            "JSON workflow environment must not gain unreviewed controls",
+        )
+        expected_env_lines = [
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ]
+        actual_env_lines = lines[env_start : env_start + len(expected_env_lines)]
+        self.assertEqual(
+            actual_env_lines,
+            expected_env_lines,
+            "JSON workflow environment values must remain deterministic",
+        )
+
+    def test_step_mapping_surfaces_are_exact(self):
+        lines = self.workflow.splitlines()
+        step_starts = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("      - name:")
+        ]
+        expected_names = [
+            "Checkout exact tested revision",
+            "Verify exact tested revision",
+            "Verify Python runtime",
+            "Validate tracked JSON surface",
+            "Run JSON surface regression contract",
+            "Verify worktree remains clean",
+        ]
+        names = [
+            lines[index].removeprefix("      - name: ")
+            for index in step_starts
+        ]
+        self.assertEqual(
+            names,
+            expected_names,
+            "JSON workflow must not gain unreviewed steps",
+        )
+
+        expected_keys = {
+            "Checkout exact tested revision": ["name", "uses", "with"],
+            "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Verify Python runtime": ["name", "shell", "run"],
+            "Validate tracked JSON surface": ["name", "shell", "run"],
+            "Run JSON surface regression contract": ["name", "shell", "run"],
+            "Verify worktree remains clean": ["name", "shell", "run"],
+        }
+        for position, start in enumerate(step_starts):
+            end = (
+                step_starts[position + 1]
+                if position + 1 < len(step_starts)
+                else len(lines)
+            )
+            step = lines[start:end]
+            name = names[position]
+            keys = ["name"]
+            for line in step[1:]:
+                match = re.fullmatch(r"        ([A-Za-z0-9_-]+):.*", line)
+                if match:
+                    keys.append(match.group(1))
+            self.assertEqual(
+                keys,
+                expected_keys[name],
+                f"{name} must not gain unreviewed step-level controls",
+            )
+
     def test_all_run_steps_are_explicit_strict_bash(self):
         lines = self.workflow.splitlines()
         run_indices = [index for index, line in enumerate(lines) if line == "        run: |"]
