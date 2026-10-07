@@ -1,0 +1,51 @@
+name: Watch APK input quality CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "tools/verify-watch-apk-identity.py"
+      - "tests/test_watch_apk_identity.py"
+      - ".github/workflows/watch-apk-input-quality.yml"
+  pull_request:
+    paths:
+      - "tools/verify-watch-apk-identity.py"
+      - "tests/test_watch_apk_identity.py"
+      - ".github/workflows/watch-apk-input-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watch-apk-input-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: [self-hosted, linux, x64, vps-bb300bba]
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Pin exact head and runner
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+
+      - name: Validate Watch APK input handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/verify-watch-apk-identity.py
+          python3 -m unittest discover -s tests -p 'test_watch_apk_identity.py' -v
