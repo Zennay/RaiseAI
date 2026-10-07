@@ -63,7 +63,7 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
     def test_load_rejects_invalid_utf8_without_traceback_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             evidence = pathlib.Path(temporary) / "watch-e2e-evidence.json"
-            evidence.write_bytes(b"{\\xff}")
+            evidence.write_bytes(bytes((0x7B, 0xFF, 0x7D)))
             with self.assertRaisesRegex(validator.EvidenceError, "valid UTF-8"):
                 validator.load_evidence(evidence)
 
