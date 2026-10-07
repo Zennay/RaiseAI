@@ -114,7 +114,7 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             '"on": {pull_request: null, workflow_dispatch: null}\n',
             "on: [push, pull_request]\n",
             "on: [\n  push,\n  pull_request,\n]\n",
-            "on: [\\n  push,\\n  pull_request # guarded legacy trigger\\n]\\n",
+            "on: [\n  push,\n  pull_request # guarded legacy trigger\n]\n",
             '"on": [\n  workflow_dispatch,\n  "pull_request",\n]\n',
             'on: [push, "pull_request"]\n',
             "'on': [workflow_dispatch, 'pull_request']\n",
