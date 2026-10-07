@@ -47,6 +47,13 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
+      - name: Verify Ruby/Psych runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ruby >/dev/null
+          ruby --disable-gems -e 'require "psych"; expected = ["3.2.3", "5.0.1"]; actual = [RUBY_VERSION, Psych::VERSION]; abort "unexpected Ruby/Psych runtime: #{actual.join(" / ")}" unless actual == expected; puts "Ruby #{RUBY_VERSION} / Psych #{Psych::VERSION}"'
+
       - name: Verify Python runtime
         shell: bash
         run: |
