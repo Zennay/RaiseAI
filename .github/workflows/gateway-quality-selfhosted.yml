@@ -1,27 +1,25 @@
-name: Raise gateway tests
+name: Gateway self-hosted quality CI
 
 on:
-  push:
-    branches:
-      - main
-      - feature/**
   pull_request:
     paths:
-      - "gateway/**"
       - ".github/workflows/gateway-test.yml"
-      - ".github/workflows/gateway-deploy.yml"
+      - ".github/workflows/gateway-quality-selfhosted.yml"
+      - "gateway/test/ci-workflow-contract.test.mjs"
+      - "gateway/test/gateway-quality-selfhosted-contract.test.mjs"
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 concurrency:
-  group: raise-gateway-tests-${{ github.event.pull_request.number || github.ref }}
+  group: raise-gateway-selfhosted-quality-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  gateway:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+  gateway-quality:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 10
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
@@ -35,6 +33,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
       - name: Verify exact tested revision
         shell: bash
         env:
@@ -42,36 +41,25 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0 (node24)
+
+      - name: Set up audited Node runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0 (node24)
         with:
           node-version: "22.23.3"
           package-manager-cache: false
+
       - name: Verify Node runtime
         shell: bash
         run: |
           set -euo pipefail
           test "$(node --version)" = "v22.23.3"
           test "$(npm --version)" = "10.9.9"
-      - name: Gateway unit tests
+
+      - name: Run gateway regressions directly
         shell: bash
         run: |
           set -euo pipefail
           node --test
-      - name: Deployment script syntax
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash -n deploy/install-user-gateway.sh
-          bash -n deploy/assert-idempotent-redeploy.sh
-          node --check deploy/readiness-policy.mjs
-          node --check deploy/wait-for-live.mjs
-          node --check deploy/smoke-live.mjs
-          node --check deploy/attest-payload.mjs
-          node --check deploy/attest-runtime-wiring.mjs
-          node --check deploy/attest-watch-profile.mjs
-          node --check deploy/write-deploy-evidence.mjs
-          node --check deploy/validate-deploy-evidence.mjs
-          node --check src/server.mjs
 
       - name: Verify worktree remains clean
         shell: bash
