@@ -69,6 +69,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
     def test_pull_request_dependencies_are_complete(self):
         expected = [
             "VERSION.txt",
+            "app/build.gradle.kts",
             "README.md",
             "START-HERE.md",
             "PHYSICAL-ACCEPTANCE.md",

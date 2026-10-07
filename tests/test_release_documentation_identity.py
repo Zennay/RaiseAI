@@ -12,6 +12,21 @@ FROZEN_ARCHIVE_SHA256 = "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b16
 
 
 class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
+    def test_repository_version_matches_android_version_name(self):
+        version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
+        self.assertRegex(version, VERSION_RE)
+
+        build_text = (ROOT / "app" / "build.gradle.kts").read_text(encoding="utf-8")
+        version_names = re.findall(
+            r'(?m)^\s*versionName\s*=\s*"([^"]+)"\s*$',
+            build_text,
+        )
+        self.assertEqual(
+            version_names,
+            [version],
+            "Android versionName must exactly match the canonical repository VERSION.txt",
+        )
+
     def test_readme_tracks_repository_version(self):
         version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
         self.assertRegex(version, VERSION_RE)
