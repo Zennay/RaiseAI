@@ -54,6 +54,14 @@ export function armReadinessRequestDeadline(
   };
 }
 
+function destroyReadable(readable) {
+  try {
+    readable?.destroy?.();
+  } catch {
+    // Best-effort release only; the readiness body failure remains authoritative.
+  }
+}
+
 export async function readReadinessJson(
   readable,
   { maxBytes = MAX_READINESS_BODY_BYTES } = {}
@@ -70,6 +78,7 @@ export async function readReadinessJson(
       typeof contentLength !== "string" ||
       !/^\d+$/u.test(contentLength.trim())
     ) {
+      destroyReadable(readable);
       return {
         json: null,
         bodyError: "health_content_length_invalid"
@@ -78,6 +87,7 @@ export async function readReadinessJson(
 
     declaredBytes = Number(contentLength.trim());
     if (!Number.isSafeInteger(declaredBytes) || declaredBytes > maxBytes) {
+      destroyReadable(readable);
       return {
         json: null,
         bodyError: "health_body_too_large"
@@ -88,16 +98,25 @@ export async function readReadinessJson(
   let totalBytes = 0;
   const chunks = [];
 
-  for await (const chunk of readable) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    totalBytes += buffer.length;
-    if (totalBytes > maxBytes) {
-      return {
-        json: null,
-        bodyError: "health_body_too_large"
-      };
+  try {
+    for await (const chunk of readable) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buffer.length;
+      if (totalBytes > maxBytes) {
+        destroyReadable(readable);
+        return {
+          json: null,
+          bodyError: "health_body_too_large"
+        };
+      }
+      chunks.push(buffer);
     }
-    chunks.push(buffer);
+  } catch {
+    destroyReadable(readable);
+    return {
+      json: null,
+      bodyError: "health_body_read_failed"
+    };
   }
 
   if (declaredBytes !== null && totalBytes !== declaredBytes) {
