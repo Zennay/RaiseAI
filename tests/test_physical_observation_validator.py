@@ -81,6 +81,43 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             with self.assertRaisesRegex(validator.ObservationError, "observations must be valid UTF-8"):
                 validator.load_json_document(path, "observations")
 
+    def test_loader_reads_same_inode_when_path_is_replaced_after_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            path = root / "session.json"
+            replacement = root / "replacement.json"
+            original = session_payload(watch_serial="original-watch")
+            forged = session_payload(watch_serial="forged-watch")
+            path.write_text(json.dumps(original), encoding="utf-8")
+            replacement.write_text(json.dumps(forged), encoding="utf-8")
+
+            real_open = validator.os.open
+
+            def open_then_replace(target, flags):
+                fd = real_open(target, flags)
+                pathlib.Path(target).unlink()
+                replacement.rename(target)
+                return fd
+
+            with mock.patch.object(validator.os, "open", side_effect=open_then_replace):
+                loaded = validator.load_json_document(path, "session")
+
+            self.assertEqual(loaded["watch_serial"], "original-watch")
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8"))["watch_serial"],
+                "forged-watch",
+            )
+
+    def test_loader_rejects_symlink_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            target = root / "session-real.json"
+            target.write_text(json.dumps(session_payload()), encoding="utf-8")
+            path = root / "session.json"
+            path.symlink_to(target)
+            with self.assertRaises(OSError):
+                validator.load_json_document(path, "session")
+
     def test_accepts_explicit_ux_failures_without_turning_them_into_a_fake_pass(self):
         result = validator.validate_observations(
             session_payload(),
