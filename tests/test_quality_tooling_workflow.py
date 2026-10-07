@@ -421,5 +421,55 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 )
 
 
+    def test_exact_head_checkout_keys_cannot_be_shadowed(self):
+        expression = (
+            "${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}"
+        )
+        expected = {
+            "ref": f"          ref: {expression}",
+            "persist-credentials": "          persist-credentials: false",
+            "EXPECTED_SHA": f"          EXPECTED_SHA: {expression}",
+        }
+        for key, expected_line in expected.items():
+            with self.subTest(key=key):
+                matches = [
+                    line
+                    for line in self.text.splitlines()
+                    if re.match(rf"^\\s+{re.escape(key)}:", line)
+                ]
+                self.assertEqual(
+                    matches,
+                    [expected_line],
+                    f"{key} must be declared exactly once with the audited value",
+                )
+
+    def test_concurrency_contract_cannot_be_shadowed(self):
+        lines = self.text.splitlines()
+        start = lines.index("concurrency:") + 1
+        end = lines.index("jobs:")
+        block = lines[start:end]
+        keys = []
+        for line in block:
+            match = re.fullmatch(r"  ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                keys.append(match.group(1))
+
+        self.assertEqual(
+            keys,
+            ["group", "cancel-in-progress"],
+            "concurrency mapping must contain only the audited keys once each",
+        )
+        self.assertEqual(
+            [
+                line
+                for line in block
+                if line.startswith("  cancel-in-progress:")
+            ],
+            ["  cancel-in-progress: true"],
+            "stale quality runs must always be cancelled",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
