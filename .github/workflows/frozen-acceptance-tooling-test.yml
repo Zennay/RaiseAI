@@ -7,6 +7,9 @@ on:
     paths:
       - "START-HERE.md"
       - "DEVICE-TEST.md"
+      - "GEMINI-HOME-SETUP.md"
+      - "CHATGPT-WEB-SETUP.md"
+      - "REMOTE-LOGIN.md"
       - "start-frozen-acceptance.command"
       - "tools/fetch-frozen-physical-handoff.py"
       - "tests/test_frozen_acceptance_launcher.py"
@@ -17,6 +20,9 @@ on:
     paths:
       - "START-HERE.md"
       - "DEVICE-TEST.md"
+      - "GEMINI-HOME-SETUP.md"
+      - "CHATGPT-WEB-SETUP.md"
+      - "REMOTE-LOGIN.md"
       - "start-frozen-acceptance.command"
       - "tools/fetch-frozen-physical-handoff.py"
       - "tests/test_frozen_acceptance_launcher.py"
