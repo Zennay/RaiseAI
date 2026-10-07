@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import {
   MAX_SMOKE_BODY_BYTES,
+  SMOKE_REQUEST_DEADLINE_MS,
+  armSmokeRequestDeadline,
   readSmokeResponseBody
 } from "../deploy/smoke-http.mjs";
 
@@ -11,6 +13,103 @@ function bodyStream(chunks, headers = {}) {
   stream.headers = headers;
   return stream;
 }
+
+test("live smoke absolute deadline destroys a request at the hard wall clock", () => {
+  let scheduled = null;
+  let destroyedWith = null;
+  const request = {
+    destroy(error) {
+      destroyedWith = error;
+    }
+  };
+
+  armSmokeRequestDeadline(request, {
+    setTimeoutImpl(callback, timeoutMs) {
+      scheduled = { callback, timeoutMs };
+      return "deadline-handle";
+    },
+    clearTimeoutImpl() {
+      throw new Error("must not clear before deadline fires");
+    }
+  });
+
+  assert.equal(scheduled.timeoutMs, SMOKE_REQUEST_DEADLINE_MS);
+  scheduled.callback();
+  assert.equal(destroyedWith?.message, "smoke_request_deadline_exceeded");
+});
+
+test("settled live smoke requests cancel the absolute deadline", () => {
+  let scheduled = null;
+  const cleared = [];
+  let destroyCalls = 0;
+  const request = {
+    destroy() {
+      destroyCalls += 1;
+    }
+  };
+
+  const cancel = armSmokeRequestDeadline(request, {
+    timeoutMs: 1234,
+    setTimeoutImpl(callback, timeoutMs) {
+      scheduled = { callback, timeoutMs };
+      return "deadline-handle";
+    },
+    clearTimeoutImpl(handle) {
+      cleared.push(handle);
+    }
+  });
+
+  assert.equal(scheduled.timeoutMs, 1234);
+  cancel();
+  cancel();
+  scheduled.callback();
+
+  assert.deepEqual(cleared, ["deadline-handle"]);
+  assert.equal(destroyCalls, 0);
+});
+
+test("live smoke absolute deadline validates request and timer configuration", () => {
+  assert.throws(
+    () => armSmokeRequestDeadline(null),
+    /smoke request must expose destroy/
+  );
+  assert.throws(
+    () => armSmokeRequestDeadline({ destroy: true }),
+    /smoke request must expose destroy/
+  );
+
+  const request = { destroy() {} };
+  for (const timeoutMs of [0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(
+      () => armSmokeRequestDeadline(request, { timeoutMs }),
+      /smoke request timeout must be a positive safe integer/
+    );
+  }
+
+  assert.throws(
+    () => armSmokeRequestDeadline(request, { setTimeoutImpl: null }),
+    /timer functions must be callable/
+  );
+  assert.throws(
+    () => armSmokeRequestDeadline(request, { clearTimeoutImpl: null }),
+    /timer functions must be callable/
+  );
+});
+
+test("deadline cancellation stays best-effort after a request settles", () => {
+  const request = { destroy() {} };
+  const cancel = armSmokeRequestDeadline(request, {
+    setTimeoutImpl() {
+      return "deadline-handle";
+    },
+    clearTimeoutImpl() {
+      throw new Error("cleanup_failed");
+    }
+  });
+
+  assert.doesNotThrow(cancel);
+  assert.doesNotThrow(cancel);
+});
 
 test("live smoke body reader accepts bounded exact-length JSON", async () => {
   const body = Buffer.from('{"ok":true}', "utf8");
