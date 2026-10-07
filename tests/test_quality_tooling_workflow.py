@@ -695,5 +695,58 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
 
 
+    def test_quality_run_command_bodies_are_exact(self):
+        lines = self.text.splitlines()
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index
+                for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        expected_commands = {
+            "Verify exact tested revision": [
+                "set -euo pipefail",
+                'test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
+            ],
+            "Verify Python runtime": [
+                "set -euo pipefail",
+                "python3 -c 'import platform, sys; assert platform.python_implementation() == \"CPython\"; assert sys.version_info[:2] == (3, 12), sys.version'",
+            ],
+            "Shell syntax": [
+                "set -euo pipefail",
+                "bash -n pull-diagnostics.command pull-watch-data.command install-watch-apk.command provision-watch-gateway.command physical-validation.command start-frozen-acceptance.command",
+            ],
+            "Python syntax": [
+                "set -euo pipefail",
+                "python3 -m py_compile tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/create-physical-observation-template.py tools/fetch-frozen-physical-handoff.py tools/validate-physical-observations.py tools/validate-watch-e2e-evidence.py tools/verify-watch-apk-identity.py",
+            ],
+            "Quality tooling regressions": [
+                "set -euo pipefail",
+                "python3 -m unittest tests.test_adb_device_binding tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_quality_tooling_workflow tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer",
+            ],
+        }
+
+        for name, expected in expected_commands.items():
+            with self.subTest(step=name):
+                step = step_named(name)
+                run_start = step.index("        run: |") + 1
+                commands = []
+                for line in step[run_start:]:
+                    if line.startswith("          "):
+                        commands.append(line.removeprefix("          "))
+                        continue
+                    break
+                self.assertEqual(
+                    commands,
+                    expected,
+                    f"{name} run body must remain exactly audited",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
