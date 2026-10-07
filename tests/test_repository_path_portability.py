@@ -10,6 +10,8 @@ WINDOWS_RESERVED_BASENAMES = {
     "nul",
     *(f"com{index}" for index in range(1, 10)),
     *(f"lpt{index}" for index in range(1, 10)),
+    *(f"com{digit}" for digit in "¹²³"),
+    *(f"lpt{digit}" for digit in "¹²³"),
 }
 WINDOWS_FORBIDDEN_CHARACTERS = set('<>:"\\|?*')
 
@@ -168,6 +170,19 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
             "nested/NUL.json",
             "tools/Com1.py",
             "artifacts/lPt9.log",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "Windows-reserved basename"):
+                    validate_portable_paths([path])
+
+    def test_rejects_windows_superscript_device_basenames(self):
+        for path in (
+            "COM¹",
+            "docs/com².txt",
+            "nested/Com³.json",
+            "LPT¹",
+            "tools/lpt².py",
+            "artifacts/LpT³.log",
         ):
             with self.subTest(path=path):
                 with self.assertRaisesRegex(ValueError, "Windows-reserved basename"):
