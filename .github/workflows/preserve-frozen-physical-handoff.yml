@@ -24,6 +24,7 @@ jobs:
       ARTIFACT_ID: "11317304352"
       ARTIFACT_RUN_ID: "37241768528"
       EXPECTED_ARTIFACT_DIGEST: "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce"
+      EXPECTED_ARTIFACT_SIZE_BYTES: "84450954"
       SOURCE_REVISION: "8f719bb273f9b997848864f342598e7df5f090e5"
       RELEASE_TAG: "physical-handoff-v1.5.2-8f719bb"
       ASSET_NAME: "RaiseAI-Watch7-v1.5.2-physical-handoff-37241768528.zip"
@@ -47,6 +48,14 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$api/actions/artifacts/$ARTIFACT_ID/zip" \
             -o "$archive"
+
+          actual_size="$(wc -c < "$archive" | tr -d '[:space:]')"
+          test "$actual_size" = "$EXPECTED_ARTIFACT_SIZE_BYTES" || {
+            echo "Artifact archive size mismatch."
+            echo "expected=$EXPECTED_ARTIFACT_SIZE_BYTES"
+            echo "actual=$actual_size"
+            exit 1
+          }
 
           actual_digest="$(sha256sum "$archive" | awk '{print tolower($1)}')"
           test "$actual_digest" = "$EXPECTED_ARTIFACT_DIGEST" || {
@@ -233,6 +242,14 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$api/releases/assets/$asset_id" \
             -o "$verify"
+
+          verify_size="$(wc -c < "$verify" | tr -d '[:space:]')"
+          test "$verify_size" = "$EXPECTED_ARTIFACT_SIZE_BYTES" || {
+            echo "Preserved release asset size mismatch."
+            echo "expected=$EXPECTED_ARTIFACT_SIZE_BYTES"
+            echo "actual=$verify_size"
+            exit 1
+          }
 
           actual_digest="$(sha256sum "$verify" | awk '{print tolower($1)}')"
           test "$actual_digest" = "$EXPECTED_ARTIFACT_DIGEST" || {
