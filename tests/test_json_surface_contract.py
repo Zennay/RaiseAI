@@ -136,6 +136,7 @@ class JsonSurfaceContractTests(unittest.TestCase):
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
         self.assertNotIn("pull_request_target:", self.workflow)
         self.assertNotIn("continue-on-error: true", self.workflow)
+        self.assertNotRegex(self.workflow, r"(?m)^\s+if:\s*")
         self.assertIn("timeout-minutes: 5", self.workflow)
         self.assertIn("cancel-in-progress: true", self.workflow)
         expression = (
@@ -144,6 +145,10 @@ class JsonSurfaceContractTests(unittest.TestCase):
         )
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
+        self.assertEqual(
+            self.workflow.count('          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"'),
+            1,
+        )
 
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(
