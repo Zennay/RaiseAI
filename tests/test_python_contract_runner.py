@@ -1,4 +1,4 @@
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import chdir, redirect_stderr, redirect_stdout
 from io import StringIO
 import importlib.util
 from pathlib import Path
@@ -38,6 +38,33 @@ class PythonContractRunnerTests(unittest.TestCase):
             finally:
                 MODULE.TESTS_DIR = previous
             return exit_code, output.getvalue()
+
+    def test_runner_binds_contract_cwd_to_repository_root_and_restores_caller(self):
+        expected_root = str(MODULE.ROOT)
+        source = f"""
+from pathlib import Path
+import unittest
+
+EXPECTED_ROOT = Path({expected_root!r})
+
+class WorkingDirectoryContract(unittest.TestCase):
+    def test_runs_from_repository_root(self):
+        self.assertEqual(Path.cwd(), EXPECTED_ROOT)
+"""
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-caller-") as outside:
+            outside_path = Path(outside)
+            with chdir(outside_path):
+                exit_code, output = self.run_temporary_suite(
+                    source,
+                    "test_runner_cwd_case.py",
+                )
+                self.assertEqual(
+                    Path.cwd(),
+                    outside_path,
+                    "aggregate runner must restore its caller working directory",
+                )
+
+        self.assertEqual(exit_code, 0, output)
 
     def test_empty_suite_returns_nonzero(self):
         exit_code, output = self.run_temporary_suite(
