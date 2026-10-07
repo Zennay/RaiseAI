@@ -16,7 +16,7 @@ const DEPLOY_WORKFLOW = fs.readFileSync(
 );
 
 function externalActionRefs(text) {
-  return [...text.matchAll(/^\\s*(?:-\\s*)?uses:\\s*([^@\\s]+)@([^\\s#]+)(?:\\s+#.*)?$/gm)]
+  return [...text.matchAll(/^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
     .map((match) => ({ action: match[1], ref: match[2] }))
     .filter(({ action }) => !action.startsWith("./"));
 }
