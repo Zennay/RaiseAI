@@ -28,10 +28,14 @@ local.properties
 !.env.sample
 .envrc
 .direnv/
+.raiseai/
+**/.config/raiseai/
 secrets.properties
 keystore.properties
 signing.properties
 credentials.json
+gateway.env
+watch-gateway.properties
 *.jks
 *.ks
 *.keystore
