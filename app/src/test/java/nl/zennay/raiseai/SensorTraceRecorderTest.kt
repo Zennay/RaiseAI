@@ -43,6 +43,29 @@ class SensorTraceRecorderTest {
     }
 
     @Test
+    fun sampleCountFailsClosedOnUnexpectedHeader() {
+        val count = SensorTraceRecorder.validSampleLineCount(
+            sequenceOf(
+                "label,session_id,x,y,z",
+                "mouth_raise,1,0,0.1,-9.7,0.3"
+            )
+        )
+
+        assertTrue(count == 0)
+    }
+
+    @Test
+    fun sampleCountFailsClosedWhenHeaderIsMissing() {
+        val count = SensorTraceRecorder.validSampleLineCount(
+            sequenceOf(
+                "mouth_raise,1,0,0.1,-9.7,0.3"
+            )
+        )
+
+        assertTrue(count == 0)
+    }
+
+    @Test
     fun sampleCountRejectsInvalidIdentityAndTimingRows() {
         val count = SensorTraceRecorder.validSampleLineCount(
             sequenceOf(
