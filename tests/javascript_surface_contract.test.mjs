@@ -12,7 +12,18 @@ const WORKFLOW_PATH = resolve(
   "workflows",
   "javascript-surface-contract.yml",
 );
-const WORKFLOW = readFileSync(WORKFLOW_PATH, "utf8");
+function decodeUtf8Strict(bytes, label) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new Error(`${label} must be strict UTF-8`, { cause: error });
+  }
+}
+
+const WORKFLOW = decodeUtf8Strict(
+  readFileSync(WORKFLOW_PATH),
+  ".github/workflows/javascript-surface-contract.yml",
+);
 const EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
 const EXPECTED_CRITICAL = new Set([
   "app/src/main/assets/raiseai_wear/wear.js",
@@ -77,6 +88,7 @@ test("every tracked JavaScript file is regular and syntax-valid", () => {
       `${relative} must not use symlink indirection`,
     );
     assert.equal(stat.isFile(), true, `${relative} must be a regular file`);
+    decodeUtf8Strict(readFileSync(absolute), relative);
 
     const checked = spawnSync(process.execPath, ["--check", relative], {
       cwd: ROOT,
@@ -89,6 +101,13 @@ test("every tracked JavaScript file is regular and syntax-valid", () => {
       `${relative} must pass node --check under the audited runtime`,
     );
   }
+});
+
+test("strict UTF-8 decoding rejects malformed source bytes", () => {
+  assert.throws(
+    () => decodeUtf8Strict(Buffer.from([0x66, 0x6f, 0x80, 0x6f]), "fixture.js"),
+    /fixture[.]js must be strict UTF-8/,
+  );
 });
 
 test("workflow triggers cover current and future JavaScript surfaces", () => {
