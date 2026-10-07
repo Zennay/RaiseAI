@@ -30,6 +30,8 @@
 
     <application
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/backup_rules"
+        android:fullBackupContent="@xml/backup_rules_legacy"
         android:icon="@drawable/ic_raise_ai"
         android:label="Raise AI"
         android:roundIcon="@drawable/ic_raise_ai"
