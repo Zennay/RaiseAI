@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "install-mac-adb-autoconnect.command"
+MAC_AUTOCONNECT_WORKFLOW = ROOT / ".github" / "workflows" / "mac-adb-autoconnect-quality.yml"
 
 
 class MacAdbAutoconnectContractTest(unittest.TestCase):
@@ -125,6 +126,15 @@ exit 0
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(result.stdout, "")
         self.assertTrue((self.home / ".raiseai" / "autoconnect-installed").is_file())
+
+
+class MacAdbAutoconnectWorkflowContractTest(unittest.TestCase):
+    def test_required_self_hosted_gate_is_not_prestart_cancelled(self):
+        workflow = MAC_AUTOCONNECT_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("concurrency:", workflow)
+        self.assertIn("  cancel-in-progress: false", workflow)
+        self.assertIn("timeout-minutes: 5", workflow)
+        self.assertIn('test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', workflow)
 
 
 if __name__ == "__main__":
