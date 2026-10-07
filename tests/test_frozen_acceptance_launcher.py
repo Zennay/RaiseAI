@@ -265,6 +265,12 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 "spki_sha256=" + ("a" * 64) + "\n",
                 "token is missing or malformed",
             ),
+            "control-token": (
+                "url=https://raise.example.invalid\n"
+                "token=" + ("x" * 40) + "\x00\n"
+                "spki_sha256=" + ("a" * 64) + "\n",
+                "token is missing or malformed",
+            ),
             "bad-pin": (
                 "url=https://raise.example.invalid\n"
                 "token=" + ("x" * 40) + "\n"
