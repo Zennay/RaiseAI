@@ -6,6 +6,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-documentation-identity.yml"
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1, node24
+EXPECTED_TRIGGER_PATHS = [
+    "VERSION.txt",
+    "app/build.gradle.kts",
+    "README.md",
+    "START-HERE.md",
+    "PHYSICAL-ACCEPTANCE.md",
+    "start-frozen-acceptance.command",
+    "start-physical-handoff.command",
+    "tools/fetch-frozen-physical-handoff.py",
+    "tools/create-physical-observation-template.py",
+    "tools/validate-physical-observations.py",
+    "DEVICE-TEST.md",
+    "REMOTE-LOGIN.md",
+    "GEMINI-HOME-SETUP.md",
+    "CHATGPT-WEB-SETUP.md",
+    "tests/test_release_documentation_identity.py",
+    "tests/test_release_documentation_workflow.py",
+    ".github/workflows/release-documentation-identity.yml",
+]
 
 
 class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
@@ -66,28 +85,9 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         self.assertEqual(block.group(1).splitlines(), ["  contents: read"])
         self.assertNotRegex(self.text, r"(?m)^    permissions:")
 
-    def test_pull_request_dependencies_are_complete(self):
-        expected = [
-            "VERSION.txt",
-            "app/build.gradle.kts",
-            "README.md",
-            "START-HERE.md",
-            "PHYSICAL-ACCEPTANCE.md",
-            "start-frozen-acceptance.command",
-            "start-physical-handoff.command",
-            "tools/fetch-frozen-physical-handoff.py",
-            "tools/create-physical-observation-template.py",
-            "tools/validate-physical-observations.py",
-            "DEVICE-TEST.md",
-            "REMOTE-LOGIN.md",
-            "GEMINI-HOME-SETUP.md",
-            "CHATGPT-WEB-SETUP.md",
-            "tests/test_release_documentation_identity.py",
-            "tests/test_release_documentation_workflow.py",
-            ".github/workflows/release-documentation-identity.yml",
-        ]
+    def _event_paths(self, event):
         lines = self.text.splitlines()
-        start = lines.index("  pull_request:") + 1
+        start = lines.index(f"  {event}:") + 1
         body = []
         for line in lines[start:]:
             if line and not line.startswith("    "):
@@ -101,7 +101,12 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
             if not match:
                 break
             paths.append(match.group(1))
-        self.assertEqual(paths, expected)
+        return paths
+
+    def test_push_and_pull_request_dependencies_match_exact_contract(self):
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                self.assertEqual(self._event_paths(event), EXPECTED_TRIGGER_PATHS)
 
     def test_contract_test_executes_in_the_release_lane(self):
         self.assertEqual(
