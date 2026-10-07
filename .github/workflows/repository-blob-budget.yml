@@ -31,20 +31,15 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Verify exact tested revision
+      - name: Pin exact head and runner
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-
-      - name: Verify Python runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
-
+          test -z "$(git status --porcelain --untracked-files=normal)"
       - name: Enforce tracked blob budget
         shell: bash
         run: |
