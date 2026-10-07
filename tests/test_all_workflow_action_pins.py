@@ -5,8 +5,6 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-WORKFLOWS = ROOT / ".github" / "workflows"
-ACTIONS = ROOT / ".github" / "actions"
 
 
 def github_action_documents(root=ROOT):
@@ -18,10 +16,24 @@ def github_action_documents(root=ROOT):
     )
 
 
-def immutable_uses_error(value):
+def unquote_scalar(value):
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-        value = value[1:-1]
+        return value[1:-1]
+    return value
+
+
+def docker_action_image_values(text):
+    values = []
+    for match in re.finditer(r"(?m)^  image:\s*([^\s#]+)", text):
+        raw = match.group(1)
+        if unquote_scalar(raw).startswith("docker://"):
+            values.append(raw)
+    return values
+
+
+def immutable_uses_error(value):
+    value = unquote_scalar(value)
 
     if value.startswith("./"):
         return None
@@ -69,6 +81,58 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                     immutable_uses_error(value),
                     f"{document}: {immutable_uses_error(value)}",
                 )
+
+    def test_docker_action_manifest_images_are_immutable(self):
+        _, action_manifests = github_action_documents()
+        for manifest in action_manifests:
+            text = manifest.read_text(encoding="utf-8")
+            for value in docker_action_image_values(text):
+                with self.subTest(
+                    manifest=str(manifest.relative_to(ROOT)),
+                    image=value,
+                ):
+                    self.assertIsNone(
+                        immutable_uses_error(value),
+                        f"{manifest.relative_to(ROOT)}: "
+                        f"{immutable_uses_error(value)}",
+                    )
+
+    def test_docker_action_image_parser_covers_remote_images_only(self):
+        digest = "c" * 64
+        pinned = (
+            "name: pinned\n"
+            "runs:\n"
+            "  using: 'docker'\n"
+            f"  image: 'docker://ghcr.io/example/tool@sha256:{digest}'\n"
+        )
+        mutable = (
+            "name: mutable\n"
+            "runs:\n"
+            "  using: docker\n"
+            "  image: docker://ghcr.io/example/tool:latest\n"
+        )
+        local = (
+            "name: local\n"
+            "runs:\n"
+            "  using: docker\n"
+            "  image: Dockerfile\n"
+        )
+
+        self.assertEqual(
+            docker_action_image_values(pinned),
+            [f"'docker://ghcr.io/example/tool@sha256:{digest}'"],
+        )
+        self.assertEqual(
+            docker_action_image_values(mutable),
+            ["docker://ghcr.io/example/tool:latest"],
+        )
+        self.assertEqual(docker_action_image_values(local), [])
+        self.assertIsNone(
+            immutable_uses_error(docker_action_image_values(pinned)[0])
+        )
+        self.assertIsNotNone(
+            immutable_uses_error(docker_action_image_values(mutable)[0])
+        )
 
     def test_composite_action_manifest_discovery_is_recursive(self):
         with tempfile.TemporaryDirectory() as temp:
