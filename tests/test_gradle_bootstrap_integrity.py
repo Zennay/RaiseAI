@@ -26,6 +26,14 @@ class GradleBootstrapIntegrityTest(unittest.TestCase):
         self.assertLess(compare, install)
         self.assertLess(install, unzip)
 
+    def test_never_falls_back_to_unpinned_system_gradle(self):
+        self.assertNotIn("command -v gradle", self.script)
+        self.assertNotRegex(
+            self.script,
+            r"(?m)^\s*exec\s+gradle(?:\s|$)",
+            "gradlew must not bypass the pinned distribution with runner PATH state",
+        )
+
     def test_checksum_mismatch_deletes_partial_download_and_fails_closed(self):
         mismatch = self.script.index('if [ "$actual_sha256" != "$GRADLE_BIN_SHA256" ]')
         cleanup = self.script.index('rm -f "$ZIP.part"', mismatch)
