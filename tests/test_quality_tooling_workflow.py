@@ -432,6 +432,15 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc", self.text)
         self.assertIn("TZ: UTC", self.text)
         self.assertIn("- name: Verify Python runtime", self.text)
+        self.assertIn(
+            "python3 -I -c 'import platform, sys;",
+            self.text,
+        )
+        self.assertNotIn(
+            "python3 -c 'import platform, sys;",
+            self.text,
+            "runtime verification must not allow ambient import-path customization",
+        )
         self.assertIn('platform.python_implementation() == "CPython"', self.text)
         self.assertIn("sys.version_info[:2] == (3, 12)", self.text)
 
@@ -810,7 +819,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Verify Python runtime": [
                 "set -euo pipefail",
-                "python3 -c 'import platform, sys; assert platform.python_implementation() == \"CPython\"; assert sys.version_info[:2] == (3, 12), sys.version'",
+                "python3 -I -c 'import platform, sys; assert platform.python_implementation() == \"CPython\"; assert sys.version_info[:2] == (3, 12), sys.version'",
             ],
             "Shell syntax": [
                 "set -euo pipefail",
