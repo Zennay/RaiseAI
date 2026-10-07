@@ -321,6 +321,11 @@ test("workflow trigger, concurrency and env surfaces are exact", () => {
     ["LANG", "LC_ALL", "TZ"],
     "JavaScript runtime environment must not gain unreviewed controls",
   );
+  assert.deepEqual(
+    lines.slice(envStart, envStart + 3),
+    ["      LANG: C.UTF-8", "      LC_ALL: C.UTF-8", "      TZ: UTC"],
+    "JavaScript runtime environment values must remain deterministic",
+  );
 });
 
 test("workflow step and nested mapping surfaces are exact", () => {
