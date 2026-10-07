@@ -15,6 +15,7 @@ EXPECTED_CRITICAL = {
 }
 FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
 UTF8_BOM = b"\xef\xbb\xbf"
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def tracked_xml_paths():
@@ -34,9 +35,12 @@ def decode_canonical_xml_source(data: bytes, *, relative: str) -> str:
     if b"\r" in data:
         raise ValueError(f"{relative} must use LF-only line endings")
     try:
-        return data.decode("utf-8", errors="strict")
+        text = data.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         raise ValueError(f"{relative} must be strict UTF-8 XML") from exc
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError(f"{relative} must not contain bidirectional control characters")
+    return text
 
 
 class XmlSurfaceContractTests(unittest.TestCase):
@@ -94,6 +98,11 @@ class XmlSurfaceContractTests(unittest.TestCase):
             decode_canonical_xml_source(b"<root>\x00</root>\n", relative="fixture.xml")
         with self.assertRaisesRegex(ValueError, "strict UTF-8 XML"):
             decode_canonical_xml_source(b"<root>\xff</root>\n", relative="fixture.xml")
+        with self.assertRaisesRegex(ValueError, "bidirectional control characters"):
+            decode_canonical_xml_source(
+                '<root label="safe\u202eunsafe"/>\n'.encode("utf-8"),
+                relative="fixture.xml",
+            )
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -166,6 +175,7 @@ class XmlSurfaceContractTests(unittest.TestCase):
             'if b"\\x00" in data:',
             'if b"\\r" in data:',
             'data.decode("utf-8", errors="strict")',
+            "BIDI_CONTROL_RE.search(text)",
             "ET.fromstring(text)",
             "python3 -m unittest tests.test_xml_surface_contract",
             "git diff --exit-code -- .",
