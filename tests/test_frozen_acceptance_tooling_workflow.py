@@ -204,12 +204,28 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
         )
 
     def test_legacy_fallback_guides_cannot_pose_as_current_acceptance(self):
+        partial_identity_markers = (
+            "8f719bb273f9b997848864f342598e7df5f090e5",
+            "physical-handoff-v1.5.2-8f719bb",
+            "611084738",
+            "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce",
+        )
         for path, warning in FALLBACK_GUIDES.items():
             with self.subTest(path=path):
                 guide = (ROOT / path).read_text(encoding="utf-8")
                 self.assertIn(warning, guide)
-                self.assertIn("8f719bb273f9b997848864f342598e7df5f090e5", guide)
-                self.assertIn("start-frozen-acceptance.command", guide)
+                self.assertIn("GitHub issue #34", guide)
+                self.assertIn(
+                    "bash ./start-frozen-acceptance.command [gateway-profile]",
+                    guide,
+                )
+                self.assertIn("START-HERE.md", guide)
+                for marker in partial_identity_markers:
+                    self.assertNotIn(
+                        marker,
+                        guide,
+                        f"{path} must redirect to START-HERE.md instead of duplicating partial carrier identity",
+                    )
 
     def test_legacy_fallback_guides_trigger_frozen_tooling_contract(self):
         for path in FALLBACK_GUIDES:
