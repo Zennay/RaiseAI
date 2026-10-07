@@ -26,14 +26,20 @@ QUALITY_MODULES = (
 )
 
 
-def suite_test_modules(suite: unittest.TestSuite) -> set[str]:
-    modules: set[str] = set()
+def suite_test_origins(suite: unittest.TestSuite) -> set[tuple[str, str]]:
+    origins: set[tuple[str, str]] = set()
     for item in suite:
         if isinstance(item, unittest.TestSuite):
-            modules.update(suite_test_modules(item))
+            origins.update(suite_test_origins(item))
             continue
-        modules.add(item.__class__.__module__)
-    return modules
+        class_module = item.__class__.__module__
+        method_module = ""
+        method_name = getattr(item, "_testMethodName", "")
+        if method_name:
+            method = getattr(item.__class__, method_name, None)
+            method_module = getattr(method, "__module__", "")
+        origins.add((class_module, method_module))
+    return origins
 
 
 def build_suite(
@@ -47,7 +53,8 @@ def build_suite(
         errors_before = len(loader.errors)
         module_suite = loader.loadTestsFromName(module)
         import_failed = len(loader.errors) != errors_before
-        if not import_failed and module not in suite_test_modules(module_suite):
+        owns_test = (module, module) in suite_test_origins(module_suite)
+        if not import_failed and not owns_test:
             empty_modules.append(module)
         suite.addTests(module_suite)
 
