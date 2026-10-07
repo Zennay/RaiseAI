@@ -68,6 +68,28 @@ else
   abort("workflow on trigger must be a scalar, sequence, or mapping")
 end
 
+writes = []
+inherited_secrets = []
+collect_writes = lambda do |value_node|
+  case value_node
+  when Psych::Nodes::Scalar
+    writes << "write-all" if value_node.value == "write-all"
+  when Psych::Nodes::Mapping
+    value_node.children.each_slice(2) do |permission_node, level_node|
+      abort("permission names must be scalars") unless permission_node.is_a?(Psych::Nodes::Scalar)
+      abort("permission levels must be scalars") unless level_node.is_a?(Psych::Nodes::Scalar)
+      writes << permission_node.value if level_node.value == "write"
+    end
+  else
+    abort("permissions must be a scalar or mapping")
+  end
+end
+
+root.children.each_slice(2) do |key_node, value_node|
+  next unless key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "permissions"
+  collect_writes.call(value_node)
+end
+
 environments = []
 external_actions = []
 if jobs_node
@@ -78,6 +100,10 @@ if jobs_node
     job_node.children.each_slice(2) do |key_node, value_node|
       next unless key_node.is_a?(Psych::Nodes::Scalar)
       environments << job_name_node.value if key_node.value == "environment"
+      collect_writes.call(value_node) if key_node.value == "permissions"
+      if key_node.value == "secrets"
+        inherited_secrets << "inherit" if value_node.is_a?(Psych::Nodes::Scalar) && value_node.value == "inherit"
+      end
       if key_node.value == "uses"
         abort("workflow uses values must be scalars") unless value_node.is_a?(Psych::Nodes::Scalar)
         external_actions << value_node.value
@@ -96,9 +122,7 @@ if jobs_node
   end
 end
 
-writes = []
 secret_expressions = []
-inherited_secrets = []
 walk = nil
 walk = lambda do |node|
   if node.is_a?(Psych::Nodes::Scalar)
@@ -110,25 +134,6 @@ walk = lambda do |node|
 
   if node.is_a?(Psych::Nodes::Mapping)
     node.children.each_slice(2) do |key_node, value_node|
-      if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "secrets"
-        if value_node.is_a?(Psych::Nodes::Scalar) && value_node.value == "inherit"
-          inherited_secrets << "inherit"
-        end
-      end
-      if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "permissions"
-        case value_node
-        when Psych::Nodes::Scalar
-          writes << "write-all" if value_node.value == "write-all"
-        when Psych::Nodes::Mapping
-          value_node.children.each_slice(2) do |permission_node, level_node|
-            abort("permission names must be scalars") unless permission_node.is_a?(Psych::Nodes::Scalar)
-            abort("permission levels must be scalars") unless level_node.is_a?(Psych::Nodes::Scalar)
-            writes << permission_node.value if level_node.value == "write"
-          end
-        else
-          abort("permissions must be a scalar or mapping")
-        end
-      end
       walk.call(value_node)
     end
     return
@@ -281,6 +286,11 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             "quoted.yml": "on: push\n'permissions': {\"statuses\": \"write\"}\n",
             "write-all.yml": "on: push\npermissions: write-all\n",
             "read-only.yml": "on: push\npermissions: {contents: read}\n",
+            "action-input.yml": (
+                "on: push\njobs:\n  verify:\n    runs-on: ubuntu-24.04\n"
+                "    steps:\n      - uses: owner/action@0123456789012345678901234567890123456789\n"
+                "        with: {permissions: write-all}\n"
+            ),
         }
         expected = {
             "block.yml": ["contents"],
@@ -288,6 +298,7 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             "quoted.yml": ["statuses"],
             "write-all.yml": ["write-all"],
             "read-only.yml": [],
+            "action-input.yml": [],
         }
 
         with tempfile.TemporaryDirectory() as temp:
@@ -332,12 +343,18 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             "quoted.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    'secrets': 'inherit'\n",
             "flow.yml": "on: pull_request\njobs: {call: {uses: ./.github/workflows/reuse.yml, secrets: inherit}}\n",
             "mapped.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    secrets: {TOKEN: public-placeholder}\n",
+            "action-input.yml": (
+                "on: pull_request\njobs:\n  verify:\n    runs-on: ubuntu-24.04\n"
+                "    steps:\n      - uses: owner/action@0123456789012345678901234567890123456789\n"
+                "        with: {secrets: inherit}\n"
+            ),
         }
         expected_counts = {
             "block.yml": 1,
             "quoted.yml": 1,
             "flow.yml": 1,
             "mapped.yml": 0,
+            "action-input.yml": 0,
         }
 
         with tempfile.TemporaryDirectory() as temp:
