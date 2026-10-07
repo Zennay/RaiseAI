@@ -210,10 +210,11 @@ Validate the record against the same physical session:
 ```bash
 python3 tools/validate-physical-observations.py \
   ~/.raiseai/evidence/<session>/session.json \
-  ~/.raiseai/evidence/<session>/operator-observations.json
+  ~/.raiseai/evidence/<session>/operator-observations.json \
+  --output ~/.raiseai/evidence/<session>/quality-result.json
 ```
 
-A passing validator means the observation record is complete and provenance-bound. It does **not** turn poor observed behavior into a product pass; failures remain evidence that must be assessed when issue #34 is closed.
+A passing validator writes the secret-safe `quality-result.json` summary and means the observation record is complete and provenance-bound. It does **not** turn poor observed behavior into a product pass; failures remain evidence that must be assessed when issue #34 is closed.
 
 ## 8. Finish and preserve evidence
 
