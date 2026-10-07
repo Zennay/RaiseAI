@@ -50,6 +50,18 @@ if [[ ! "$PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( 10#$PORT > 65535 )); then
   exit 1
 fi
 
+NODE_MIN_MAJOR=22
+NODE_BIN="$(command -v node || true)"
+if [ -z "$NODE_BIN" ] || [[ "$NODE_BIN" != /* ]] || [ ! -x "$NODE_BIN" ]; then
+  echo "Raise gateway requires an absolute executable Node.js binary" >&2
+  exit 1
+fi
+NODE_MAJOR="$("$NODE_BIN" -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)"
+if [[ ! "$NODE_MAJOR" =~ ^[0-9]+$ ]] || (( 10#$NODE_MAJOR < NODE_MIN_MAJOR )); then
+  echo "Raise gateway requires Node.js >= $NODE_MIN_MAJOR (found: ${NODE_MAJOR:-unknown})" >&2
+  exit 1
+fi
+
 CONFIG_DIR="${RAISE_CONFIG_DIR:-$HOME/.config/raiseai}"
 TLS_DIR="$CONFIG_DIR/tls"
 ENV_FILE="$CONFIG_DIR/gateway.env"
@@ -125,7 +137,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$ENV_FILE
-ExecStart=/usr/bin/node $INSTALL_DIR/src/server.mjs
+ExecStart=$NODE_BIN $INSTALL_DIR/src/server.mjs
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
@@ -158,7 +170,7 @@ chmod 600 "$WATCH_PROFILE"
 
 RAISE_EXPECTED_REVISION="$DEPLOY_REVISION" \
 RAISE_READY_URL="https://$PUBLIC_HOST:$PORT" \
-node "$SCRIPT_DIR/wait-for-live.mjs"
+"$NODE_BIN" "$SCRIPT_DIR/wait-for-live.mjs"
 
 echo "Raise gateway installed."
 echo "URL: https://$PUBLIC_HOST:$PORT"
