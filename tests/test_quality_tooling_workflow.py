@@ -172,11 +172,14 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_physical_observation_validator.py",
             "tests/test_physical_validation_cli.py",
             "tests/test_quality_tooling_workflow.py",
+            "tests/test_quality_workflow_action_pinning.py",
             "tests/test_watch_apk_identity.py",
             "tests/test_watch_e2e_evidence_validator.py",
             "tests/test_watch_sensor_trace_analyzer.py",
             "tests/test_watch_sensor_trial_analyzer.py",
+            ".github/workflows/physical-quality-evidence-test.yml",
             ".github/workflows/quality-tooling-test.yml",
+            ".github/workflows/watch-app-test.yml",
         ]
         for event in ("push", "pull_request"):
             with self.subTest(event=event):
@@ -275,6 +278,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests.test_physical_observation_validator",
             "tests.test_physical_validation_cli",
             "tests.test_quality_tooling_workflow",
+            "tests.test_quality_workflow_action_pinning",
             "tests.test_watch_apk_identity",
             "tests.test_watch_e2e_evidence_validator",
             "tests.test_watch_sensor_trace_analyzer",
@@ -792,7 +796,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Quality tooling regressions": [
                 "set -euo pipefail",
-                "python3 -m unittest tests.test_adb_device_binding tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_physical_validation_cli tests.test_quality_tooling_workflow tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer",
+                "python3 -m unittest tests.test_adb_device_binding tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_physical_validation_cli tests.test_quality_tooling_workflow tests.test_quality_workflow_action_pinning tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer",
             ],
             "Verify worktree remains clean": [
                 "set -euo pipefail",
