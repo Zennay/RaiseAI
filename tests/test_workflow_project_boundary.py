@@ -1,6 +1,9 @@
 from pathlib import Path
 import re
+import tempfile
 import unittest
+
+from tests.test_workflow_privilege_boundary import workflow_security_metadata
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,20 +32,6 @@ LEGACY_FOREIGN_WORKFLOWS = {
 }
 
 FOREIGN_MARKER_RE = re.compile(r"(?i)\b(?:ftmo|lightup|zcloud)\b")
-ON_KEY = r"""(?:"on"|'on'|on)"""
-PULL_REQUEST_KEY = r"""(?:"pull_request(?:_target)?"|\'pull_request(?:_target)?\'|pull_request(?:_target)?)"""
-PULL_REQUEST_BLOCK_RE = re.compile(rf"(?m)^\s{{0,2}}{PULL_REQUEST_KEY}\s*:")
-PULL_REQUEST_FLOW_MAP_RE = re.compile(
-    rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\{{[^}}]*{PULL_REQUEST_KEY}\s*:"
-)
-PULL_REQUEST_FLOW_SEQUENCE_RE = re.compile(
-    rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\[[^\]]*{PULL_REQUEST_KEY}(?:\s+#[^\n]*)?\s*(?:,|\])"
-)
-PULL_REQUEST_SCALAR_RE = re.compile(
-    rf"(?m)^\s{{0,2}}{ON_KEY}\s*:\s*{PULL_REQUEST_KEY}\s*(?:#.*)?$"
-)
-
-
 def is_foreign_workflow_name(name: str) -> bool:
     return FOREIGN_MARKER_RE.search(name) is not None
 
@@ -60,16 +49,12 @@ def foreign_workflows() -> list[Path]:
     )
 
 
-def declares_pull_request(text: str) -> bool:
-    return any(
-        pattern.search(text) is not None
-        for pattern in (
-            PULL_REQUEST_BLOCK_RE,
-            PULL_REQUEST_FLOW_MAP_RE,
-            PULL_REQUEST_FLOW_SEQUENCE_RE,
-            PULL_REQUEST_SCALAR_RE,
-        )
-    )
+PULL_REQUEST_EVENTS = {"pull_request", "pull_request_target"}
+
+
+def pull_request_events(path: Path) -> set[str]:
+    events = set(workflow_security_metadata(path)["events"])
+    return events & PULL_REQUEST_EVENTS
 
 
 def push_section(text: str) -> list[str]:
@@ -107,8 +92,8 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(is_foreign_workflow_name(name))
 
-    def test_pull_request_detection_covers_block_map_and_sequence_variants(self):
-        for text in (
+    def test_pull_request_detection_covers_block_scalar_sequence_flow_and_quotes(self):
+        positives = (
             "on:\n  pull_request:\n",
             "on:\n  pull_request_target:\n",
             "on:\n  \"pull_request\":\n",
@@ -117,7 +102,7 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             'on: {"pull_request": null, workflow_dispatch: null}\n',
             "'on': {'pull_request': null, workflow_dispatch: null}\n",
             '"on": {pull_request: null, workflow_dispatch: null}\n',
-            "on: {\n    push: null,\n    pull_request: null\n}\n",
+            "on: {\n    push: {paths: ['src/**']},\n    pull_request: null\n}\n",
             "'on': {\n    workflow_dispatch: null,\n    'pull_request_target': null\n}\n",
             "on: pull_request\n",
             "on: pull_request_target\n",
@@ -130,13 +115,28 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             '"on": [\n  workflow_dispatch,\n  "pull_request",\n]\n',
             'on: [push, "pull_request"]\n',
             "'on': [workflow_dispatch, 'pull_request']\n",
-        ):
-            with self.subTest(text=text):
-                self.assertTrue(declares_pull_request(text))
+        )
+        negatives = (
+            "on:\n  push:\n",
+            "on: [push, workflow_dispatch]\n",
+            "# pull_request:\non:\n  push:\n",
+            "on: {push: {paths: ['pull_request/**']}, workflow_dispatch: null}\n",
+        )
 
-        self.assertFalse(declares_pull_request("on:\n  push:\n"))
-        self.assertFalse(declares_pull_request("on: [push, workflow_dispatch]\n"))
-        self.assertFalse(declares_pull_request("# pull_request:\non:\n  push:\n"))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, text in enumerate(positives):
+                path = root / f"positive-{index}.yml"
+                path.write_text(text, encoding="utf-8")
+                with self.subTest(text=text):
+                    self.assertTrue(pull_request_events(path))
+
+            for index, text in enumerate(negatives):
+                path = root / f"negative-{index}.yml"
+                path.write_text(text, encoding="utf-8")
+                with self.subTest(text=text):
+                    self.assertEqual(pull_request_events(path), set())
+
 
     def test_no_new_foreign_project_workflows_are_added_to_raiseai(self):
         current = {path.name for path in foreign_workflows()}
@@ -152,10 +152,10 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
         inspected = 0
         for path in foreign_workflows():
             inspected += 1
-            text = path.read_text(encoding="utf-8")
             with self.subTest(workflow=path.name):
-                self.assertFalse(
-                    declares_pull_request(text),
+                self.assertEqual(
+                    pull_request_events(path),
+                    set(),
                     f"{path.name}: legacy cross-project workflows must never allocate "
                     "work in response to RaiseAI pull requests",
                 )
