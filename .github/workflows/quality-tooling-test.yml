@@ -22,6 +22,7 @@ on:
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
       - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
       - "tests/test_all_workflow_action_pins.py"
   pull_request:
     paths:
@@ -42,6 +43,7 @@ on:
       - "tests/test_watch_sensor_trace_analyzer.py"
       - "tests/test_watch_sensor_trial_analyzer.py"
       - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
       - "tests/test_all_workflow_action_pins.py"
 
 permissions:
