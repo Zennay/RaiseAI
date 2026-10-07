@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_SESSION_JSON_BYTES = 64 * 1024
-APP_VERSION_RE = re.compile(r"^\\d+\\.\\d+\\.\\d+$")
+APP_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 REQUIRED_SESSION_KEYS = {
     "schema_version",
