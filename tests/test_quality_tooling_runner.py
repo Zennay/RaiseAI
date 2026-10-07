@@ -94,6 +94,42 @@ class QualityToolingRunnerTests(unittest.TestCase):
             output.getvalue(),
         )
 
+    def test_reexported_tests_do_not_mask_empty_allowlisted_module(self):
+        with tempfile.TemporaryDirectory(prefix="raise-quality-reexport-") as tmp:
+            root = Path(tmp)
+            package = root / "quality_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "source_contract.py").write_text(
+                "import unittest\n"
+                "class SourceContract(unittest.TestCase):\n"
+                "    def test_passes(self):\n"
+                "        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            (package / "reexport_contract.py").write_text(
+                "from .source_contract import SourceContract\n",
+                encoding="utf-8",
+            )
+            sys.path.insert(0, str(root))
+            try:
+                output = StringIO()
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = runner.run_contracts(
+                        ("quality_fixture.reexport_contract",)
+                    )
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("quality_fixture.reexport_contract", None)
+                sys.modules.pop("quality_fixture.source_contract", None)
+                sys.modules.pop("quality_fixture", None)
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn(
+            "EMPTY-QUALITY-MODULE: quality_fixture.reexport_contract",
+            output.getvalue(),
+        )
+
     def test_import_failure_is_a_test_failure(self):
         output = StringIO()
         with redirect_stdout(output), redirect_stderr(output):
