@@ -1,0 +1,115 @@
+name: PowerShell surface contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "*.ps1"
+      - "**/*.ps1"
+      - "tests/test_powershell_surface_contract.py"
+      - ".github/workflows/powershell-surface-contract.yml"
+  pull_request:
+    paths:
+      - "*.ps1"
+      - "**/*.ps1"
+      - "tests/test_powershell_surface_contract.py"
+      - ".github/workflows/powershell-surface-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-powershell-surface-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify PowerShell runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v pwsh >/dev/null
+          pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: Validate tracked PowerShell surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import subprocess
+
+          raw = subprocess.check_output(["git", "ls-files", "-z"])
+          paths = sorted(
+              item
+              for item in raw.decode("utf-8").split("\0")
+              if item and pathlib.PurePosixPath(item).suffix.lower() == ".ps1"
+          )
+          if not paths:
+              raise SystemExit("no tracked PowerShell files discovered")
+
+          parser = (
+              '$tokens = $null; $errors = $null; '
+              '[void][System.Management.Automation.Language.Parser]::ParseFile('
+              '$env:RAISE_PS_FILE, [ref]$tokens, [ref]$errors); '
+              'if ($errors.Count -ne 0) { '
+              '$errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 }'
+          )
+          for path in paths:
+              candidate = pathlib.Path(path)
+              if candidate.is_symlink():
+                  raise SystemExit(f"{path}: tracked PowerShell files must not be symlinks")
+              if not candidate.is_file():
+                  raise SystemExit(f"{path}: tracked PowerShell path must be a regular file")
+              try:
+                  candidate.read_bytes().decode("utf-8")
+              except UnicodeDecodeError as exc:
+                  raise SystemExit(f"{path}: invalid UTF-8: {exc}") from None
+              subprocess.run(
+                  ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", parser],
+                  check=True,
+                  env={**os.environ, "RAISE_PS_FILE": path},
+              )
+
+          print(f"validated {len(paths)} tracked PowerShell files")
+          PY
+
+      - name: Run PowerShell surface regression contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_powershell_surface_contract
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
