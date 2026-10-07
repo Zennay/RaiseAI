@@ -4,6 +4,7 @@ import io
 import json
 import os
 import pathlib
+import stat
 import tempfile
 import unittest
 from unittest import mock
