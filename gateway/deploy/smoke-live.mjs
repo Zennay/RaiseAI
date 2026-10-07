@@ -22,6 +22,7 @@ import os from "node:os";
 import path from "node:path";
 import { httpsOrigin } from "./readiness-config.mjs";
 import { evaluateZCloudProbe, hasJsonMediaType } from "./smoke-policy.mjs";
+import { readSmokeResponseBody } from "./smoke-http.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
@@ -76,18 +77,14 @@ function request(method, route, { auth = false, body = null } = {}) {
         timeout: 10_000
       },
       res => {
-        const chunks = [];
-        res.on("data", chunk => chunks.push(chunk));
-        res.on("end", () => {
+        void (async () => {
           const jsonMediaType = hasJsonMediaType(res.headers["content-type"]);
-          let json = null;
-          if (jsonMediaType) {
-            try {
-              json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-            } catch {}
-          }
+          const { json, bodyError } = await readSmokeResponseBody(res, {
+            parseJson: jsonMediaType
+          });
+          if (bodyError) throw new Error(bodyError);
           resolve({ status: res.statusCode, json, jsonMediaType });
-        });
+        })().catch(reject);
       }
     );
     req.on("timeout", () => req.destroy(new Error("timeout")));
