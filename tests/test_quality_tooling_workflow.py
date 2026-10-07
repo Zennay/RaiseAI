@@ -2,6 +2,8 @@ import pathlib
 import re
 import unittest
 
+from tools.run_quality_tooling_contracts import QUALITY_MODULES
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-tooling-test.yml"
@@ -173,6 +175,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_physical_observation_validator.py",
             "tests/test_physical_validation_cli.py",
             "tests/test_quality_tooling_workflow.py",
+            "tests/test_quality_tooling_runner.py",
             "tests/test_quality_workflow_action_pinning.py",
             "tests/test_source_text_review_integrity.py",
             "tests/test_watch_data_analyzer.py",
@@ -273,8 +276,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         discovered = sorted(path.name for path in (ROOT / "tools").glob("*.py"))
         self.assertTrue(discovered, "tools/ must retain Python quality tooling")
 
-    def test_runs_complete_hosted_quality_regression_set(self):
-        modules = [
+    def test_runs_complete_hosted_quality_regression_set_in_isolated_mode(self):
+        modules = (
             "tests.test_adb_device_binding",
             "tests.test_all_workflow_action_pins",
             "tests.test_frozen_acceptance_launcher",
@@ -282,6 +285,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests.test_physical_observation_template",
             "tests.test_physical_observation_validator",
             "tests.test_physical_validation_cli",
+            "tests.test_quality_tooling_runner",
             "tests.test_quality_tooling_workflow",
             "tests.test_quality_workflow_action_pinning",
             "tests.test_source_text_review_integrity",
@@ -290,11 +294,17 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests.test_watch_e2e_evidence_validator",
             "tests.test_watch_sensor_trace_analyzer",
             "tests.test_watch_sensor_trial_analyzer",
-        ]
-        self.assertIn("python3 -m unittest", self.text)
-        for module in modules:
-            with self.subTest(module=module):
-                self.assertIn(module, self.text)
+        )
+        self.assertEqual(QUALITY_MODULES, modules)
+        self.assertIn(
+            "python3 -I tools/run_quality_tooling_contracts.py",
+            self.text,
+        )
+        self.assertNotIn(
+            "python3 -m unittest",
+            self.text,
+            "hosted quality regressions must not re-enable environment-controlled imports",
+        )
 
     def test_all_run_steps_use_bash_strict_mode(self):
         lines = self.text.splitlines()
