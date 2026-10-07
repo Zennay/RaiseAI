@@ -88,6 +88,9 @@ class WindowsInstallerWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("pull_request_target:", self.workflow)
         self.assertNotIn("secrets.", self.workflow)
         self.assertNotIn("continue-on-error: true", self.workflow)
+        self.assertIn("    timeout-minutes: 10", self.workflow)
+        self.assertIn("  cancel-in-progress: true", self.workflow)
+        self.assertEqual(self.workflow.count("uses: actions/checkout@"), 1)
 
     def test_workflow_run_steps_are_strict_and_leave_clean_worktree(self):
         self.assertEqual(self.workflow.count("        shell: bash"), 2)
