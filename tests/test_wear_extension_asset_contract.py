@@ -216,7 +216,7 @@ class WearExtensionAssetContractTests(unittest.TestCase):
         for token in ("NaN", "Infinity", "-Infinity"):
             with self.subTest(token=token):
                 with self.assertRaisesRegex(ValueError, "non-finite manifest JSON number"):
-                    load_manifest_text(f'{"{"}"value":{token}{"}"}')
+                    load_manifest_text(f'{{"value":{token}}}')
 
     def test_kotlin_constant_extractor_rejects_missing_or_duplicate_identity(self):
         with self.assertRaisesRegex(ValueError, "exactly once"):
