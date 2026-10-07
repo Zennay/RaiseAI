@@ -150,6 +150,28 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
                 any(path.name.startswith(".operator-observations.json.") for path in root.iterdir())
             )
 
+    def test_cli_keeps_success_when_only_post_publish_cleanup_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session_path = root / "session.json"
+            output = root / "operator-observations.json"
+            session_path.write_text(json.dumps(session_payload()), encoding="utf-8")
+
+            real_unlink = pathlib.Path.unlink
+
+            def fail_stage_cleanup(path, *args, **kwargs):
+                if path.name.startswith(".operator-observations.json.") and path.name.endswith(".tmp"):
+                    raise OSError("simulated post-publish cleanup failure")
+                return real_unlink(path, *args, **kwargs)
+
+            with mock.patch.object(generator.Path, "unlink", autospec=True, side_effect=fail_stage_cleanup):
+                code = generator.main([str(session_path)])
+
+            self.assertEqual(code, 0)
+            self.assertTrue(output.is_file())
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["source_revision"], REVISION)
+
     def test_cli_refuses_broken_symlink_without_creating_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
