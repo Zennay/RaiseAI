@@ -198,5 +198,171 @@ class ShellSurfaceContractTests(unittest.TestCase):
         self.assertNotIn("continue-on-error: true", self.workflow)
 
 
+    def test_workflow_trigger_and_execution_surfaces_are_exact(self):
+        lines = self.workflow.splitlines()
+
+        top_level = []
+        for line in lines:
+            match = re.fullmatch(r"([A-Za-z0-9_-]+):.*", line)
+            if match:
+                top_level.append(match.group(1))
+        self.assertEqual(
+            top_level,
+            ["name", "on", "permissions", "concurrency", "jobs"],
+            "shell workflow must not gain unreviewed top-level controls",
+        )
+
+        on_start = lines.index("on:") + 1
+        permissions_start = lines.index("permissions:")
+        events = []
+        for line in lines[on_start:permissions_start]:
+            match = re.fullmatch(r"  ([A-Za-z0-9_-]+):", line)
+            if match:
+                events.append(match.group(1))
+        self.assertEqual(events, ["push", "pull_request"])
+
+        def event_block(event):
+            start = lines.index(f"  {event}:") + 1
+            block = []
+            for line in lines[start:]:
+                if line and not line.startswith("    "):
+                    break
+                block.append(line)
+            return block
+
+        push = event_block("push")
+        push_keys = [
+            match.group(1)
+            for line in push
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(push_keys, ["branches", "paths"])
+        branches_start = push.index("    branches:") + 1
+        self.assertEqual(push[branches_start], "      - main")
+
+        pull_request = event_block("pull_request")
+        pr_keys = [
+            match.group(1)
+            for line in pull_request
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(
+            pr_keys,
+            ["paths"],
+            "pull_request must not gain type or branch filters that can skip synchronize validation",
+        )
+
+        concurrency_start = lines.index("concurrency:") + 1
+        jobs_start = lines.index("jobs:")
+        concurrency_keys = [
+            match.group(1)
+            for line in lines[concurrency_start:jobs_start]
+            if (match := re.fullmatch(r"  ([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(concurrency_keys, ["group", "cancel-in-progress"])
+
+        jobs_block = self.workflow.split("\njobs:\n", 1)[1]
+        job_keys = [
+            match.group(1)
+            for line in jobs_block.splitlines()[1:]
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(job_keys, ["runs-on", "timeout-minutes", "env", "steps"])
+
+        env_start = lines.index("    env:") + 1
+        env_keys = []
+        for line in lines[env_start:]:
+            match = re.fullmatch(r"      ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                env_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(
+            env_keys,
+            [
+                "LANG",
+                "LC_ALL",
+                "PYTHONHASHSEED",
+                "PYTHONNOUSERSITE",
+                "PYTHONDONTWRITEBYTECODE",
+                "TZ",
+            ],
+        )
+
+    def test_workflow_step_and_nested_mapping_surfaces_are_exact(self):
+        lines = self.workflow.splitlines()
+        step_starts = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("      - name:")
+        ]
+        expected_names = [
+            "Checkout exact tested revision",
+            "Verify exact tested revision",
+            "Verify Bash runtime",
+            "Verify Python runtime",
+            "Validate tracked shell surface",
+            "Run shell surface regression contract",
+            "Verify worktree remains clean",
+        ]
+        self.assertEqual(
+            [lines[index].removeprefix("      - name: ") for index in step_starts],
+            expected_names,
+            "shell workflow must not gain unreviewed steps",
+        )
+
+        expected_keys = {
+            "Checkout exact tested revision": ["name", "uses", "with"],
+            "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Verify Bash runtime": ["name", "shell", "run"],
+            "Verify Python runtime": ["name", "shell", "run"],
+            "Validate tracked shell surface": ["name", "shell", "run"],
+            "Run shell surface regression contract": ["name", "shell", "run"],
+            "Verify worktree remains clean": ["name", "shell", "run"],
+        }
+        for position, start in enumerate(step_starts):
+            end = step_starts[position + 1] if position + 1 < len(step_starts) else len(lines)
+            step = lines[start:end]
+            name = lines[start].removeprefix("      - name: ")
+            keys = ["name"]
+            for line in step[1:]:
+                match = re.fullmatch(r"        ([A-Za-z0-9_-]+):.*", line)
+                if match:
+                    keys.append(match.group(1))
+            self.assertEqual(keys, expected_keys[name])
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index
+                for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        checkout = step_named("Checkout exact tested revision")
+        with_start = checkout.index("        with:") + 1
+        checkout_keys = []
+        for line in checkout[with_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                checkout_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(checkout_keys, ["ref", "persist-credentials"])
+
+        verifier = step_named("Verify exact tested revision")
+        env_start = verifier.index("        env:") + 1
+        verifier_keys = []
+        for line in verifier[env_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                verifier_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(verifier_keys, ["EXPECTED_SHA"])
+
+
 if __name__ == "__main__":
     unittest.main()
