@@ -12,6 +12,7 @@ COMMAND_ENTRYPOINTS = [
     "provision-watch-gateway.command",
     "physical-validation.command",
     "start-frozen-acceptance.command",
+    "start-physical-handoff.command",
 ]
 
 
