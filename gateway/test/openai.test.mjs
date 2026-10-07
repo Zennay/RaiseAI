@@ -75,7 +75,10 @@ test("invalid OpenAI model config fails closed before provider calls", async () 
   const cases = [
     { fastModel: "" },
     { fastModel: "bad model" },
+    { fastModel: "m".repeat(257) },
+    { fastModel: "gpt-5.4-nano\u0000shadow" },
     { deepModel: "\t" },
+    { deepModel: "gpt-5.4-mini\u001fpreview" },
     { deepModel: 42 }
   ];
 
@@ -217,8 +220,18 @@ test("web search is opt-in", async () => {
   assert.equal(called, false);
 });
 
-test("missing or whitespace-contaminated API key fails closed without a provider call", async () => {
-  for (const apiKey of ["", " ", "\t", " test-key", "test-key ", "test key"]) {
+test("missing or contaminated API key fails closed without a provider call", async () => {
+  for (const apiKey of [
+    "",
+    " ",
+    "\t",
+    " test-key",
+    "test-key ",
+    "test key",
+    "test-key\u0000suffix",
+    "test-key\u001fsuffix",
+    "test-key\u007fsuffix"
+  ]) {
     let called = false;
     const execute = createOpenAIExecutor({
       apiKey,
@@ -433,8 +446,18 @@ test("malformed successful OpenAI response shapes fail as upstream 502 errors", 
 });
 
 
-test("successful OpenAI responses require a JSON media type", async () => {
-  for (const contentType of [null, "", "text/plain", "text/html; charset=utf-8"]) {
+test("successful OpenAI responses require an unambiguous UTF-8 JSON media type", async () => {
+  for (const contentType of [
+    null,
+    "",
+    "text/plain",
+    "text/html; charset=utf-8",
+    "application/json; charset=iso-8859-1",
+    "application/json; charset=",
+    "application/json; charset=utf-8; charset=utf-8",
+    "application/json; profile=watch",
+    "application/json; charset=utf-8; profile=watch"
+  ]) {
     let jsonCalls = 0;
     const execute = createOpenAIExecutor({
       apiKey: "test-key",
@@ -465,27 +488,34 @@ test("successful OpenAI responses require a JSON media type", async () => {
   }
 });
 
-test("OpenAI accepts case-insensitive JSON media types with parameters", async () => {
-  const execute = createOpenAIExecutor({
-    apiKey: "test-key",
-    fetchImpl: async () => ({
-      ok: true,
-      status: 200,
-      headers: responseHeaders("Application/JSON; charset=UTF-8"),
-      async json() {
-        return {
-          output: [{
-            type: "message",
-            role: "assistant",
-            content: [{ type: "output_text", text: "geldig antwoord" }]
-          }]
-        };
-      }
-    })
-  });
+test("OpenAI accepts bare JSON or one UTF-8 charset parameter", async () => {
+  for (const contentType of [
+    "application/json",
+    "Application/JSON; charset=UTF-8",
+    "application/json; charset=\"utf-8\"",
+    "application/json; CHARSET = \"UTF-8\""
+  ]) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: responseHeaders(contentType),
+        async json() {
+          return {
+            output: [{
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "geldig antwoord" }]
+            }]
+          };
+        }
+      })
+    });
 
-  const result = await execute({ route: "quick_ai" }, "hoi");
-  assert.equal(result.answer, "geldig antwoord");
+    const result = await execute({ route: "quick_ai" }, "hoi");
+    assert.equal(result.answer, "geldig antwoord");
+  }
 });
 
 test("non-JSON OpenAI HTTP failures retain their HTTP failure classification", async () => {
@@ -564,6 +594,27 @@ test("OpenAI streams successful JSON through a 64 KiB response budget", async ()
 
   const result = await execute({ route: "quick_ai" }, "hoi");
   assert.equal(result.answer, "bounded");
+});
+
+test("OpenAI rejects malformed declared response lengths before parsing", async () => {
+  const payload = Buffer.from(JSON.stringify(validOpenAIBody()), "utf8");
+
+  for (const contentLength of ["", " ", "abc", "-1", "1.5", "10, 10"]) {
+    const execute = createOpenAIExecutor({
+      apiKey: "test-key",
+      fetchImpl: async () => streamedOpenAIResponse(payload, { contentLength })
+    });
+
+    await assert.rejects(
+      execute({ route: "quick_ai" }, "hoi"),
+      error => {
+        assert.equal(error.message, "openai_invalid_response");
+        assert.equal(error.statusCode, 502);
+        return true;
+      },
+      JSON.stringify(contentLength)
+    );
+  }
 });
 
 test("OpenAI rejects oversized declared response bodies before parsing", async () => {
