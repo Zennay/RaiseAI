@@ -25,22 +25,62 @@ FORBIDDEN_SUFFIXES = {
 ALLOWED_ENV_TEMPLATES = {".env.example", ".env.sample"}
 
 PRIVATE_KEY_MARKERS = (
-    b"-----BEGIN " + b"PRIVATE KEY-----",
-    b"-----BEGIN " + b"ENCRYPTED PRIVATE KEY-----",
-    b"-----BEGIN " + b"RSA PRIVATE KEY-----",
-    b"-----BEGIN " + b"EC PRIVATE KEY-----",
-    b"-----BEGIN " + b"OPENSSH PRIVATE KEY-----",
+    "-----BEGIN " + "PRIVATE KEY-----",
+    "-----BEGIN " + "ENCRYPTED PRIVATE KEY-----",
+    "-----BEGIN " + "RSA PRIVATE KEY-----",
+    "-----BEGIN " + "EC PRIVATE KEY-----",
+    "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
+)
+
+HIGH_CONFIDENCE_SECRET_PATTERNS = (
+    r"sk-or-v1-[A-Za-z0-9_-]{32,}",
+    r"sk-proj-[A-Za-z0-9_-]{32,}",
+    r"github_pat_[A-Za-z0-9_]{50,}",
+    r"gh[pousr]_[A-Za-z0-9]{36,}",
+    r"AIza[0-9A-Za-z_-]{35}",
+    r"AKIA[0-9A-Z]{16}",
 )
 
 
-def tracked_paths() -> list[str]:
-    result = subprocess.run(
-        ["git", "ls-files", "-z"],
+def run_git(args: list[str]) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", *args],
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        check=True,
+        check=False,
     )
+
+
+def tracked_paths() -> list[str]:
+    result = run_git(["ls-files", "-z"])
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git ls-files failed with exit {result.returncode}: "
+            f"{result.stderr.decode('utf-8', errors='replace').strip()}"
+        )
+    return [
+        raw.decode("utf-8", errors="strict")
+        for raw in result.stdout.split(b"\0")
+        if raw
+    ]
+
+
+def cached_grep_paths(patterns: tuple[str, ...], *, extended: bool) -> list[str]:
+    args = ["grep", "--cached", "-I", "-l", "-z"]
+    args.append("-E" if extended else "-F")
+    for pattern in patterns:
+        args.extend(["-e", pattern])
+    args.extend(["--", "."])
+
+    result = run_git(args)
+    if result.returncode == 1:
+        return []
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git grep failed with exit {result.returncode}: "
+            f"{result.stderr.decode('utf-8', errors='replace').strip()}"
+        )
     return [
         raw.decode("utf-8", errors="strict")
         for raw in result.stdout.split(b"\0")
@@ -90,32 +130,30 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             "local secret/config material must never be tracked; use documented templates instead",
         )
 
-    def test_tracked_files_do_not_contain_private_key_headers(self):
-        offenders = []
-        for raw in self.paths:
-            path = ROOT / raw
-            if not path.is_file():
-                continue
-
-            # Private-key PEM/OpenSSH headers are tiny and always near text content.
-            # Bound reads so this contract never loads an unexpectedly large artifact.
-            try:
-                with path.open("rb") as handle:
-                    payload = handle.read(2 * 1024 * 1024 + 1)
-            except OSError as exc:
-                self.fail(f"could not inspect tracked path {raw}: {exc}")
-
-            if len(payload) > 2 * 1024 * 1024:
-                continue
-
-            if any(marker in payload for marker in PRIVATE_KEY_MARKERS):
-                offenders.append(raw)
-
+    def test_git_index_blobs_do_not_contain_private_key_headers(self):
+        offenders = cached_grep_paths(PRIVATE_KEY_MARKERS, extended=False)
         self.assertEqual(
             offenders,
             [],
             "tracked private-key material is forbidden",
         )
+
+    def test_git_index_blobs_do_not_contain_high_confidence_tokens(self):
+        offenders = cached_grep_paths(
+            HIGH_CONFIDENCE_SECRET_PATTERNS,
+            extended=True,
+        )
+        self.assertEqual(
+            offenders,
+            [],
+            "tracked credential-like tokens are forbidden",
+        )
+
+    def test_secret_content_scan_uses_git_index_not_worktree_reads(self):
+        source = Path(__file__).read_text(encoding="utf-8")
+        self.assertIn('"grep", "--cached"', source)
+        self.assertNotIn('path.open("rb")', source)
+        self.assertNotIn(".is_file()", source)
 
     def test_gitignore_retains_defense_in_depth_patterns(self):
         text = (ROOT / ".gitignore").read_text(encoding="utf-8")
