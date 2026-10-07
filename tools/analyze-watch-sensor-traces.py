@@ -75,6 +75,8 @@ def read_samples(path: Path) -> list[Sample]:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
             raise TraceError("trace CSV has no header")
+        if len(reader.fieldnames) != len(set(reader.fieldnames)):
+            raise TraceError("trace CSV has duplicate column names")
         missing = REQUIRED_COLUMNS - set(reader.fieldnames)
         unexpected = set(reader.fieldnames) - REQUIRED_COLUMNS
         if missing:
