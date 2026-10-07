@@ -1,3 +1,4 @@
+import importlib.util
 import pathlib
 import re
 import unittest
@@ -5,6 +6,16 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-tooling-test.yml"
+RUNNER = ROOT / "tools" / "run_quality_tooling_contracts.py"
+RUNNER_SPEC = importlib.util.spec_from_file_location(
+    "raise_quality_tooling_runner_contract",
+    RUNNER,
+)
+if RUNNER_SPEC is None or RUNNER_SPEC.loader is None:
+    raise RuntimeError("could not load quality tooling contract runner")
+RUNNER_MODULE = importlib.util.module_from_spec(RUNNER_SPEC)
+RUNNER_SPEC.loader.exec_module(RUNNER_MODULE)
+QUALITY_MODULES = RUNNER_MODULE.QUALITY_MODULES
 STRICT_COMMAND_ENTRYPOINTS = [
     "pull-diagnostics.command",
     "pull-watch-data.command",
@@ -173,6 +184,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_physical_observation_validator.py",
             "tests/test_physical_validation_cli.py",
             "tests/test_quality_tooling_workflow.py",
+            "tests/test_quality_tooling_runner.py",
             "tests/test_quality_workflow_action_pinning.py",
             "tests/test_source_text_review_integrity.py",
             "tests/test_watch_data_analyzer.py",
@@ -273,8 +285,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         discovered = sorted(path.name for path in (ROOT / "tools").glob("*.py"))
         self.assertTrue(discovered, "tools/ must retain Python quality tooling")
 
-    def test_runs_complete_hosted_quality_regression_set(self):
-        modules = [
+    def test_runs_complete_hosted_quality_regression_set_in_isolated_mode(self):
+        modules = (
             "tests.test_adb_device_binding",
             "tests.test_all_workflow_action_pins",
             "tests.test_frozen_acceptance_launcher",
@@ -282,6 +294,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests.test_physical_observation_template",
             "tests.test_physical_observation_validator",
             "tests.test_physical_validation_cli",
+            "tests.test_quality_tooling_runner",
             "tests.test_quality_tooling_workflow",
             "tests.test_quality_workflow_action_pinning",
             "tests.test_source_text_review_integrity",
@@ -290,11 +303,17 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests.test_watch_e2e_evidence_validator",
             "tests.test_watch_sensor_trace_analyzer",
             "tests.test_watch_sensor_trial_analyzer",
-        ]
-        self.assertIn("python3 -m unittest", self.text)
-        for module in modules:
-            with self.subTest(module=module):
-                self.assertIn(module, self.text)
+        )
+        self.assertEqual(QUALITY_MODULES, modules)
+        self.assertIn(
+            "python3 -I tools/run_quality_tooling_contracts.py",
+            self.text,
+        )
+        self.assertNotIn(
+            "python3 -m unittest",
+            self.text,
+            "hosted quality regressions must not re-enable environment-controlled imports",
+        )
 
     def test_all_run_steps_use_bash_strict_mode(self):
         lines = self.text.splitlines()
@@ -803,7 +822,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Quality tooling regressions": [
                 "set -euo pipefail",
-                "python3 -m unittest tests.test_adb_device_binding tests.test_all_workflow_action_pins tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_physical_validation_cli tests.test_quality_tooling_workflow tests.test_quality_workflow_action_pinning tests.test_source_text_review_integrity tests.test_watch_data_analyzer tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer",
+                "python3 -I tools/run_quality_tooling_contracts.py",
             ],
             "Verify worktree remains clean": [
                 "set -euo pipefail",
