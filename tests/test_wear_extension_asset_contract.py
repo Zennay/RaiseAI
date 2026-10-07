@@ -12,6 +12,18 @@ EXPECTED_ASSETS = {
     "css": {"wear.css"},
     "js": {"wear.js"},
 }
+EXPECTED_MATCHES = {
+    "https://chatgpt.com/*",
+    "https://*.chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://*.chat.openai.com/*",
+}
+EXPECTED_PERMISSIONS = {
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons",
+}
+EXPECTED_CONTENT_SCRIPT_KEYS = {"matches", "css", "js", "run_at"}
 ABSOLUTE_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", flags=re.IGNORECASE)
 
 
@@ -91,6 +103,37 @@ class WearExtensionAssetContractTests(unittest.TestCase):
                 f"critical {kind} assets missing from manifest: "
                 f"{sorted(expected - discovered[kind])}",
             )
+
+    def test_manifest_keeps_exact_injection_and_native_permission_scope(self):
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+
+        permissions = manifest.get("permissions")
+        self.assertIsInstance(permissions, list)
+        self.assertTrue(all(isinstance(value, str) for value in permissions))
+        self.assertEqual(len(permissions), len(set(permissions)))
+        self.assertEqual(set(permissions), EXPECTED_PERMISSIONS)
+
+        scripts = manifest.get("content_scripts")
+        self.assertIsInstance(scripts, list)
+        self.assertEqual(
+            len(scripts),
+            1,
+            "content-script count changes require explicit scope review",
+        )
+        script = scripts[0]
+        self.assertIsInstance(script, dict)
+        self.assertEqual(
+            set(script),
+            EXPECTED_CONTENT_SCRIPT_KEYS,
+            "content-script execution controls must stay explicit and reviewable",
+        )
+
+        matches = script.get("matches")
+        self.assertIsInstance(matches, list)
+        self.assertTrue(all(isinstance(value, str) for value in matches))
+        self.assertEqual(len(matches), len(set(matches)))
+        self.assertEqual(set(matches), EXPECTED_MATCHES)
+        self.assertEqual(script.get("run_at"), "document_idle")
 
     def test_asset_reference_validator_rejects_ambiguous_or_external_paths(self):
         cases = (
