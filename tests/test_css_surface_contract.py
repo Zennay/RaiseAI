@@ -146,13 +146,10 @@ def _css_url_targets(text: str, *, label: str) -> list[str]:
                 while cursor < len(text):
                     current = text[cursor]
                     if current == "\\":
-                        if cursor + 1 >= len(text):
-                            raise ValueError(
-                                f"{label}: unterminated escape in CSS url()"
-                            )
-                        value.append(text[cursor + 1])
-                        cursor += 2
-                        continue
+                        raise ValueError(
+                            f"{label}: CSS url() escapes are forbidden; "
+                            "use a literal local or data URL"
+                        )
                     if current == arg_quote:
                         cursor += 1
                         break
@@ -173,6 +170,11 @@ def _css_url_targets(text: str, *, label: str) -> list[str]:
 
             start = cursor
             while cursor < len(text) and text[cursor] != ")":
+                if text[cursor] == "\\":
+                    raise ValueError(
+                        f"{label}: CSS url() escapes are forbidden; "
+                        "use a literal local or data URL"
+                    )
                 if text[cursor] in {'"', "'", "(", "\n"}:
                     raise ValueError(f"{label}: malformed unquoted CSS url()")
                 cursor += 1
@@ -200,6 +202,11 @@ def validate_css_source(data: bytes, *, label: str) -> None:
         raise ValueError(f"{label}: CSS source must use LF line endings")
 
     visible = _visible_css_code(text, label=label)
+    if "\\" in visible:
+        raise ValueError(
+            f"{label}: CSS escapes outside strings are forbidden; "
+            "use literal reviewable tokens"
+        )
     if re.search(r"(?i)(?<![-_a-z0-9])@import\b", visible):
         raise ValueError(f"{label}: CSS @import is forbidden; bundle assets locally")
 
@@ -293,6 +300,17 @@ class CssSurfaceContractTests(unittest.TestCase):
             b'/* @import url("https://example.invalid/x.css"); */\n.a { content: "@import"; }\n',
             label="fixture.css",
         )
+
+    def test_validator_rejects_escaped_css_tokens_that_can_hide_fetches(self):
+        cases = (
+            (b"@\\69mport url(local.css);\n.a {}\n", "escapes outside strings"),
+            (b'.a { background: url("https\\://example.invalid/x.png"); }\n', "url\\(\\) escapes"),
+            (b".a { background: url(https\\://example.invalid/x.png); }\n", "escapes outside strings"),
+        )
+        for payload, expected in cases:
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(ValueError, expected):
+                    validate_css_source(payload, label="fixture.css")
 
     def test_validator_rejects_remote_url_assets_but_allows_local_and_data_targets(self):
         for target in (
