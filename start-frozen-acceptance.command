@@ -27,6 +27,12 @@ Galaxy Watch 7 (SM-L315F / SM_L315F).
 EOF
 }
 
+if [ "$#" -gt 0 ] && [ -z "$1" ]; then
+  echo "Gateway profile argument must not be empty."
+  usage
+  exit 2
+fi
+
 case "${1:-}" in
   -h|--help|help)
     usage
@@ -34,6 +40,11 @@ case "${1:-}" in
     ;;
   --preflight-only)
     MODE="preflight"
+    if [ "$#" -ge 2 ] && [ -z "$2" ]; then
+      echo "Gateway profile argument must not be empty."
+      usage
+      exit 2
+    fi
     PROFILE="${2:-$DEFAULT_PROFILE}"
     if [ "$#" -gt 2 ]; then
       usage
