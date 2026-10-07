@@ -65,8 +65,13 @@ concurrency:
 
 jobs:
   python-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
     steps:
       - name: Checkout exact tested revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -81,6 +86,12 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
 
       - name: Shell syntax
         shell: bash
