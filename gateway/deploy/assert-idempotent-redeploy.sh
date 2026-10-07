@@ -8,8 +8,24 @@ CERT_FILE="$CONFIG_DIR/tls/gateway-cert.pem"
 EXPECTED_REVISION="${RAISE_DEPLOY_REVISION:-}"
 
 read_env_value() {
-  local key="$1"
-  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE"
+  local key="$1" value
+  if ! value="$(awk -F= -v key="$key" '
+    $1 == key {
+      count += 1
+      sub(/^[^=]*=/, "")
+      value = $0
+    }
+    END {
+      if (count != 1) {
+        exit 2
+      }
+      print value
+    }
+  ' "$ENV_FILE")"; then
+    echo "Expected exactly one $key in gateway env" >&2
+    return 1
+  fi
+  printf '%s\n' "$value"
 }
 
 spki_sha256() {

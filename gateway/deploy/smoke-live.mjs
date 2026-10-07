@@ -29,18 +29,10 @@ import {
   armSmokeRequestDeadline,
   readSmokeResponseBody
 } from "./smoke-http.mjs";
+import { readKeyValueFile } from "./read-key-value-file.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
-
-function readKeyValueFile(file) {
-  const out = new Map();
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    const idx = line.indexOf("=");
-    if (idx > 0) out.set(line.slice(0, idx).trim(), line.slice(idx + 1).trim());
-  }
-  return out;
-}
 
 const env = readKeyValueFile(path.join(configDir, "gateway.env"));
 const profile = readKeyValueFile(path.join(configDir, "watch-gateway.properties"));
