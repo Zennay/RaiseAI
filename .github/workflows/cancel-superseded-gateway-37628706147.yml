@@ -1,0 +1,91 @@
+name: Cancel superseded gateway deploy run 37628706147
+
+on:
+  push:
+    branches:
+      - "ops/cancel-superseded-gateway-37628706147-20261007"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-superseded-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_RUN_ID: "37628706147"
+      TARGET_SHA: "b35562f984539d5c9431ddd5835dccb49db7208b"
+      SUPERSEDING_RUN_ID: "37662877690"
+      SUPERSEDING_SHA: "e1c07e1f995b6202921c017587a5a842dcf02b5a"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify exact stale target and superseding deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          curl --fail --silent --show-error "${auth[@]}"             "${api}/actions/runs/${TARGET_RUN_ID}" > /tmp/target-run.json
+          curl --fail --silent --show-error "${auth[@]}"             "${api}/actions/runs/${SUPERSEDING_RUN_ID}" > /tmp/superseding-run.json
+
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime
+
+          target = json.load(open("/tmp/target-run.json", encoding="utf-8"))
+          newer = json.load(open("/tmp/superseding-run.json", encoding="utf-8"))
+
+          assert target["id"] == int(os.environ["TARGET_RUN_ID"]), target
+          assert target["name"] == "Raise gateway deploy + live smoke", target["name"]
+          assert target["path"] == ".github/workflows/gateway-deploy.yml", target["path"]
+          assert target["event"] == "push", target["event"]
+          assert target["head_branch"] == "main", target["head_branch"]
+          assert target["head_sha"] == os.environ["TARGET_SHA"], target["head_sha"]
+          assert target["status"] in {"queued", "pending"}, target["status"]
+
+          assert newer["id"] == int(os.environ["SUPERSEDING_RUN_ID"]), newer
+          assert newer["name"] == target["name"], newer["name"]
+          assert newer["path"] == target["path"], newer["path"]
+          assert newer["event"] == "push", newer["event"]
+          assert newer["head_branch"] == "main", newer["head_branch"]
+          assert newer["head_sha"] == os.environ["SUPERSEDING_SHA"], newer["head_sha"]
+          assert newer["status"] in {
+              "queued", "pending", "requested", "waiting", "in_progress", "completed"
+          }, newer["status"]
+
+          target_created = datetime.fromisoformat(target["created_at"].replace("Z", "+00:00"))
+          newer_created = datetime.fromisoformat(newer["created_at"].replace("Z", "+00:00"))
+          assert target_created < newer_created, (target["created_at"], newer["created_at"])
+          PY
+
+      - name: Cancel only the verified superseded gateway deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer ${GH_TOKEN}"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}/cancel"
+
+      - name: Confirm target reaches cancelled conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          for attempt in {1..15}; do
+            curl --fail --silent --show-error "${auth[@]}"               "${api}/actions/runs/${TARGET_RUN_ID}" > /tmp/target-after.json
+            if python3 - <<'PY'
+          import json
+          run = json.load(open("/tmp/target-after.json", encoding="utf-8"))
+          raise SystemExit(0 if run["status"] == "completed" and run["conclusion"] == "cancelled" else 1)
+          PY
+            then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          cat /tmp/target-after.json
+          exit 1
