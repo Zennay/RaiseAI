@@ -131,6 +131,7 @@ class RepositoryBlobBudgetTests(unittest.TestCase):
         self.assertNotIn("ubuntu-latest", text)
         self.assertNotIn("ubuntu-24.04", text)
         self.assertIn("    timeout-minutes: 10", text)
+        self.assertIn('          test "$(hostname)" = "vps-bb300bba"', text)
         self.assertIn(
             "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             text,
