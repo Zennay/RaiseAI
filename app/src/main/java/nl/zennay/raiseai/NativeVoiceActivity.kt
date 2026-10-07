@@ -41,7 +41,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
     private val recognitionSessions = VoiceRecognitionSessionGate()
     private val retryListeningRunnable = Runnable {
-        if (!submitted && !isFinishing && !isDestroyed) {
+        if (isUiStarted && !submitted && !isFinishing && !isDestroyed) {
             startListening()
         }
     }
@@ -189,6 +189,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             private fun withCurrentSession(block: () -> Unit) {
                 if (
                     recognitionSessions.accepts(generation) &&
+                    isUiStarted &&
                     !submitted &&
                     !isFinishing &&
                     !isDestroyed
