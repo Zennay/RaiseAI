@@ -63,7 +63,7 @@ class GradleDependencyPinningTests(unittest.TestCase):
             self.settings,
         )
 
-        custom_urls = re.findall(r'maven\("([^"]+)"\)', self.settings)
+        custom_urls = re.findall(r'maven\\("([^"]+)"\\)', self.settings)
         for raw_url in custom_urls:
             with self.subTest(url=raw_url):
                 parsed = urlsplit(raw_url)
@@ -75,7 +75,7 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 self.assertFalse(parsed.fragment)
 
     def test_repository_sources_are_explicitly_allowlisted(self):
-        custom_urls = re.findall(r'maven\\("([^\"]+)"\\)', self.settings)
+        custom_urls = re.findall(r'maven\\("([^"]+)"\\)', self.settings)
         self.assertEqual(
             custom_urls,
             ["https://maven.mozilla.org/maven2/"],
