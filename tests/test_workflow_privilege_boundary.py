@@ -395,6 +395,10 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                 "on: pull_request\njobs: {verify: {steps: "
                 f"[{{uses: actions/checkout@{sha}}}]}}}}\n"
             ),
+            "reusable.yml": (
+                "on: pull_request\njobs:\n  verify:\n"
+                f"    uses: owner/repo/.github/workflows/reuse.yml@{sha}\n"
+            ),
             "local.yml": (
                 "on: pull_request\njobs: {verify: {steps: "
                 "[{uses: ./.github/actions/local-check}]}}\n"
@@ -413,6 +417,7 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             "block.yml": [("actions/checkout", sha)],
             "quoted.yml": [("actions/checkout", sha)],
             "flow.yml": [("actions/checkout", sha)],
+            "reusable.yml": [("owner/repo/.github/workflows/reuse.yml", sha)],
             "local.yml": [],
             "docker.yml": [],
             "comment.yml": [],
