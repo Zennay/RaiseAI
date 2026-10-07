@@ -83,6 +83,8 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         seen_sessions: set[int] = set()
         for line, row in enumerate(reader, start=2):
+            if None in row:
+                raise TrialError(f"line {line}: row has surplus fields")
             label = (row.get("label") or "").strip()
             if label not in ALLOWED_LABELS:
                 raise TrialError(f"line {line}: unknown label {label!r}")
