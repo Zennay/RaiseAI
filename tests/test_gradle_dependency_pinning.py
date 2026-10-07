@@ -74,6 +74,28 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 self.assertFalse(parsed.query)
                 self.assertFalse(parsed.fragment)
 
+    def test_mozilla_repository_is_scoped_to_geckoview_only(self):
+        self.assertEqual(
+            self.settings.count('maven("https://maven.mozilla.org/maven2/")'),
+            1,
+            "Mozilla Maven repository must have one canonical declaration",
+        )
+        scoped = re.search(
+            r'(?ms)maven\("https://maven[.]mozilla[.]org/maven2/"\)\s*\{'
+            r'\s*content\s*\{\s*includeGroup\("org[.]mozilla[.]geckoview"\)'
+            r'\s*\}\s*\}',
+            self.settings,
+        )
+        self.assertIsNotNone(
+            scoped,
+            "Mozilla Maven must be content-filtered to org.mozilla.geckoview",
+        )
+        self.assertEqual(
+            self.settings.count('includeGroup("org.mozilla.geckoview")'),
+            1,
+            "GeckoView group filter must be explicit and unique",
+        )
+
     def test_build_scripts_do_not_use_dynamic_dependency_helpers(self):
         combined = self.root_build + "\n" + self.app_build + "\n" + self.settings
         for forbidden in (
