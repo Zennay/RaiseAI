@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/run_python_contracts.py
+          python3 -I tools/run_python_contracts.py
 
       - name: Verify worktree remains clean
         shell: bash
