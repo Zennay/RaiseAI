@@ -160,7 +160,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
     def test_push_and_pull_request_filters_cover_quality_surface(self):
         expected_paths = [
-            *SHELL_SYNTAX_ENTRYPOINTS,
+            "*.command",
             "tools/analyze-watch-sensor-traces.py",
             "tools/analyze-watch-sensor-trials.py",
             "tools/create-physical-observation-template.py",
@@ -201,13 +201,11 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
     def test_checks_shell_syntax_for_all_command_entrypoints(self):
         self.assertIn("- name: Shell syntax", self.text)
         self.assertIn("bash -n", self.text)
+        self.assertEqual(self._trigger_paths("push")[0], "*.command")
+        self.assertEqual(self._trigger_paths("pull_request")[0], "*.command")
         for path in SHELL_SYNTAX_ENTRYPOINTS:
             with self.subTest(path=path):
-                self.assertGreaterEqual(
-                    self.text.count(path),
-                    3,
-                    f"{path} must be trigger-covered and syntax-checked",
-                )
+                self.assertIn(path, self.text, f"{path} must be syntax-checked")
 
     def test_strict_command_entrypoints_keep_bash_and_strict_mode(self):
         for path in STRICT_COMMAND_ENTRYPOINTS:
