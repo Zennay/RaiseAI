@@ -1,4 +1,6 @@
+import pathlib
 import subprocess
+import tempfile
 import unicodedata
 import unittest
 
@@ -14,6 +16,13 @@ WINDOWS_RESERVED_BASENAMES = {
     *(f"lpt{digit}" for digit in "¹²³"),
 }
 WINDOWS_FORBIDDEN_CHARACTERS = set('<>:"\\|?*')
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+ALLOWED_EXECUTABLE_SHEBANGS = {
+    "#!/bin/bash",
+    "#!/usr/bin/env bash",
+    "#!/usr/bin/env node",
+    "#!/usr/bin/env python3",
+}
 
 
 def tracked_paths() -> list[str]:
@@ -51,6 +60,36 @@ def validate_regular_file_entries(entries: list[tuple[str, str, str]]) -> None:
         if mode not in {"100644", "100755"}:
             raise ValueError(
                 f"{path!r}: tracked entry mode {mode} is not a regular file"
+            )
+
+
+def validate_executable_entry_sources(
+    entries: list[tuple[str, str, str]],
+    *,
+    root: pathlib.Path = ROOT,
+) -> None:
+    for mode, stage, path in entries:
+        if mode != "100755":
+            continue
+        if stage != "0":
+            raise ValueError(f"{path!r}: executable entry must be at canonical stage 0")
+
+        candidate = root / path
+        if candidate.is_symlink() or not candidate.is_file():
+            raise ValueError(f"{path!r}: executable entry must be a regular file")
+
+        with candidate.open("rb") as source:
+            first_line = source.readline(257)
+        if len(first_line) > 256 and not first_line.endswith(b"\n"):
+            raise ValueError(f"{path!r}: executable shebang is unreasonably long")
+        try:
+            shebang = first_line.removesuffix(b"\n").decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"{path!r}: executable shebang must be strict UTF-8") from exc
+
+        if shebang not in ALLOWED_EXECUTABLE_SHEBANGS:
+            raise ValueError(
+                f"{path!r}: executable entry must declare a reviewed interpreter"
             )
 
 
@@ -114,6 +153,7 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
         entries = tracked_index_entries()
         self.assertTrue(entries)
         validate_regular_file_entries(entries)
+        validate_executable_entry_sources(entries)
         self.assertEqual(
             [path for _mode, _stage, path in entries],
             tracked_paths(),
@@ -143,6 +183,47 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
     def test_rejects_empty_index_surface(self):
         with self.assertRaisesRegex(ValueError, "index discovery must not be empty"):
             validate_regular_file_entries([])
+
+    def test_executable_entries_require_reviewed_shebangs(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-executable-") as temporary:
+            root = pathlib.Path(temporary)
+            fixtures = {
+                "bash.sh": "#!/usr/bin/env bash\necho ok\n",
+                "wrapper": "#!/bin/bash\necho ok\n",
+                "tool.py": "#!/usr/bin/env python3\nprint('ok')\n",
+                "smoke.mjs": "#!/usr/bin/env node\nconsole.log('ok')\n",
+            }
+            entries = []
+            for name, source in fixtures.items():
+                (root / name).write_text(source, encoding="utf-8")
+                entries.append(("100755", "0", name))
+
+            validate_executable_entry_sources(entries, root=root)
+
+    def test_nonexecutable_entries_do_not_require_shebangs(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-executable-") as temporary:
+            root = pathlib.Path(temporary)
+            (root / "README.md").write_text("# docs\n", encoding="utf-8")
+            validate_executable_entry_sources(
+                [("100644", "0", "README.md")],
+                root=root,
+            )
+
+    def test_rejects_executable_without_reviewed_interpreter(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-executable-") as temporary:
+            root = pathlib.Path(temporary)
+            fixtures = {
+                "missing.txt": "plain text\n",
+                "unsupported.py": "#!/usr/bin/python3\nprint('no')\n",
+            }
+            for name, source in fixtures.items():
+                with self.subTest(name=name):
+                    (root / name).write_text(source, encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "reviewed interpreter"):
+                        validate_executable_entry_sources(
+                            [("100755", "0", name)],
+                            root=root,
+                        )
 
     def test_accepts_normal_cross_platform_paths(self):
         validate_portable_paths(
