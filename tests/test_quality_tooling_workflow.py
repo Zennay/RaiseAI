@@ -44,7 +44,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
     def test_checkout_is_immutable_and_does_not_persist_credentials(self):
         self.assertRegex(
             self.source,
-            re.compile(r"uses: actions/checkout@[0-9a-f]{40}(?:\\s+#.*)?$",
+            re.compile(r"uses: actions/checkout@[0-9a-f]{40}(?:\s+#.*)?$",
                        re.MULTILINE),
         )
         self.assertNotIn("uses: actions/checkout@v", self.source)
