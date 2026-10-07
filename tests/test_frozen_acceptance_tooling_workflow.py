@@ -5,6 +5,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "frozen-acceptance-tooling-test.yml"
+START_GUIDE = ROOT / "START-HERE.md"
+DEVICE_TEST_GUIDE = ROOT / "DEVICE-TEST.md"
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
@@ -124,6 +126,60 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
             "-p 'test_frozen_acceptance_tooling_workflow.py'"
         )
         self.assertEqual(self.text.count(command), 1)
+
+    def test_operator_start_guide_stays_bound_to_frozen_handoff(self):
+        guide = START_GUIDE.read_text(encoding="utf-8")
+        section = guide.split("## Preferred physical validation flow", 1)[1].split(
+            "\n## 1. Install or upgrade the Watch app", 1
+        )[0]
+
+        self.assertIn(
+            "8f719bb273f9b997848864f342598e7df5f090e5",
+            section,
+            "current physical gate must name the preserved v1.5.2 source revision",
+        )
+        self.assertIn(
+            "bash ./start-frozen-acceptance.command --preflight-only /path/to/watch-gateway.properties",
+            section,
+        )
+        self.assertIn(
+            "bash ./start-frozen-acceptance.command /path/to/watch-gateway.properties",
+            section,
+        )
+        self.assertIn(
+            "Do not run `physical-validation.command all` from the current checkout",
+            section,
+        )
+        self.assertNotIn(
+            "bash ./physical-validation.command all /path/to/watch-gateway.properties",
+            section,
+            "repository-tip builds must not be presented as the current frozen acceptance path",
+        )
+
+    def test_operator_start_guide_triggers_frozen_tooling_contract(self):
+        path = '      - "START-HERE.md"'
+        self.assertEqual(
+            self.text.count(path),
+            2,
+            "operator handoff guide changes must trigger both push and pull_request validation",
+        )
+
+    def test_legacy_device_checklist_cannot_pose_as_current_acceptance(self):
+        guide = DEVICE_TEST_GUIDE.read_text(encoding="utf-8")
+        self.assertIn("Historical fallback checklist only.", guide)
+        self.assertIn(
+            "8f719bb273f9b997848864f342598e7df5f090e5",
+            guide,
+        )
+        self.assertIn("start-frozen-acceptance.command", guide)
+        self.assertIn("Do not use this V0.3 Gemini-first checklist", guide)
+
+    def test_legacy_device_checklist_triggers_frozen_tooling_contract(self):
+        self.assertEqual(
+            self.text.count('      - "DEVICE-TEST.md"'),
+            2,
+            "legacy checklist warning changes must trigger both push and pull_request validation",
+        )
 
     def test_all_run_steps_fail_closed_under_bash(self):
         lines = self.text.splitlines()

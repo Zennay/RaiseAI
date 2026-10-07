@@ -8,40 +8,33 @@ ChatGPT Web and Gemini are retained as fallbacks; they are no longer the primary
 
 ## Preferred physical validation flow
 
-For the current M0/V0 gate, use the session orchestrator on the Mac paired with the Galaxy Watch 7:
+For the current M0/V0 gate, **do not build from the repository tip**. The only valid acceptance input is the preserved v1.5.2 handoff from merged-main revision `8f719bb273f9b997848864f342598e7df5f090e5`.
+
+Connect exactly one ADB device—the intended Galaxy Watch 7—and run the canonical frozen launcher from the current checkout. Preflight first if you want to prove device + artifact provenance without installing anything:
 
 ```bash
-bash ./physical-validation.command all /path/to/watch-gateway.properties
+bash ./start-frozen-acceptance.command --preflight-only /path/to/watch-gateway.properties
 ```
 
-The flow is fail-closed and keeps one evidence directory under `~/.raiseai/evidence/`:
+Then start the real provenance-bound acceptance session:
 
-1. **prepare** requires a clean Git checkout, binds the APK to the exact 40-character source revision, builds/installs v1.5.2, provisions the gateway profile, clears only old validation evidence, and opens Raise AI;
-2. **verify-e2e** accepts only a fresh `quick_ai` response from the exact prepared app version and Git revision;
+```bash
+bash ./start-frozen-acceptance.command /path/to/watch-gateway.properties
+```
+
+The launcher fetches the preserved v1.5.2 handoff, verifies its frozen identity before install, re-checks that the same Galaxy Watch 7 is still connected, and delegates the physical session into the restored frozen source with the preserved APK. This is the supported path for GitHub issue #34.
+
+**Do not run `physical-validation.command all` from the current checkout for the frozen M0/V0 gate.** Current `main` is newer than the preserved v1.5.2 acceptance source, so a repository-tip build is not valid physical acceptance evidence even when its own checks pass.
+
+Inside the restored frozen handoff, the physical orchestrator keeps one evidence directory under `~/.raiseai/evidence/` and enforces the same gate order:
+
+1. **prepare** installs only the prebuilt preserved APK, provisions the gateway profile, binds the exact app/source/APK identity, clears only old validation evidence, and opens Raise AI;
+2. **verify-e2e** accepts only a fresh `quick_ai` response from that exact prepared app version and Git revision;
 3. **verify-v1** is allowed only after E2E passes and requires the full 30 intentional raises / 100 non-trigger dataset from that same exact app version + source revision, with ≥90% detection and ≤5% false triggers.
 
-For a published physical-handoff artifact, install the exact prebuilt APK instead of rebuilding it by exporting both the artifact path and the SHA-256 recorded in `BUILD-IDENTITY.txt`:
+For development diagnostics outside the frozen acceptance gate, `physical-validation.command` subcommands remain available. They are not a substitute for `start-frozen-acceptance.command` while issue #34 owns the preserved-v1.5.2 gate.
 
-```bash
-RAISE_PREBUILT_APK=/path/to/RaiseAI-v1.5.2-debug.apk \
-RAISE_EXPECT_APK_SHA256=<64-char-sha256> \
-bash ./physical-validation.command all /path/to/watch-gateway.properties
-```
-
-The orchestrator verifies the APK digest, exact embedded Git source revision and Watch ABI before install, and stores the installed APK SHA-256 in the physical session manifest.
-
-Only publish and use a physical handoff generated from the exact merged canonical `main` revision; PR-head or stale pre-merge artifacts are not valid acceptance evidence.
-
-The manual commands remain available when debugging an individual stage:
-
-```bash
-bash ./physical-validation.command prepare /path/to/watch-gateway.properties
-bash ./physical-validation.command verify-e2e
-bash ./physical-validation.command verify-v1
-bash ./physical-validation.command status
-```
-
-A dirty source tree cannot produce passing physical evidence. Old v1 schema evidence also fails closed; v1.5.2 writes schema v2 with `app_version` and `source_revision`.
+A dirty or mixed source/artifact identity cannot produce valid physical evidence. Old v1 schema evidence also fails closed; v1.5.2 writes schema v2 with `app_version` and `source_revision`.
 
 ## 1. Install or upgrade the Watch app
 

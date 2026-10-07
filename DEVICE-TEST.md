@@ -1,5 +1,7 @@
 # Watch 7 test checklist — V0.3
 
+> **Historical fallback checklist only.** Do not use this V0.3 Gemini-first checklist for the current physical acceptance gate. The canonical gate is the preserved Raise AI v1.5.2 handoff from source `8f719bb273f9b997848864f342598e7df5f090e5`; start it with `bash ./start-frozen-acceptance.command [gateway-profile]` as documented in `START-HERE.md` and `PHYSICAL-ACCEPTANCE.md`.
+
 Record facts, not guesses.
 
 ## A. Gemini voice path
