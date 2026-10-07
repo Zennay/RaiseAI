@@ -248,7 +248,7 @@ ADB="$(python3 - "$ADB" <<'PY'
 import os
 import sys
 
-print(os.path.abspath(sys.argv[1]))
+print(os.path.realpath(sys.argv[1]))
 PY
 )"
 [ -x "$ADB" ] || {

@@ -63,6 +63,13 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 if drop_device_marker:
                     Path(drop_device_marker).write_text("dropped\n", encoding="utf-8")
 
+                swap_adb_link = os.environ.get("FAKE_SWAP_ADB_LINK")
+                swap_adb_target = os.environ.get("FAKE_SWAP_ADB_TARGET")
+                if swap_adb_link and swap_adb_target:
+                    link = Path(swap_adb_link)
+                    link.unlink()
+                    link.symlink_to(swap_adb_target)
+
                 launcher = output / "start-physical-handoff.command"
                 launcher.write_text(
                     r'''#!/bin/bash
@@ -618,6 +625,43 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stdout)
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[1].startswith("run:watch-1:"))
+
+    def test_run_mode_pins_resolved_adb_when_selected_symlink_is_retargeted(self):
+        real_bin = self.root / "real-bin"
+        real_bin.mkdir()
+        good_adb = real_bin / "adb"
+        shutil.copy2(self.bin / "adb", good_adb)
+        good_adb.chmod(0o755)
+
+        bad_adb_marker = self.root / "retargeted-adb-used"
+        bad_adb = self.root / "retargeted-adb"
+        bad_adb.write_text(
+            "#!/bin/bash\n"
+            "printf 'used\\n' > \"$BAD_ADB_MARKER\"\n"
+            "exit 99\n",
+            encoding="utf-8",
+        )
+        bad_adb.chmod(0o755)
+
+        selected_adb = self.bin / "adb"
+        selected_adb.unlink()
+        selected_adb.symlink_to(good_adb)
+
+        result = self.run_launcher(
+            {
+                "FAKE_SWAP_ADB_LINK": str(selected_adb),
+                "FAKE_SWAP_ADB_TARGET": str(bad_adb),
+                "BAD_ADB_MARKER": str(bad_adb_marker),
+            },
+            args=[str(self.profile)],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(selected_adb.resolve(), bad_adb.resolve())
+        self.assertFalse(bad_adb_marker.exists(), result.stdout)
         lines = self.log.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 2)
         self.assertTrue(lines[1].startswith("run:watch-1:"))
