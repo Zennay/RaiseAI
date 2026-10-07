@@ -288,6 +288,7 @@ fi
 echo "Starting provenance-bound physical acceptance..."
 echo
 
+PATH="$SDK_SHIM/platform-tools:$PATH" \
 ANDROID_SERIAL="$TARGET" \
 ANDROID_SDK_ROOT="$SDK_SHIM" \
 ANDROID_HOME="$SDK_SHIM" \
