@@ -183,7 +183,18 @@ test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () 
   }
   assert.match(
     DEPLOY_WORKFLOW,
-    /defaults:\s*\n\s+run:\s*\n\s+working-directory:\s*gateway\s*\n\s+shell:\s*bash\b/,
+    /jobs:\s*\n  deploy-and-verify:\s*\n    runs-on: \[self-hosted, vps-bb300bba\]\s*\n    timeout-minutes: 30\s*\n    env:\s*\n      LANG: C\.UTF-8\s*\n      LC_ALL: C\.UTF-8\s*\n      TZ: UTC\s*\n    defaults:\s*\n      run:\s*\n        working-directory: gateway\s*\n        shell: bash\s*\n    steps:/,
+    "deploy job execution environment must stay exact and minimal",
+  );
+  assert.equal(
+    DEPLOY_WORKFLOW.split("        shell: bash").length - 1,
+    1,
+    "deploy workflow must use one job-default Bash binding without per-step overrides",
+  );
+  assert.equal(
+    DEPLOY_WORKFLOW.split("        working-directory: gateway").length - 1,
+    1,
+    "deploy workflow must keep one canonical working directory",
   );
 
   const deploySha = "\${{ github.sha }}";
