@@ -120,11 +120,18 @@ class FrozenPreserveContractWorkflowTests(unittest.TestCase):
             "      LANG: C.UTF-8",
             "      LC_ALL: C.UTF-8",
             '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
             '      PYTHONDONTWRITEBYTECODE: "1"',
             "      TZ: UTC",
         ):
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
+
+        self.assertEqual(
+            len(re.findall(r'(?m)^\\s+PYTHONNOUSERSITE:\\s*', self.text)),
+            1,
+            "contract lane must expose exactly one PYTHONNOUSERSITE binding",
+        )
 
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
