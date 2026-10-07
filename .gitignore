@@ -28,6 +28,8 @@ local.properties
 !.env.sample
 .envrc
 .direnv/
+.raiseai/
+**/.config/raiseai/
 secrets.properties
 keystore.properties
 signing.properties
