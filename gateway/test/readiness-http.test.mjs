@@ -248,6 +248,81 @@ test("readiness body reader validates declared Content-Length before trust", asy
   }
 });
 
+test("readiness body reader releases early-rejected and broken streams", async () => {
+  let declaredReadStarted = false;
+  let declaredDestroyCalls = 0;
+  const declaredOversized = {
+    headers: { "content-length": String(MAX_READINESS_BODY_BYTES + 1) },
+    destroy() {
+      declaredDestroyCalls += 1;
+    },
+    async *[Symbol.asyncIterator]() {
+      declaredReadStarted = true;
+      yield Buffer.from("{}");
+    }
+  };
+
+  assert.deepEqual(await readReadinessJson(declaredOversized), {
+    json: null,
+    bodyError: "health_body_too_large"
+  });
+  assert.equal(declaredReadStarted, false);
+  assert.equal(declaredDestroyCalls, 1);
+
+  let streamedDestroyCalls = 0;
+  const streamedOversized = {
+    headers: {},
+    destroy() {
+      streamedDestroyCalls += 1;
+    },
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.alloc(MAX_READINESS_BODY_BYTES, 0x20);
+      yield Buffer.from("x");
+    }
+  };
+
+  assert.deepEqual(await readReadinessJson(streamedOversized), {
+    json: null,
+    bodyError: "health_body_too_large"
+  });
+  assert.equal(streamedDestroyCalls, 1);
+
+  let brokenDestroyCalls = 0;
+  const broken = {
+    headers: {},
+    destroy() {
+      brokenDestroyCalls += 1;
+    },
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.from("{");
+      throw new Error("broken_health_stream");
+    }
+  };
+
+  assert.deepEqual(await readReadinessJson(broken), {
+    json: null,
+    bodyError: "health_body_read_failed"
+  });
+  assert.equal(brokenDestroyCalls, 1);
+});
+
+test("readiness cleanup failures never mask the body validation error", async () => {
+  const malformed = {
+    headers: { "content-length": "not-a-number" },
+    destroy() {
+      throw new Error("cleanup_failed");
+    },
+    async *[Symbol.asyncIterator]() {
+      throw new Error("must_not_read");
+    }
+  };
+
+  assert.deepEqual(await readReadinessJson(malformed), {
+    json: null,
+    bodyError: "health_content_length_invalid"
+  });
+});
+
 test("readiness HTTP gate preserves bounded-body failure reasons", () => {
   const result = evaluateReadinessHttpResponse({
     status: 200,
