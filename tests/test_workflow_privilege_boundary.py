@@ -309,11 +309,13 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
         fixtures = {
             "block.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    secrets: inherit\n",
             "quoted.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    'secrets': 'inherit'\n",
+            "flow.yml": "on: pull_request\njobs: {call: {uses: ./.github/workflows/reuse.yml, secrets: inherit}}\n",
             "mapped.yml": "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/reuse.yml\n    secrets: {TOKEN: public-placeholder}\n",
         }
         expected_counts = {
             "block.yml": 1,
             "quoted.yml": 1,
+            "flow.yml": 1,
             "mapped.yml": 0,
         }
 
