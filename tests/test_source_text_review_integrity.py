@@ -1,5 +1,6 @@
 import pathlib
 import subprocess
+import unicodedata
 import unittest
 
 
@@ -31,6 +32,8 @@ TEXT_SUFFIXES = {
     ".yml",
 }
 EXACT_TEXT_PATHS = {".gitignore", "gradlew", "VERSION.txt"}
+ALLOWED_CONTROL_CODEPOINTS = {0x0009, 0x000A}  # horizontal tab and LF
+ALLOWED_FORMAT_CODEPOINTS = {0x200C, 0x200D}  # ZWNJ and ZWJ
 
 
 def is_reviewable_text_path(item: str) -> bool:
@@ -99,6 +102,18 @@ def validate_reviewable_text(raw: bytes, relative: str) -> None:
                 f"at character {index}"
             )
 
+        category = unicodedata.category(char)
+        if category == "Cc" and codepoint not in ALLOWED_CONTROL_CODEPOINTS:
+            raise ValueError(
+                f"{relative}: forbidden Unicode control U+{codepoint:04X} "
+                f"at character {index}"
+            )
+        if category == "Cf" and codepoint not in ALLOWED_FORMAT_CODEPOINTS:
+            raise ValueError(
+                f"{relative}: forbidden Unicode format control U+{codepoint:04X} "
+                f"at character {index}"
+            )
+
 
 class SourceTextReviewIntegrityTests(unittest.TestCase):
     def test_common_text_config_extensions_are_reviewable(self):
@@ -161,6 +176,27 @@ class SourceTextReviewIntegrityTests(unittest.TestCase):
     def test_validator_rejects_non_utf8_bytes(self):
         with self.assertRaisesRegex(ValueError, "strict UTF-8"):
             validate_reviewable_text(b"safe \xff tail", "fixture.py")
+
+    def test_validator_rejects_unlisted_ascii_and_unicode_controls(self):
+        cases = (
+            ("\\u0007", "Unicode control U+0007"),
+            ("\\u0008", "Unicode control U+0008"),
+            ("\\u001b", "Unicode control U+001B"),
+            ("\\u007f", "Unicode control U+007F"),
+            ("\\u009f", "Unicode control U+009F"),
+            ("\\u2061", "Unicode format control U+2061"),
+            ("\\u2064", "Unicode format control U+2064"),
+        )
+        for escaped, expected in cases:
+            with self.subTest(escaped=escaped):
+                value = escaped.encode("ascii").decode("unicode_escape")
+                payload = f"safe {value} tail".encode("utf-8")
+                with self.assertRaisesRegex(ValueError, expected):
+                    validate_reviewable_text(payload, "fixture.py")
+
+    def test_validator_preserves_allowed_source_whitespace(self):
+        validate_reviewable_text(b"safe\\ttext\\nnext line\\n", "fixture.py")
+
 
     def test_validator_preserves_joiner_controls_used_by_legitimate_text(self):
         validate_reviewable_text("safe \u200c \u200d tail".encode("utf-8"), "fixture.md")
