@@ -6,6 +6,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "frozen-acceptance-tooling-test.yml"
 START_GUIDE = ROOT / "START-HERE.md"
+DEVICE_TEST_GUIDE = ROOT / "DEVICE-TEST.md"
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
@@ -161,6 +162,23 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
             self.text.count(path),
             2,
             "operator handoff guide changes must trigger both push and pull_request validation",
+        )
+
+    def test_legacy_device_checklist_cannot_pose_as_current_acceptance(self):
+        guide = DEVICE_TEST_GUIDE.read_text(encoding="utf-8")
+        self.assertIn("Historical fallback checklist only.", guide)
+        self.assertIn(
+            "8f719bb273f9b997848864f342598e7df5f090e5",
+            guide,
+        )
+        self.assertIn("start-frozen-acceptance.command", guide)
+        self.assertIn("Do not use this V0.3 Gemini-first checklist", guide)
+
+    def test_legacy_device_checklist_triggers_frozen_tooling_contract(self):
+        self.assertEqual(
+            self.text.count('      - "DEVICE-TEST.md"'),
+            2,
+            "legacy checklist warning changes must trigger both push and pull_request validation",
         )
 
     def test_all_run_steps_fail_closed_under_bash(self):
