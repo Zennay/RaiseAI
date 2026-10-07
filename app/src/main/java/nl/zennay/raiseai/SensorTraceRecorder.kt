@@ -49,7 +49,7 @@ object SensorTraceRecorder {
     fun sampleCount(context: Context): Int {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return 0
-        return file.useLines(::validSampleLineCount)
+        return file.useLines { lines -> validSampleLineCount(lines) }
     }
 
     internal fun validSampleLineCount(lines: Sequence<String>): Int {
