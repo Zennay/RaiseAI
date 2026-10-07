@@ -139,6 +139,13 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
                 recorded_at_utc="2026-10-06T05:45:00Z",
             )
 
+    def test_rejects_noncanonical_session_app_version(self):
+        with self.assertRaisesRegex(generator.TemplateError, "canonical MAJOR.MINOR.PATCH"):
+            generator.build_template(
+                session_payload(app_version="1.5.2\nprivate-note"),
+                recorded_at_utc="2026-10-06T05:45:00Z",
+            )
+
     def test_cli_creates_file_beside_session_and_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
