@@ -38,6 +38,10 @@ function writeExecutable(file, content) {
   fs.writeFileSync(file, content, { mode: 0o755 });
 }
 
+function permissionMode(file) {
+  return fs.existsSync(file) ? fs.statSync(file).mode & 0o777 : null;
+}
+
 function runInstallerWithShadowedDependency(dependency) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-installer-dependency-"));
   const home = path.join(root, "home");
@@ -186,6 +190,16 @@ exit 0
       installDir,
       nodePath: path.join(bin, "node"),
       unitText: fs.existsSync(unitPath) ? fs.readFileSync(unitPath, "utf8") : "",
+      permissions: {
+        configDir: permissionMode(effectiveConfigDir),
+        tlsDir: permissionMode(path.join(effectiveConfigDir, "tls")),
+        envFile: permissionMode(envPath),
+        privateKey: permissionMode(path.join(effectiveConfigDir, "tls", "gateway-key.pem")),
+        certificate: permissionMode(path.join(effectiveConfigDir, "tls", "gateway-cert.pem")),
+        watchProfile: permissionMode(
+          path.join(effectiveConfigDir, "watch-gateway.properties")
+        )
+      },
       envCreated: fs.existsSync(envPath),
       gatewayToken,
       profileCreated: fs.existsSync(
@@ -284,6 +298,19 @@ test("installer emits a hardened user service contract", () => {
   );
   assert.equal(lines.some((line) => line.startsWith("User=")), false);
   assert.equal(lines.some((line) => line.startsWith("Environment=")), false);
+});
+
+test("installer keeps gateway credentials private on disk", () => {
+  const result = runInstallerWithStubbedRuntime("raise.example");
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.permissions, {
+    configDir: 0o700,
+    tlsDir: 0o700,
+    envFile: 0o600,
+    privateKey: 0o600,
+    certificate: 0o644,
+    watchProfile: 0o600
+  });
 });
 
 test("installer uses a certificate SAN matching the public host identity", () => {
