@@ -17,10 +17,6 @@ for candidate in \
   fi
 done
 
-if command -v gradle >/dev/null 2>&1; then
-  exec gradle "$@"
-fi
-
 mkdir -p "$TOOLS"
 echo "Gradle $GRADLE_VERSION is not cached; downloading once…"
 rm -f "$ZIP.part"
