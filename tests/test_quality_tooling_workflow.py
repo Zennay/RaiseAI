@@ -177,7 +177,9 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_watch_e2e_evidence_validator.py",
             "tests/test_watch_sensor_trace_analyzer.py",
             "tests/test_watch_sensor_trial_analyzer.py",
+            ".github/workflows/physical-quality-evidence-test.yml",
             ".github/workflows/quality-tooling-test.yml",
+            ".github/workflows/watch-app-test.yml",
         ]
         for event in ("push", "pull_request"):
             with self.subTest(event=event):
