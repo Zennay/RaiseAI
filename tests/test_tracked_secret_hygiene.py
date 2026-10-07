@@ -1,4 +1,5 @@
 from pathlib import Path, PurePosixPath
+import re
 import subprocess
 import unittest
 
@@ -148,6 +149,31 @@ class TrackedSecretHygieneTests(unittest.TestCase):
             [],
             "tracked credential-like tokens are forbidden",
         )
+
+    def test_high_confidence_token_patterns_reject_real_shapes_not_placeholders(self):
+        synthetic_tokens = (
+            "sk-or-" + "v1-" + ("a" * 64),
+            "sk-" + "proj-" + ("b" * 48),
+            "github_" + "pat_" + ("C" * 60),
+            "gh" + "p_" + ("D" * 36),
+            "AI" + "za" + ("E" * 35),
+            "AK" + "IA" + ("F" * 16),
+        )
+        combined = re.compile("|".join(f"(?:{pattern})" for pattern in HIGH_CONFIDENCE_SECRET_PATTERNS))
+        for token in synthetic_tokens:
+            with self.subTest(prefix=token[:8]):
+                self.assertIsNotNone(combined.search(token))
+
+        for placeholder in (
+            "sk-or-" + "v1-...",
+            "sk-" + "proj-...",
+            "github_" + "pat_EXAMPLE",
+            "gh" + "p_EXAMPLE",
+            "AI" + "zaEXAMPLE",
+            "AK" + "IAEXAMPLE",
+        ):
+            with self.subTest(placeholder=placeholder):
+                self.assertIsNone(combined.search(placeholder))
 
     def test_secret_content_scan_uses_git_index_not_worktree_reads(self):
         source = Path(__file__).read_text(encoding="utf-8")
