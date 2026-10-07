@@ -168,6 +168,17 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
             with self.assertRaisesRegex(analyzer.TrialError, "duplicate session_id"):
                 analyzer.read_trials(path)
 
+    def test_read_trials_rejects_duplicate_header_columns(self):
+        content = (
+            "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config,label\n"
+            "mouth_raise,1,4000,40,true,0.98,1.5.2,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,raise-detector-v1;similarity=0.955,normal_move\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "sensor-trials.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(analyzer.TrialError, "duplicate columns: label"):
+                analyzer.read_trials(path)
+
 
 if __name__ == "__main__":
     unittest.main()
