@@ -73,7 +73,11 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import pathlib
+          import re
           import subprocess
+
+          UTF8_BOM = b"\xef\xbb\xbf"
+          BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
           raw = subprocess.check_output(["git", "ls-files", "-z"])
           paths = []
@@ -93,6 +97,10 @@ jobs:
               if candidate.is_symlink():
                   raise SystemExit(f"{path}: tracked shell entrypoints must not be symlinks")
               source = candidate.read_bytes()
+              if source.startswith(UTF8_BOM):
+                  raise SystemExit(f"{path}: shell source must not start with a UTF-8 BOM")
+              if b"\x00" in source:
+                  raise SystemExit(f"{path}: shell source must not contain NUL bytes")
               if b"\r" in source:
                   raise SystemExit(
                       f"{path}: shell source must use LF line endings without carriage returns"
@@ -101,6 +109,8 @@ jobs:
                   text = source.decode("utf-8", errors="strict")
               except UnicodeDecodeError as exc:
                   raise SystemExit(f"{path}: shell source must be strict UTF-8") from exc
+              if BIDI_CONTROL_RE.search(text):
+                  raise SystemExit(f"{path}: shell source must not contain bidirectional control characters")
               lines = text.splitlines()
               if len(lines) < 2:
                   raise SystemExit(f"{path}: missing shebang/strict-mode preamble")

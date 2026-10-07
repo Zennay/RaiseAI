@@ -14,6 +14,8 @@ EXPECTED_CRITICAL = {
     "gateway/deploy/assert-idempotent-redeploy.sh",
 }
 ALLOWED_SHEBANGS = {"#!/bin/bash", "#!/usr/bin/env bash"}
+UTF8_BOM = b"\xef\xbb\xbf"
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def tracked_shell_paths():
@@ -32,12 +34,19 @@ def tracked_shell_paths():
 
 
 def decode_shell_source(raw: bytes, *, relative: str) -> str:
+    if raw.startswith(UTF8_BOM):
+        raise ValueError(f"{relative} must not start with a UTF-8 BOM")
+    if b"\x00" in raw:
+        raise ValueError(f"{relative} must not contain NUL bytes")
     if b"\r" in raw:
         raise ValueError(f"{relative} must use LF line endings without carriage returns")
     try:
-        return raw.decode("utf-8", errors="strict")
+        text = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         raise ValueError(f"{relative} must be strict UTF-8") from exc
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError(f"{relative} must not contain bidirectional control characters")
+    return text
 
 
 class ShellSurfaceContractTests(unittest.TestCase):
@@ -98,6 +107,20 @@ class ShellSurfaceContractTests(unittest.TestCase):
                 b"#!/bin/bash\nset -euo pipefail\necho \xff\n",
                 relative="fixture.command",
             )
+
+    def test_shell_source_rejects_bom_nul_and_bidirectional_controls(self):
+        cases = (
+            (UTF8_BOM + b"#!/bin/bash\nset -euo pipefail\n", "UTF-8 BOM"),
+            (b"#!/bin/bash\nset -euo pipefail\necho bad\x00value\n", "NUL bytes"),
+            (
+                '#!/bin/bash\nset -euo pipefail\necho "safe\u202eunsafe"\n'.encode("utf-8"),
+                "bidirectional control",
+            ),
+        )
+        for payload, expected in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    decode_shell_source(payload, relative="fixture.command")
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -169,7 +192,11 @@ class ShellSurfaceContractTests(unittest.TestCase):
             'candidate.is_symlink()',
             'tracked shell entrypoints must not be symlinks',
             'source = candidate.read_bytes()',
+            'UTF8_BOM = b"\\xef\\xbb\\xbf"',
+            'if source.startswith(UTF8_BOM):',
+            'if b"\\x00" in source:',
             'if b"\\r" in source:',
+            "BIDI_CONTROL_RE.search(text)",
             'shell source must use LF line endings without carriage returns',
             'source.decode("utf-8", errors="strict")',
             'subprocess.run(["bash", "-n", path], check=True)',
