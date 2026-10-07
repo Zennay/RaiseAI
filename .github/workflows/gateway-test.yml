@@ -20,14 +20,18 @@ concurrency:
 
 jobs:
   gateway:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TZ: UTC
     defaults:
       run:
         working-directory: gateway
     steps:
       - name: Checkout exact tested revision
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
