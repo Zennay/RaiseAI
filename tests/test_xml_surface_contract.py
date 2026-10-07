@@ -287,6 +287,20 @@ class XmlSurfaceContractTests(unittest.TestCase):
             ],
             "XML parser environment must not gain unreviewed interpreter controls",
         )
+        expected_env_lines = [
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ]
+        actual_env_lines = lines[env_start : env_start + len(expected_env_lines)]
+        self.assertEqual(
+            actual_env_lines,
+            expected_env_lines,
+            "XML parser environment values must remain deterministic",
+        )
 
     def test_workflow_step_and_nested_mapping_surfaces_are_exact(self):
         lines = self.workflow.splitlines()
