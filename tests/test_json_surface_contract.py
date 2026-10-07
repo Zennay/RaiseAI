@@ -1,4 +1,5 @@
 import json
+import math
 import pathlib
 import re
 import subprocess
@@ -38,12 +39,20 @@ def reject_nonfinite(value):
     raise ValueError(f"non-finite JSON number: {value}")
 
 
+def parse_finite_float(value):
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"non-finite JSON number: {value}")
+    return parsed
+
+
 def load_strict_json(path):
     text = path.read_bytes().decode("utf-8")
     return json.loads(
         text,
         object_pairs_hook=reject_duplicate_keys,
         parse_constant=reject_nonfinite,
+        parse_float=parse_finite_float,
     )
 
 
@@ -79,14 +88,16 @@ class JsonSurfaceContractTests(unittest.TestCase):
                 '{"a": 1, "a": 2}',
                 object_pairs_hook=reject_duplicate_keys,
                 parse_constant=reject_nonfinite,
+                parse_float=parse_finite_float,
             )
-        for token in ("NaN", "Infinity", "-Infinity"):
+        for token in ("NaN", "Infinity", "-Infinity", "1e400", "-1e400"):
             with self.subTest(token=token):
                 with self.assertRaisesRegex(ValueError, "non-finite JSON number"):
                     json.loads(
                         f'{{"value": {token}}}',
                         object_pairs_hook=reject_duplicate_keys,
                         parse_constant=reject_nonfinite,
+                        parse_float=parse_finite_float,
                     )
 
     def _trigger_paths(self, event):
@@ -155,6 +166,7 @@ class JsonSurfaceContractTests(unittest.TestCase):
             "tracked JSON files must not be symlinks",
             "object_pairs_hook=reject_duplicate_keys",
             "parse_constant=reject_nonfinite",
+            "parse_float=parse_finite_float",
             'decode("utf-8")',
             "python3 -m unittest tests.test_json_surface_contract",
             "git diff --exit-code -- .",
