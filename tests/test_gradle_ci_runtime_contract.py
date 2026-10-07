@@ -19,11 +19,20 @@ class GradleCiRuntimeContractTests(unittest.TestCase):
             "      LANG: C.UTF-8",
             "      LC_ALL: C.UTF-8",
             '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
             '      PYTHONDONTWRITEBYTECODE: "1"',
             "      TZ: UTC",
         ):
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
+
+    def test_python_user_site_is_disabled_once(self):
+        lines = [
+            line
+            for line in self.text.splitlines()
+            if re.match(r"^\s+PYTHONNOUSERSITE:", line)
+        ]
+        self.assertEqual(lines, ['      PYTHONNOUSERSITE: "1"'])
 
     def test_python_runtime_contract_is_explicit(self):
         command = (
