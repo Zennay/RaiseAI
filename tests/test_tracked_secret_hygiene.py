@@ -87,7 +87,7 @@ def gitignore_matches(path: str) -> bool:
 
 
 def cached_grep_paths(patterns: tuple[str, ...], *, extended: bool) -> list[str]:
-    args = ["grep", "--cached", "-I", "-l", "-z"]
+    args = ["grep", "--cached", "-a", "-l", "-z"]
     args.append("-E" if extended else "-F")
     for pattern in patterns:
         args.extend(["-e", pattern])
@@ -196,7 +196,8 @@ class TrackedSecretHygieneTests(unittest.TestCase):
 
     def test_secret_content_scan_uses_git_index_not_worktree_reads(self):
         source = inspect.getsource(cached_grep_paths)
-        self.assertIn('"grep", "--cached"', source)
+        self.assertIn('"grep", "--cached", "-a", "-l", "-z"', source)
+        self.assertNotIn('"-I"', source)
         self.assertNotIn(".open(", source)
         self.assertNotIn(".is_file()", source)
 
