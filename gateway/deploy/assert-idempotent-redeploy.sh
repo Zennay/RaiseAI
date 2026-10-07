@@ -26,9 +26,20 @@ fi
 
 before_token="$(read_env_value RAISE_GATEWAY_TOKEN)"
 before_spki="$(spki_sha256 "$CERT_FILE")"
+before_revision="$(read_env_value RAISE_DEPLOY_REVISION)"
 
 if [ "${#before_token}" -lt 32 ] || [ "${#before_spki}" -ne 64 ]; then
   echo "Invalid pre-redeploy credential state" >&2
+  exit 1
+fi
+
+if [[ ! "$before_revision" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
+  echo "Invalid pre-redeploy revision state" >&2
+  exit 1
+fi
+
+if [ -n "$EXPECTED_REVISION" ] && [ "$before_revision" != "$EXPECTED_REVISION" ]; then
+  echo "Idempotency failure: pre-redeploy revision does not match expected revision" >&2
   exit 1
 fi
 
@@ -48,8 +59,13 @@ if [ "$before_spki" != "$after_spki" ]; then
   exit 1
 fi
 
-if [ -n "$EXPECTED_REVISION" ] && [ "$after_revision" != "$EXPECTED_REVISION" ]; then
+if [ "$before_revision" != "$after_revision" ]; then
   echo "Idempotency failure: deploy revision changed" >&2
+  exit 1
+fi
+
+if [ -n "$EXPECTED_REVISION" ] && [ "$after_revision" != "$EXPECTED_REVISION" ]; then
+  echo "Idempotency failure: post-redeploy revision does not match expected revision" >&2
   exit 1
 fi
 
