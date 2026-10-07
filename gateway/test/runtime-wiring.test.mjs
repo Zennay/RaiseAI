@@ -54,6 +54,33 @@ test("rejects a stale or miswired loaded systemd service", () => {
   assert.equal(report.checks.environment_file, false);
 });
 
+test("rejects prefix-lookalike and extra runtime wiring", () => {
+  for (const [label, systemctlOutput, failedCheck] of [
+    [
+      "server path suffix",
+      healthySystemctl().replace(serverFile, serverFile + ".old"),
+      "exec_start"
+    ],
+    [
+      "extra exec argument",
+      healthySystemctl().replace(serverFile + " ;", serverFile + " --unsafe ;"),
+      "exec_start"
+    ],
+    [
+      "additional environment file",
+      healthySystemctl().replace(
+        "EnvironmentFiles=" + envFile + " (ignore_errors=no)",
+        "EnvironmentFiles=" + envFile + " (ignore_errors=no) /tmp/override.env (ignore_errors=no)"
+      ),
+      "environment_file"
+    ]
+  ]) {
+    const report = attestRuntimeWiring({ systemctlOutput, home });
+    assert.equal(report.ok, false, label);
+    assert.equal(report.checks[failedCheck], false, label);
+  }
+});
+
 test("rejects a loaded service with weakened systemd hardening", () => {
   for (const [property, weakened] of [
     ["NoNewPrivileges=yes", "NoNewPrivileges=no"],

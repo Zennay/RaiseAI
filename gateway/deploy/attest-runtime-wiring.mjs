@@ -33,14 +33,19 @@ export function attestRuntimeWiring({
   const properties = parseProperties(systemctlOutput);
   const execStart = properties.ExecStart ?? "";
   const environmentFiles = properties.EnvironmentFiles ?? "";
+  const execPath = execStart.match(/(?:^| )path=([^; ]+) ;/u)?.[1] ?? "";
+  const execArgv = execStart.match(/(?:^| )argv\[\]=([^;]*) ;/u)?.[1] ?? "";
+  const execArgvCount = (execStart.match(/argv\[\]=/gu) ?? []).length;
 
   const checks = {
     fragment_path: properties.FragmentPath === expected.unitFile,
     working_directory: properties.WorkingDirectory === expected.installDir,
     exec_start:
-      execStart.includes("path=/usr/bin/node") &&
-      execStart.includes(expected.serverFile),
-    environment_file: environmentFiles.includes(expected.envFile),
+      execPath === "/usr/bin/node" &&
+      execArgv === `/usr/bin/node ${expected.serverFile}` &&
+      execArgvCount === 1,
+    environment_file:
+      environmentFiles === `${expected.envFile} (ignore_errors=no)`,
     no_new_privileges: properties.NoNewPrivileges === "yes",
     private_tmp: properties.PrivateTmp === "yes",
     protect_system: properties.ProtectSystem === "strict"
