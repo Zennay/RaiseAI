@@ -1,4 +1,4 @@
-name: macOS ADB auto-connect contract CI
+name: macOS Watch operator contract CI
 
 on:
   push:
@@ -6,12 +6,16 @@ on:
       - main
     paths:
       - "install-mac-adb-autoconnect.command"
+      - "login-from-mac.command"
       - "tests/test_mac_adb_autoconnect_contract.py"
+      - "tests/test_mac_watch_login_contract.py"
       - ".github/workflows/mac-adb-autoconnect-contract.yml"
   pull_request:
     paths:
       - "install-mac-adb-autoconnect.command"
+      - "login-from-mac.command"
       - "tests/test_mac_adb_autoconnect_contract.py"
+      - "tests/test_mac_watch_login_contract.py"
       - ".github/workflows/mac-adb-autoconnect-contract.yml"
 
 permissions:
@@ -40,9 +44,9 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
-      - name: Validate macOS ADB auto-connect contract
+      - name: Validate macOS Watch operator contracts
         shell: bash
         run: |
           set -euo pipefail
-          bash -n install-mac-adb-autoconnect.command
-          python3 -m unittest tests.test_mac_adb_autoconnect_contract
+          bash -n install-mac-adb-autoconnect.command login-from-mac.command
+          python3 -m unittest tests.test_mac_adb_autoconnect_contract tests.test_mac_watch_login_contract

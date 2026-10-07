@@ -29,21 +29,34 @@ mapfile_devices() {
   "$ADB" devices | awk 'NR > 1 && $2 == "device" {print $1}'
 }
 
-WATCH=""
+WATCHES=()
 while IFS= read -r serial; do
   [ -n "$serial" ] || continue
-  characteristics="$("$ADB" -s "$serial" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r')"
+  characteristics="$("$ADB" -s "$serial" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+  model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
   if echo "$characteristics" | grep -qi "watch"; then
-    WATCH="$serial"
-    break
+    case "$model" in
+      SM-L315F|SM_L315F)
+        WATCHES+=("$serial")
+        ;;
+    esac
   fi
 done < <(mapfile_devices)
 
-if [ -z "$WATCH" ]; then
-  echo "Geen verbonden Wear OS-watch gevonden."
-  echo "Zet Wireless debugging aan en verbind eerst met: adb connect WATCH_IP:PORT"
-  exit 1
-fi
+case "${#WATCHES[@]}" in
+  0)
+    echo "Geen verbonden Galaxy Watch 7 (SM-L315F) gevonden."
+    echo "Zet Wireless debugging aan en verbind eerst met: adb connect WATCH_IP:PORT"
+    exit 1
+    ;;
+  1)
+    WATCH="${WATCHES[0]}"
+    ;;
+  *)
+    echo "Meerdere Galaxy Watch 7-apparaten gevonden. Verbind precies één Watch voordat je de login opent."
+    exit 1
+    ;;
+esac
 
 echo "Watch gevonden: $WATCH"
 
