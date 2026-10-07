@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "prepare-physical-share-bundle.py"
 SPEC = importlib.util.spec_from_file_location("physical_share_bundle", MODULE_PATH)
@@ -110,6 +111,23 @@ class PhysicalShareBundleTests(unittest.TestCase):
                 data = json.loads((output / name).read_text(encoding="utf-8"))
                 self.assertIsInstance(data, dict)
                 self.assertEqual((output / name).stat().st_mode & 0o777, 0o600)
+
+    def test_partial_os_writes_still_publish_complete_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = self.write_session(root)
+            output = root / "share"
+            real_write = bundle.os.write
+
+            def short_write(fd, data):
+                return real_write(fd, data[: max(1, min(len(data), 7))])
+
+            with mock.patch.object(bundle.os, "write", side_effect=short_write):
+                bundle.prepare_bundle(session, output)
+
+            for name in bundle.SUMMARY_FILES:
+                payload = json.loads((output / name).read_text(encoding="utf-8"))
+                self.assertIsInstance(payload, dict)
 
     def test_cli_publishes_bundle_and_machine_readable_success(self):
         with tempfile.TemporaryDirectory() as tmp:
