@@ -442,6 +442,31 @@ class CssSurfaceContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, self.workflow)
 
+    def test_workflow_rejects_quoted_mapping_keys(self):
+        quoted_mapping_key = re.compile(
+            r'''(?m)^ {0,10}(?:"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+')\s*:'''
+        )
+        fixtures = (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "timeout-minutes": 30',
+            "  'pull_request_target':",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                self.assertRegex(
+                    fixture,
+                    quoted_mapping_key,
+                    "regression fixture must exercise the quoted-key detector",
+                )
+
+        self.assertNotRegex(
+            self.workflow,
+            quoted_mapping_key,
+            "quoted YAML mapping keys can bypass the CSS workflow exact-surface parsers",
+        )
+
+
     def test_all_run_steps_are_explicit_strict_bash(self):
         lines = self.workflow.splitlines()
         run_indices = [index for index, line in enumerate(lines) if line == "        run: |"]
