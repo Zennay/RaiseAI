@@ -61,7 +61,11 @@ def load_json_document(path: Path, label: str) -> Any:
         hasattr(os, "O_NOFOLLOW"),
         f"{label} cannot be read safely on this platform",
     )
-    flags = os.O_RDONLY | os.O_NOFOLLOW
+    _require(
+        hasattr(os, "O_NONBLOCK"),
+        f"{label} cannot be read non-blockingly on this platform",
+    )
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
 
