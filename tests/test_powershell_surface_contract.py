@@ -114,6 +114,23 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
 
+    def test_workflow_pins_exact_powershell_runtime(self):
+        command = (
+            'test "$(pwsh -NoLogo -NoProfile -NonInteractive -Command '
+            "'$PSVersionTable.PSVersion.ToString()')\" = \"7.6.6\""
+        )
+        self.assertEqual(
+            self.workflow.count(command),
+            1,
+            "PowerShell parser runtime must remain pinned to reviewed 7.6.6",
+        )
+        self.assertNotIn(
+            "pwsh -NoLogo -NoProfile -NonInteractive -Command "
+            "'$PSVersionTable.PSVersion.ToString()'\n",
+            self.workflow,
+            "runtime probe must fail closed instead of only printing the version",
+        )
+
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
