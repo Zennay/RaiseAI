@@ -29,6 +29,16 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
     def test_hosted_runtime_is_reproducible(self):
         self.assertIn("runs-on: ubuntu-24.04", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
+        self.assertEqual(self.text.count("- name: Pin CPython 3.12 runtime"), 1)
+        self.assertEqual(
+            self.text.count(
+                "python3 -c 'import platform, sys; "
+                "expected=(3, 12); actual=sys.version_info[:2]; "
+                "assert platform.python_implementation()==\"CPython\" and actual == expected, "
+                "f\"expected CPython 3.12, got {platform.python_implementation()} {sys.version}\"'"
+            ),
+            1,
+        )
         for line in (
             "      LANG: C.UTF-8",
             "      LC_ALL: C.UTF-8",
