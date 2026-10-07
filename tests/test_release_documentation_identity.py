@@ -21,6 +21,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
 
     def test_readme_next_gate_pins_exact_preserved_carrier_identity(self):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertEqual(text.count("## Next proof gate\n"), 1)
         next_gate = text.split("## Next proof gate\n", 1)[1].split("\n## ", 1)[0]
         required = (
             f"merged-main revision `{FROZEN_SOURCE_REVISION}`",
