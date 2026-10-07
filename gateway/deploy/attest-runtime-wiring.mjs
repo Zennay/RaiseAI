@@ -40,7 +40,10 @@ export function attestRuntimeWiring({
     exec_start:
       execStart.includes("path=/usr/bin/node") &&
       execStart.includes(expected.serverFile),
-    environment_file: environmentFiles.includes(expected.envFile)
+    environment_file: environmentFiles.includes(expected.envFile),
+    no_new_privileges: properties.NoNewPrivileges === "yes",
+    private_tmp: properties.PrivateTmp === "yes",
+    protect_system: properties.ProtectSystem === "strict"
   };
 
   const activeState = properties.ActiveState ?? null;
@@ -92,6 +95,9 @@ function systemctlShow() {
       "--property=WorkingDirectory",
       "--property=ExecStart",
       "--property=EnvironmentFiles",
+      "--property=NoNewPrivileges",
+      "--property=PrivateTmp",
+      "--property=ProtectSystem",
       "--property=ActiveState",
       "--property=SubState",
       "--no-pager"
