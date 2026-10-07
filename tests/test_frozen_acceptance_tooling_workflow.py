@@ -79,7 +79,7 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
         token_lines = [
             line
             for line in self.text.splitlines()
-            if "GITHUB_TOKEN:" in line
+            if re.match(r"^\s+GITHUB_TOKEN:\s*", line)
         ]
         self.assertEqual(
             token_lines,
