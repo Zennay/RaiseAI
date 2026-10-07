@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm test
+          node --test
       - name: Deployment script syntax
         shell: bash
         run: |
