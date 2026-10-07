@@ -133,6 +133,7 @@ async function readBoundedJsonResponse(response) {
       chunks.push(value);
     }
   } catch {
+    await reader.cancel().catch(() => {});
     return { ok: false, json: null };
   }
 
