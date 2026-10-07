@@ -67,6 +67,32 @@ class FailingContract(unittest.TestCase):
         )
         self.assertEqual(exit_code, 1)
 
+    def test_discovery_system_exit_zero_is_captured_as_error(self):
+        exit_code, output = self.run_temporary_suite(
+            """
+raise SystemExit(0)
+""",
+            "test_runner_import_exit_case.py",
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("SystemExit: 0", output)
+        self.assertIn("FAILED (errors=1)", output)
+
+    def test_unexpected_success_returns_nonzero(self):
+        exit_code, output = self.run_temporary_suite(
+            """
+import unittest
+
+class UnexpectedSuccessContract(unittest.TestCase):
+    @unittest.expectedFailure
+    def test_must_not_be_accepted_when_it_starts_passing(self):
+        self.assertTrue(True)
+""",
+            "test_runner_unexpected_success_case.py",
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("unexpected success", output.lower())
+
     def test_expected_failure_returns_nonzero_and_reports_test_identity(self):
         exit_code, output = self.run_temporary_suite(
             """
