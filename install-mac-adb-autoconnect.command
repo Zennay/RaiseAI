@@ -34,10 +34,12 @@ find_watch() {
   "$ADB" devices -l 2>/dev/null | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
     [ -z "${serial:-}" ] && continue
     model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
-    if [ "$model" = "SM_L315F" ]; then
-      printf '%s\n' "$serial"
-      return 0
-    fi
+    case "$model" in
+      SM-L315F|SM_L315F)
+        printf '%s\n' "$serial"
+        return 0
+        ;;
+    esac
   done
 }
 
