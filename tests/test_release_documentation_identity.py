@@ -255,5 +255,39 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
         )
 
 
+    def test_physical_acceptance_default_share_set_excludes_raw_identity_and_notes(self):
+        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        share_section = text.split("Default GitHub issue #34 share set:\n", 1)[1].split(
+            "\nAttach or link only the reviewed safe evidence", 1
+        )[0]
+        self.assertEqual(
+            share_section.count("- `e2e-result.json`"),
+            1,
+            "E2E summary must be in the default share set",
+        )
+        self.assertEqual(
+            share_section.count("- `v1-result.json`"),
+            1,
+            "V1 summary must be in the default share set",
+        )
+        self.assertEqual(
+            share_section.count("- `quality-result.json`"),
+            1,
+            "quality summary must be in the default share set",
+        )
+        for local_only in (
+            "session.json",
+            "operator-observations.json",
+            "raw diagnostics directories",
+            "raw trace/trial CSV files",
+        ):
+            with self.subTest(local_only=local_only):
+                self.assertIn(local_only, share_section)
+        self.assertIn(
+            "session.json` contains the Watch serial and is not part of the default share set",
+            share_section,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
