@@ -25,7 +25,6 @@ on:
       - "tests/test_physical_observation_template.py"
       - "tests/test_physical_observation_validator.py"
       - "tests/test_physical_validation_cli.py"
-      - "tests/test_physical_validation_cli.py"
       - "tests/test_quality_tooling_workflow.py"
       - "tests/test_watch_apk_identity.py"
       - "tests/test_watch_e2e_evidence_validator.py"
