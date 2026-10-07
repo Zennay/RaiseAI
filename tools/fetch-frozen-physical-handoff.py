@@ -179,6 +179,8 @@ class _SafeReleaseRedirect(urllib.request.HTTPRedirectHandler):
 
         if target.scheme.lower() != "https" or not target.hostname:
             raise HandoffError("Refusing non-HTTPS Release asset redirect")
+        if target.username is not None or target.password is not None:
+            raise HandoffError("Refusing Release asset redirect with URL credentials")
 
         source_origin = (
             source.scheme.lower(),

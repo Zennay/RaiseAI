@@ -100,6 +100,22 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
                 "http://release-assets.githubusercontent.com/example/handoff.zip",
             )
 
+    def test_release_redirect_rejects_url_credentials(self):
+        request = urllib.request.Request(
+            MODULE.ASSET_API_URL,
+            headers={"Authorization": "Bearer secret-test-token"},
+        )
+
+        with self.assertRaisesRegex(MODULE.HandoffError, "URL credentials"):
+            MODULE._SafeReleaseRedirect().redirect_request(
+                request,
+                None,
+                302,
+                "Found",
+                {},
+                "https://attacker:secret@release-assets.githubusercontent.com/example/handoff.zip",
+            )
+
     def test_download_accepts_exact_frozen_asset_size(self):
         with tempfile.TemporaryDirectory() as tmp:
             destination = Path(tmp) / "handoff.zip"
