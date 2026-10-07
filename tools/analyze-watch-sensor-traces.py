@@ -13,6 +13,8 @@ import argparse
 import csv
 import json
 import math
+import os
+import stat
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -66,13 +68,27 @@ def _parse_float(row: dict[str, str], key: str, line: int) -> float:
 
 
 def read_samples(path: Path) -> list[Sample]:
-    try:
-        handle = path.open("r", encoding="utf-8", newline="")
-    except OSError as exc:
-        raise TraceError(str(exc)) from exc
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise TraceError("safe no-follow trace reads are unavailable on this platform")
 
-    with handle:
-        reader = csv.DictReader(handle)
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise TraceError(f"trace CSV must be a regular non-symlink file: {exc}") from exc
+
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise TraceError("trace CSV must be a regular non-symlink file")
+        handle = os.fdopen(fd, "r", encoding="utf-8", newline="", closefd=False)
+        try:
+            reader = csv.DictReader(handle)
         if reader.fieldnames is None:
             raise TraceError("trace CSV has no header")
         if len(reader.fieldnames) != len(set(reader.fieldnames)):
@@ -113,6 +129,10 @@ def read_samples(path: Path) -> list[Sample]:
                     z=_parse_float(row, "z", line),
                 )
             )
+        finally:
+            handle.close()
+    finally:
+        os.close(fd)
 
     if not samples:
         raise TraceError("trace CSV contains no samples")
