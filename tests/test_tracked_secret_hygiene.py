@@ -1,4 +1,5 @@
 from pathlib import Path, PurePosixPath
+import inspect
 import re
 import subprocess
 import unittest
@@ -176,9 +177,9 @@ class TrackedSecretHygieneTests(unittest.TestCase):
                 self.assertIsNone(combined.search(placeholder))
 
     def test_secret_content_scan_uses_git_index_not_worktree_reads(self):
-        source = Path(__file__).read_text(encoding="utf-8")
+        source = inspect.getsource(cached_grep_paths)
         self.assertIn('"grep", "--cached"', source)
-        self.assertNotIn('path.open("rb")', source)
+        self.assertNotIn(".open(", source)
         self.assertNotIn(".is_file()", source)
 
     def test_gitignore_retains_defense_in_depth_patterns(self):
