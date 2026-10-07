@@ -398,6 +398,56 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
             self.assertFalse(target.exists())
             self.assertIn("refusing to overwrite", output.getvalue())
 
+    def test_cli_output_rejects_symlinked_parent_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            real_output = root / "real-output"
+            real_output.mkdir()
+            linked_output = root / "linked-output"
+            linked_output.symlink_to(real_output, target_is_directory=True)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            result = linked_output / "quality-result.json"
+            session.write_text(json.dumps(session_payload()), encoding="utf-8")
+            observations.write_text(json.dumps(observation_payload()), encoding="utf-8")
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = validator.main([str(session), str(observations), "--output", str(result)])
+
+            self.assertEqual(code, 1)
+            self.assertFalse((real_output / "quality-result.json").exists())
+            self.assertFalse(result.exists())
+            self.assertIn("valid", json.loads(output.getvalue()))
+
+    def test_output_publish_stays_bound_to_opened_parent_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            output_dir = root / "output"
+            output_dir.mkdir()
+            moved_dir = root / "opened-output"
+            replacement_dir = root / "replacement-output"
+            replacement_dir.mkdir()
+            result = output_dir / "quality-result.json"
+            real_open = validator.os.open
+            parent_opened = False
+
+            def open_then_replace_parent(target, flags, *args, **kwargs):
+                nonlocal parent_opened
+                fd = real_open(target, flags, *args, **kwargs)
+                if not parent_opened and pathlib.Path(target) == output_dir and "dir_fd" not in kwargs:
+                    parent_opened = True
+                    output_dir.rename(moved_dir)
+                    replacement_dir.rename(output_dir)
+                return fd
+
+            with mock.patch.object(validator.os, "open", side_effect=open_then_replace_parent):
+                validator.write_new_json_atomically(result, {"valid": True})
+
+            self.assertTrue((moved_dir / "quality-result.json").exists())
+            self.assertFalse((output_dir / "quality-result.json").exists())
+            self.assertTrue(json.loads((moved_dir / "quality-result.json").read_text())["valid"])
+
     def test_cli_failure_does_not_echo_sensitive_observation_values(self):
         secret = "private spoken content must never be echoed"
         with tempfile.TemporaryDirectory() as tmp:
