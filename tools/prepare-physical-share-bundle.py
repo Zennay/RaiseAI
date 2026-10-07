@@ -125,6 +125,15 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _write_all(fd: int, data: bytes) -> None:
+    view = memoryview(data)
+    written = 0
+    while written < len(view):
+        count = os.write(fd, view[written:])
+        _require(count > 0, "bundle output write made no progress")
+        written += count
+
+
 def _load_json(path: Path, label: str) -> Any:
     _require(hasattr(os, "O_NOFOLLOW"), "safe no-follow reads are unavailable on this platform")
     flags = os.O_RDONLY | os.O_NOFOLLOW
@@ -394,7 +403,7 @@ def prepare_bundle(session_dir: Path, output_dir: Path) -> None:
                 flags |= os.O_CLOEXEC
             fd = os.open(target, flags, stat.S_IRUSR | stat.S_IWUSR)
             try:
-                os.write(fd, serialized.encode("utf-8"))
+                _write_all(fd, serialized.encode("utf-8"))
                 os.fsync(fd)
             finally:
                 os.close(fd)
