@@ -3,6 +3,16 @@ import { evaluateReadinessResponse } from "./readiness-policy.mjs";
 export const MAX_READINESS_BODY_BYTES = 64 * 1024;
 export const MAX_READINESS_REQUEST_MS = 5_000;
 
+export function readinessRequestBudget(remainingMs) {
+  if (!Number.isSafeInteger(remainingMs) || remainingMs < 1) {
+    throw new TypeError(
+      "readiness remaining budget must be a positive safe integer"
+    );
+  }
+
+  return Math.min(MAX_READINESS_REQUEST_MS, remainingMs);
+}
+
 export function armReadinessRequestDeadline(
   request,
   {
