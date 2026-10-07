@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1";
 const SETUP_NODE_SHA = "820762786026740c76f36085b0efc47a31fe5020";
+const NODE_VERSION = "22.23.3";
+const NPM_VERSION = "10.9.9";
 const UPLOAD_ARTIFACT_SHA = "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
@@ -58,8 +60,20 @@ test("gateway test CI pins external actions and exact PR-head checkout", () => {
     "gateway test setup-node must stay on the audited Node 24 release",
   );
   assert.match(TEST_WORKFLOW, /runs-on:\s*ubuntu-24\.04\b/);
-  assert.match(TEST_WORKFLOW, /^\s*node-version:\s*"22"\s*$/m);
+  assert.equal(
+    TEST_WORKFLOW.split(`          node-version: "${NODE_VERSION}"`).length - 1,
+    1,
+    "gateway test Node runtime must be pinned to the proven exact patch",
+  );
   assert.match(TEST_WORKFLOW, /package-manager-cache:\s*false\b/);
+  assert.ok(
+    TEST_WORKFLOW.includes(`          test "$(node --version)" = "v${NODE_VERSION}"`),
+    "gateway test CI must verify the exact Node runtime before tests",
+  );
+  assert.ok(
+    TEST_WORKFLOW.includes(`          test "$(npm --version)" = "${NPM_VERSION}"`),
+    "gateway test CI must verify the npm version bundled with the pinned Node runtime",
+  );
   assert.doesNotMatch(TEST_WORKFLOW, /ubuntu-latest/);
   for (const line of [
     "      LANG: C.UTF-8",
@@ -106,6 +120,7 @@ test("gateway test run steps use explicit strict Bash", () => {
 
   for (const name of [
     "Verify exact tested revision",
+    "Verify Node runtime",
     "Gateway unit tests",
     "Deployment script syntax",
     "Verify worktree remains clean",
