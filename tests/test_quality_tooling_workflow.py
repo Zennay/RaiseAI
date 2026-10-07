@@ -5,6 +5,14 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-tooling-test.yml"
+COMMAND_ENTRYPOINTS = [
+    "pull-diagnostics.command",
+    "pull-watch-data.command",
+    "install-watch-apk.command",
+    "provision-watch-gateway.command",
+    "physical-validation.command",
+    "start-frozen-acceptance.command",
+]
 
 
 class QualityToolingWorkflowContractTests(unittest.TestCase):
@@ -30,12 +38,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
     def test_push_and_pull_request_filters_cover_quality_surface(self):
         paths = [
-            "pull-diagnostics.command",
-            "pull-watch-data.command",
-            "install-watch-apk.command",
-            "provision-watch-gateway.command",
-            "physical-validation.command",
-            "start-frozen-acceptance.command",
+            *COMMAND_ENTRYPOINTS,
             "tools/analyze-watch-sensor-traces.py",
             "tools/analyze-watch-sensor-trials.py",
             "tools/create-physical-observation-template.py",
@@ -64,22 +67,26 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 )
 
     def test_checks_shell_syntax_for_all_command_entrypoints(self):
-        scripts = [
-            "pull-diagnostics.command",
-            "pull-watch-data.command",
-            "install-watch-apk.command",
-            "provision-watch-gateway.command",
-            "physical-validation.command",
-            "start-frozen-acceptance.command",
-        ]
         self.assertIn("- name: Shell syntax", self.text)
         self.assertIn("bash -n", self.text)
-        for path in scripts:
+        for path in COMMAND_ENTRYPOINTS:
             with self.subTest(path=path):
                 self.assertGreaterEqual(
                     self.text.count(path),
                     3,
                     f"{path} must be trigger-covered and syntax-checked",
+                )
+
+    def test_command_entrypoints_keep_bash_and_strict_mode(self):
+        for path in COMMAND_ENTRYPOINTS:
+            with self.subTest(path=path):
+                lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
+                self.assertGreaterEqual(len(lines), 2)
+                self.assertEqual(lines[0], "#!/bin/bash")
+                self.assertEqual(
+                    lines[1],
+                    "set -euo pipefail",
+                    f"{path} must fail closed on command, unset-variable, and pipeline errors",
                 )
 
     def test_compiles_all_python_quality_tools(self):
