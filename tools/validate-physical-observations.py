@@ -38,6 +38,7 @@ OBSERVATION_KEYS = {
     "visible_ux_failures",
 }
 MAX_JSON_BYTES = 64 * 1024
+MAX_FUTURE_SKEW_SECONDS = 60
 APP_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -127,7 +128,12 @@ def _require_sha(value: Any, field: str, length: int) -> str:
     return normalized
 
 
-def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
+def validate_observations(
+    session: Any,
+    observations: Any,
+    *,
+    now_utc: dt.datetime | None = None,
+) -> dict[str, Any]:
     _require(isinstance(session, dict), "session root must be a JSON object")
     _require(isinstance(observations, dict), "observations root must be a JSON object")
     _require(
@@ -169,6 +175,14 @@ def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
     recorded_at = _parse_timestamp(observations["recorded_at_utc"], "recorded_at_utc")
     started_at = _parse_timestamp(session["started_at_utc"], "session started_at_utc")
     _require(recorded_at >= started_at, "observations were recorded before the physical session started")
+
+    now = now_utc or dt.datetime.now(dt.timezone.utc)
+    _require(now.tzinfo is not None, "now_utc must include a timezone")
+    age_seconds = (now.astimezone(dt.timezone.utc) - recorded_at).total_seconds()
+    _require(
+        age_seconds >= -MAX_FUTURE_SKEW_SECONDS,
+        f"recorded_at_utc is more than {MAX_FUTURE_SKEW_SECONDS}s in the future",
+    )
 
     for key in ("screen_off_tested", "background_tested", "ux_failures_reviewed"):
         _require(type(observations[key]) is bool, f"{key} must be boolean")
