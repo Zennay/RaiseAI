@@ -15,6 +15,8 @@ LEGACY_FOREIGN_WORKFLOWS = {
     "lightup-pr13-exact-head-proof-20261005.yml",
     "lightup-pr17-exact-head-proof-20261005.yml",
     "lightup-pr21-exact-head-proof-20261005.yml",
+    "probe-zcloud-dashboard-external.yml",
+    "recover-zcloud-dashboard-20261004.yml",
     "zcloud-emergency-queue-preempt-20261006.yml",
     "zcloud-emergency-restore-20261006.yml",
     "zcloud-listener-recovery-20261004.yml",
@@ -42,7 +44,10 @@ def foreign_workflows() -> list[Path]:
         for path in WORKFLOWS.iterdir()
         if path.is_file()
         and path.suffix in {".yml", ".yaml"}
-        and path.name.startswith(FOREIGN_PREFIXES)
+        and (
+            path.name in LEGACY_FOREIGN_WORKFLOWS
+            or path.name.startswith(FOREIGN_PREFIXES)
+        )
     )
 
 
@@ -58,7 +63,7 @@ def push_section(text: str) -> list[str]:
             for candidate in lines[index + 1 :]:
                 if candidate and not candidate.startswith(" "):
                     break
-                if re.match(r"^  [A-Za-z_][A-Za-z0-9_-]*:\\s*$", candidate):
+                if re.match(r"^  [A-Za-z_][A-Za-z0-9_-]*:\s*$", candidate):
                     break
                 section.append(candidate)
             return section
@@ -93,7 +98,6 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             0,
             "project-boundary contract must inspect the remaining legacy foreign workflows",
         )
-
 
     def test_legacy_push_triggers_are_self_scoped_to_main(self):
         for path in foreign_workflows():
