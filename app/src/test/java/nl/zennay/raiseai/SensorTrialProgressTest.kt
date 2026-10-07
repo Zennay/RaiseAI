@@ -131,6 +131,9 @@ class SensorTrialProgressTest {
 
         assertTrue(progress.unexpectedEvidenceIdentity)
         assertFalse(progress.v1GatePassed)
+        assertEquals(0, progress.mouthTrials)
+        assertEquals(0, progress.nonTriggerTrials)
+        assertEquals(2, progress.rejectedTrials)
         assertEquals(
             0,
             SensorTrialRecorder.trialCount(
