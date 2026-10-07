@@ -57,6 +57,8 @@ test("gateway test CI pins external actions and exact PR-head checkout", () => {
     "gateway test setup-node must stay on the audited Node 24 release",
   );
   assert.match(TEST_WORKFLOW, /runs-on:\s*ubuntu-24\.04\b/);
+  assert.match(TEST_WORKFLOW, /^\s*node-version:\s*"22"\s*$/m);
+  assert.match(TEST_WORKFLOW, /package-manager-cache:\s*false\b/);
   assert.doesNotMatch(TEST_WORKFLOW, /ubuntu-latest/);
   for (const line of [
     "      LANG: C.UTF-8",
@@ -92,6 +94,32 @@ test("gateway test CI pins external actions and exact PR-head checkout", () => {
   }
   assert.match(TEST_WORKFLOW, /cancel-in-progress:\s*true\b/);
   assert.match(TEST_WORKFLOW, /timeout-minutes:\s*15\b/);
+});
+
+
+test("gateway test run steps use explicit strict Bash", () => {
+  const lines = TEST_WORKFLOW.split("\n");
+  const stepStarts = lines
+    .map((line, index) => line.startsWith("      - name:") ? index : -1)
+    .filter((index) => index >= 0);
+
+  for (const name of [
+    "Verify exact tested revision",
+    "Gateway unit tests",
+    "Deployment script syntax",
+  ]) {
+    const start = lines.indexOf(`      - name: ${name}`);
+    assert.notEqual(start, -1, `missing step: ${name}`);
+    const next = stepStarts.find((index) => index > start) ?? lines.length;
+    const step = lines.slice(start, next);
+    const runIndex = step.indexOf("        run: |");
+
+    assert.ok(step.includes("        shell: bash"), `${name} must select Bash explicitly`);
+    assert.notEqual(runIndex, -1, `${name} must use a block run body`);
+    assert.equal(step[runIndex + 1], "          set -euo pipefail");
+  }
+
+  assert.doesNotMatch(TEST_WORKFLOW, /continue-on-error:\s*true\b/);
 });
 
 test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () => {
