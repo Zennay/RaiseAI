@@ -82,6 +82,12 @@ if (-not $watchFeature) {
     throw "ADB target $serial meldt zich niet als Wear OS watch."
 }
 
+$model = (adb -s $serial shell getprop ro.product.model).Trim()
+Write-Host "Watch model: $model"
+if ($model -ne "SM-L315F" -and $model -ne "SM_L315F") {
+    throw "Onverwacht Watch-model: $model (verwacht Galaxy Watch 7 SM-L315F)."
+}
+
 $abi = (adb -s $serial shell getprop ro.product.cpu.abi).Trim()
 Write-Host "Watch ABI: $abi"
 if ($abi -ne "armeabi-v7a") {
