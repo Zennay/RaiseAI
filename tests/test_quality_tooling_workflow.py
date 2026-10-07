@@ -148,8 +148,19 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("cancel-in-progress: true", self.text)
 
+    def test_hosted_runtime_is_reproducible(self):
+        self.assertIn("runs-on: ubuntu-24.04", self.text)
+        self.assertNotIn("ubuntu-latest", self.text)
+        self.assertIn("LANG: C.UTF-8", self.text)
+        self.assertIn('PYTHONHASHSEED: "1"', self.text)
+        self.assertIn('PYTHONDONTWRITEBYTECODE: "1"', self.text)
+        self.assertIn("TZ: UTC", self.text)
+        self.assertIn("- name: Verify Python runtime", self.text)
+        self.assertIn('platform.python_implementation() == "CPython"', self.text)
+        self.assertIn("sys.version_info[:2] == (3, 12)", self.text)
+
     def test_job_stays_github_hosted_and_secret_free(self):
-        self.assertIn("runs-on: ubuntu-latest", self.text)
+        self.assertRegex(self.text, r"runs-on:\s*ubuntu-[0-9]+\.[0-9]+")
         self.assertNotIn("self-hosted", self.text)
         self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")
         self.assertNotRegex(self.text, r"(?m)^\s*environment\s*:")
