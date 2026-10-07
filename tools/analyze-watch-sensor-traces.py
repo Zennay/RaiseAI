@@ -238,6 +238,14 @@ def main(argv: list[str] | None = None) -> int:
             required_raises=args.required_raises,
             required_non_triggers=args.required_non_triggers,
         )
+    except UnicodeDecodeError:
+        print(
+            json.dumps(
+                {"valid": False, "reason": "trace CSV must be valid UTF-8"},
+                separators=(",", ":"),
+            )
+        )
+        return 2
     except TraceError as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
         return 2
