@@ -63,6 +63,20 @@ class SensorTrialCsvPolicyTest {
     }
 
     @Test
+    fun rejectsSimilarityOutsideDetectorDomain() {
+        assertNull(
+            SensorTrialCsvPolicy.parseRow(
+                "mouth_raise,123,4000,40,true,1.01,1.5.2," + revision + "," + detector
+            )
+        )
+        assertNull(
+            SensorTrialCsvPolicy.parseRow(
+                "mouth_raise,123,4000,40,true,-1.01,1.5.2," + revision + "," + detector
+            )
+        )
+    }
+
+    @Test
     fun rejectsNonFiniteSimilarityAndMalformedRevision() {
         assertNull(
             SensorTrialCsvPolicy.parseRow(
