@@ -1,5 +1,7 @@
 # Raise AI — inloggen via je Mac
 
+> **Alleen voor de legacy ChatGPT Web-fallback.** Deze Mac-loginroute is niet de huidige fysieke acceptance-route. Voor GitHub issue #34 gebruik je de bevroren Raise AI v1.5.2-handoff van bron `8f719bb273f9b997848864f342598e7df5f090e5` via `bash ./start-frozen-acceptance.command [gateway-profile]`, zoals beschreven in `START-HERE.md`.
+
 De veiligste "login bridge" voor Raise AI is geen cookie-export en geen eigen accountserver.
 De Watch blijft zelf ingelogd in de ingebouwde GeckoView-browser; je Mac wordt alleen tijdelijk
 gebruikt als groter scherm en toetsenbord via ADB/scrcpy.
