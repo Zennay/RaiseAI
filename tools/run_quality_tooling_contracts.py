@@ -1,10 +1,12 @@
 from contextlib import chdir
 from pathlib import Path
+import stat
 import sys
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TEST_PACKAGE_INIT = ROOT / "tests" / "__init__.py"
 
 QUALITY_MODULES = (
     "tests.test_adb_device_binding",
@@ -24,6 +26,24 @@ QUALITY_MODULES = (
     "tests.test_watch_sensor_trace_analyzer",
     "tests.test_watch_sensor_trial_analyzer",
 )
+
+
+def validate_test_package_anchor() -> str | None:
+    try:
+        mode = TEST_PACKAGE_INIT.lstat().st_mode
+    except OSError as exc:
+        return f"tests package anchor is unavailable: {exc}"
+    if stat.S_ISLNK(mode):
+        return "tests package anchor may not be a symbolic link"
+    if not stat.S_ISREG(mode):
+        return "tests package anchor must be a regular file"
+    try:
+        content = TEST_PACKAGE_INIT.read_bytes()
+    except OSError as exc:
+        return f"tests package anchor cannot be read: {exc}"
+    if content != b"":
+        return "tests package anchor must remain empty"
+    return None
 
 
 def suite_test_origins(suite: unittest.TestSuite) -> set[tuple[str, str]]:
@@ -68,6 +88,11 @@ def result_exit_code(result: unittest.TestResult) -> int:
 
 
 def run_contracts(modules: tuple[str, ...] = QUALITY_MODULES) -> int:
+    anchor_error = validate_test_package_anchor()
+    if anchor_error is not None:
+        print(f"ERROR: {anchor_error}.", file=sys.stderr)
+        return 1
+
     if not modules:
         print("ERROR: quality tooling module allowlist is empty.", file=sys.stderr)
         return 1

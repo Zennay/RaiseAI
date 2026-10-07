@@ -176,6 +176,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "*.py",
             "*.ps1",
             "tools/*.py",
+            "tests/__init__.py",
             "tests/test_adb_device_binding.py",
             "tests/test_all_workflow_action_pins.py",
             "tests/test_frozen_acceptance_launcher.py",
