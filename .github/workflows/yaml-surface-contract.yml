@@ -93,6 +93,9 @@ jobs:
             if node.respond_to?(:anchor) && node.anchor && !node.anchor.empty?
               abort("YAML anchors are forbidden")
             end
+            if node.respond_to?(:tag) && node.tag && !node.tag.empty?
+              abort("explicit YAML tags are forbidden")
+            end
 
             if node.is_a?(Psych::Nodes::Mapping)
               seen = {}
