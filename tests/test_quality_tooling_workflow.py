@@ -344,6 +344,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("LC_ALL: C.UTF-8", self.text)
         self.assertIn('PYTHONHASHSEED: "1"', self.text)
         self.assertIn('PYTHONDONTWRITEBYTECODE: "1"', self.text)
+        self.assertIn("PYTHONPYCACHEPREFIX: ${{ runner.temp }}/raise-quality-pyc", self.text)
         self.assertIn("TZ: UTC", self.text)
         self.assertIn("- name: Verify Python runtime", self.text)
         self.assertIn('platform.python_implementation() == "CPython"', self.text)
@@ -420,6 +421,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "LC_ALL": "      LC_ALL: C.UTF-8",
             "PYTHONHASHSEED": '      PYTHONHASHSEED: "1"',
             "PYTHONDONTWRITEBYTECODE": '      PYTHONDONTWRITEBYTECODE: "1"',
+            "PYTHONPYCACHEPREFIX": "      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/raise-quality-pyc",
             "TZ": "      TZ: UTC",
         }
         for key, expected_line in expected_lines.items():
@@ -574,7 +576,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 "Shell syntax",
                 "Python syntax",
                 "Quality tooling regressions",
-                "Verify tracked worktree remains clean",
+                "Verify worktree remains clean",
             ],
             "hosted quality step list must remain explicit and ordered",
         )
@@ -586,7 +588,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "Shell syntax": ["name", "shell", "run"],
             "Python syntax": ["name", "shell", "run"],
             "Quality tooling regressions": ["name", "shell", "run"],
-            "Verify tracked worktree remains clean": ["name", "shell", "run"],
+            "Verify worktree remains clean": ["name", "shell", "run"],
         }
         for position, start in enumerate(step_starts):
             end = step_starts[position + 1] if position + 1 < len(step_starts) else len(lines)
@@ -655,7 +657,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             break
         self.assertEqual(
             job_env_keys,
-            ["LANG", "LC_ALL", "PYTHONHASHSEED", "PYTHONDONTWRITEBYTECODE", "TZ"],
+            ["LANG", "LC_ALL", "PYTHONHASHSEED", "PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX", "TZ"],
             "python-quality job env must not gain unreviewed variables",
         )
 
@@ -734,10 +736,11 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 "set -euo pipefail",
                 "python3 -m unittest tests.test_adb_device_binding tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_quality_tooling_workflow tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer",
             ],
-            "Verify tracked worktree remains clean": [
+            "Verify worktree remains clean": [
                 "set -euo pipefail",
                 "git diff --exit-code -- .",
                 "git diff --cached --exit-code -- .",
+                'test -z "$(git ls-files --others --exclude-standard)"',
             ],
         }
 
