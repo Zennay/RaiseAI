@@ -3,7 +3,12 @@ import re
 import tempfile
 import unittest
 
-from tests.test_workflow_privilege_boundary import workflow_security_metadata
+try:
+    from tests.test_workflow_privilege_boundary import workflow_security_metadata
+except ModuleNotFoundError as exc:
+    if exc.name != "tests":
+        raise
+    from test_workflow_privilege_boundary import workflow_security_metadata
 
 
 ROOT = Path(__file__).resolve().parents[1]
