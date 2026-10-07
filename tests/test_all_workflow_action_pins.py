@@ -1,16 +1,39 @@
 import pathlib
 import re
+import tempfile
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-WORKFLOWS = ROOT / ".github" / "workflows"
+
+
+def github_action_documents(root=ROOT):
+    workflows = root / ".github" / "workflows"
+    actions = root / ".github" / "actions"
+    return (
+        sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")]),
+        sorted([*actions.glob("**/action.yml"), *actions.glob("**/action.yaml")]),
+    )
+
+
+def unquote_scalar(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def docker_action_image_values(text):
+    values = []
+    for match in re.finditer(r"(?m)^  image:\s*([^\s#]+)", text):
+        raw = match.group(1)
+        if unquote_scalar(raw).startswith("docker://"):
+            values.append(raw)
+    return values
 
 
 def immutable_uses_error(value):
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-        value = value[1:-1]
+    value = unquote_scalar(value)
 
     if value.startswith("./"):
         return None
@@ -35,12 +58,12 @@ def immutable_uses_error(value):
 
 class AllWorkflowActionPinsTests(unittest.TestCase):
     def test_every_remote_uses_ref_is_immutable(self):
-        workflows = sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
+        workflows, action_manifests = github_action_documents()
         self.assertTrue(workflows, "repository must retain GitHub Actions workflows")
 
         remote_refs = []
-        for workflow in workflows:
-            text = workflow.read_text(encoding="utf-8")
+        for document in [*workflows, *action_manifests]:
+            text = document.read_text(encoding="utf-8")
             for match in re.finditer(
                 r"^\s*(?:-\s*)?uses:\s*([^\s#]+)",
                 text,
@@ -49,15 +72,92 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                 value = match.group(1)
                 if value.startswith("./"):
                     continue
-                remote_refs.append((workflow.name, value))
+                remote_refs.append((str(document.relative_to(ROOT)), value))
 
         self.assertTrue(remote_refs, "repository must retain at least one remote action")
-        for workflow, value in remote_refs:
-            with self.subTest(workflow=workflow, uses=value):
+        for document, value in remote_refs:
+            with self.subTest(document=document, uses=value):
                 self.assertIsNone(
                     immutable_uses_error(value),
-                    f"{workflow}: {immutable_uses_error(value)}",
+                    f"{document}: {immutable_uses_error(value)}",
                 )
+
+    def test_docker_action_manifest_images_are_immutable(self):
+        _, action_manifests = github_action_documents()
+        for manifest in action_manifests:
+            text = manifest.read_text(encoding="utf-8")
+            for value in docker_action_image_values(text):
+                with self.subTest(
+                    manifest=str(manifest.relative_to(ROOT)),
+                    image=value,
+                ):
+                    self.assertIsNone(
+                        immutable_uses_error(value),
+                        f"{manifest.relative_to(ROOT)}: "
+                        f"{immutable_uses_error(value)}",
+                    )
+
+    def test_docker_action_image_parser_covers_remote_images_only(self):
+        digest = "c" * 64
+        pinned = (
+            "name: pinned\n"
+            "runs:\n"
+            "  using: 'docker'\n"
+            f"  image: 'docker://ghcr.io/example/tool@sha256:{digest}'\n"
+        )
+        mutable = (
+            "name: mutable\n"
+            "runs:\n"
+            "  using: docker\n"
+            "  image: docker://ghcr.io/example/tool:latest\n"
+        )
+        local = (
+            "name: local\n"
+            "runs:\n"
+            "  using: docker\n"
+            "  image: Dockerfile\n"
+        )
+
+        self.assertEqual(
+            docker_action_image_values(pinned),
+            [f"'docker://ghcr.io/example/tool@sha256:{digest}'"],
+        )
+        self.assertEqual(
+            docker_action_image_values(mutable),
+            ["docker://ghcr.io/example/tool:latest"],
+        )
+        self.assertEqual(docker_action_image_values(local), [])
+        self.assertIsNone(
+            immutable_uses_error(docker_action_image_values(pinned)[0])
+        )
+        self.assertIsNotNone(
+            immutable_uses_error(docker_action_image_values(mutable)[0])
+        )
+
+    def test_composite_action_manifest_discovery_is_recursive(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            workflow = root / ".github" / "workflows" / "quality.yml"
+            nested_yaml = root / ".github" / "actions" / "nested" / "action.yaml"
+            nested_yml = root / ".github" / "actions" / "deeper" / "check" / "action.yml"
+            ignored = root / ".github" / "actions" / "nested" / "README.md"
+            for document in (workflow, nested_yaml, nested_yml, ignored):
+                document.parent.mkdir(parents=True, exist_ok=True)
+                document.write_text("name: fixture\n", encoding="utf-8")
+
+            workflows, action_manifests = github_action_documents(root)
+
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in workflows],
+                [".github/workflows/quality.yml"],
+            )
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in action_manifests],
+                [
+                    ".github/actions/deeper/check/action.yml",
+                    ".github/actions/nested/action.yaml",
+                ],
+            )
 
     def test_docker_uses_requires_sha256_digest(self):
         digest = "a" * 64
