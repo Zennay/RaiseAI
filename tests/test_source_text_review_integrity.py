@@ -74,6 +74,11 @@ def tracked_reviewable_text_paths():
 
 
 def validate_reviewable_text(raw: bytes, relative: str) -> None:
+    if b"\r" in raw:
+        raise ValueError(
+            f"{relative}: source must use LF line endings; carriage returns are forbidden"
+        )
+
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -133,6 +138,12 @@ class SourceTextReviewIntegrityTests(unittest.TestCase):
                 )
                 self.assertTrue(path.is_file(), f"{relative} must be a regular file")
                 validate_reviewable_text(path.read_bytes(), relative)
+
+    def test_validator_rejects_crlf_and_bare_carriage_returns(self):
+        for payload in (b"safe\r\ntail\n", b"safe\rtail\n"):
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(ValueError, "LF line endings"):
+                    validate_reviewable_text(payload, "fixture.txt")
 
     def test_validator_rejects_nul_and_each_forbidden_invisible_control(self):
         with self.assertRaisesRegex(ValueError, "NUL"):
