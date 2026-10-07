@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GatewayResponseBodyReaderTest {
@@ -29,6 +30,25 @@ class GatewayResponseBodyReaderTest {
         }
 
         assertEquals("gateway_response_too_large", error.message)
+    }
+
+    @Test
+    fun oversizedResponseClosesInputStream() {
+        val payload = "a".repeat(GatewayResponseBodyReader.MAX_RESPONSE_BYTES + 1)
+            .toByteArray(Charsets.UTF_8)
+        var closed = false
+        val stream = object : ByteArrayInputStream(payload) {
+            override fun close() {
+                closed = true
+                super.close()
+            }
+        }
+
+        assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(stream)
+        }
+
+        assertTrue(closed)
     }
 
     @Test
