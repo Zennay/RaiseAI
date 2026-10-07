@@ -10,7 +10,7 @@ CLI = ROOT / "physical-validation.command"
 class PhysicalValidationCliContractTest(unittest.TestCase):
     def run_cli(self, *args):
         return subprocess.run(
-            [str(CLI), *args],
+            ["bash", str(CLI), *args],
             cwd=ROOT,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
