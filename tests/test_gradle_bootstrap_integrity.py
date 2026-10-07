@@ -5,6 +5,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 GRADLEW = ROOT / "gradlew"
+WORKFLOW = ROOT / ".github" / "workflows" / "gradle-bootstrap-integrity.yml"
+CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
 class GradleBootstrapIntegrityTest(unittest.TestCase):
@@ -32,6 +34,33 @@ class GradleBootstrapIntegrityTest(unittest.TestCase):
         self.assertLess(mismatch, cleanup)
         self.assertLess(cleanup, failure)
         self.assertLess(failure, install)
+
+
+class GradleBootstrapWorkflowContractTest(unittest.TestCase):
+    def setUp(self):
+        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    def test_checkout_uses_audited_node24_release(self):
+        expected = (
+            f"uses: actions/checkout@{CHECKOUT_SHA} "
+            "# v7.0.1 (node24)"
+        )
+        self.assertEqual(self.workflow.count(expected), 1)
+        self.assertNotIn(
+            "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+            self.workflow,
+        )
+
+    def test_checkout_is_exact_head_and_does_not_persist_credentials(self):
+        expression = (
+            "${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}"
+        )
+        self.assertEqual(self.workflow.count(f"          ref: {expression}"), 1)
+        self.assertEqual(
+            self.workflow.count("          persist-credentials: false"),
+            1,
+        )
 
 
 if __name__ == "__main__":
