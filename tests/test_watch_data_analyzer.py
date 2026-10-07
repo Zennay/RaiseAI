@@ -1,5 +1,7 @@
 import importlib.util
+import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -105,6 +107,22 @@ class WatchDataAnalyzerTests(unittest.TestCase):
                 self.skipTest("symlinks unavailable")
             with self.assertRaisesRegex(analyzer.TraceError, "must not be a symlink"):
                 analyzer.read_sessions(link)
+
+    def test_fifo_input_fails_closed_without_waiting_for_writer(self):
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFO creation unavailable")
+        with tempfile.TemporaryDirectory() as temp:
+            fifo = pathlib.Path(temp) / "sensor-traces.csv"
+            os.mkfifo(fifo)
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), str(fifo)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("not a regular file", result.stderr)
 
     def test_path_replacement_after_open_cannot_change_parsed_trace(self):
         with tempfile.TemporaryDirectory() as temp:
