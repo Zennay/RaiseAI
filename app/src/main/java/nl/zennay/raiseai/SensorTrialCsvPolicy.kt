@@ -68,4 +68,22 @@ internal object SensorTrialCsvPolicy {
             detectorConfig = detectorConfig
         )
     }
+
+    fun canAppend(lines: List<String>, candidate: ParsedSensorTrialRow): Boolean {
+        if (lines.isEmpty() || !hasCanonicalHeader(lines.first())) return false
+
+        val seenSessions = mutableSetOf<Long>()
+        lines.drop(1).forEach { line ->
+            val parsed = parseRow(line) ?: return false
+            if (!seenSessions.add(parsed.sessionId)) return false
+            if (parsed.appVersion != candidate.appVersion ||
+                parsed.sourceRevision != candidate.sourceRevision ||
+                parsed.detectorConfig != candidate.detectorConfig
+            ) {
+                return false
+            }
+        }
+
+        return candidate.sessionId !in seenSessions
+    }
 }
