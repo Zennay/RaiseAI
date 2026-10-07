@@ -16,6 +16,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -37,6 +38,7 @@ OBSERVATION_KEYS = {
     "visible_ux_failures",
 }
 MAX_JSON_BYTES = 64 * 1024
+APP_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class ObservationError(ValueError):
@@ -149,7 +151,10 @@ def validate_observations(session: Any, observations: Any) -> dict[str, Any]:
     watch_serial = observations["watch_serial"]
     app_version = observations["app_version"]
     _require(isinstance(watch_serial, str) and watch_serial.strip(), "watch_serial must be non-empty")
-    _require(isinstance(app_version, str) and app_version.strip(), "app_version must be non-empty")
+    _require(
+        isinstance(app_version, str) and APP_VERSION_RE.fullmatch(app_version) is not None,
+        "app_version must be canonical MAJOR.MINOR.PATCH",
+    )
 
     source_revision = _require_sha(observations["source_revision"], "source_revision", 40)
     apk_sha256 = _require_sha(observations["apk_sha256"], "apk_sha256", 64)
