@@ -193,6 +193,36 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 observation_payload(apk_sha256="cd" * 32),
             )
 
+    def test_rejects_quality_before_e2e_gate_passes(self):
+        with self.assertRaisesRegex(
+            validator.ObservationError,
+            "session e2e_passed must be true before quality evidence is complete",
+        ):
+            validator.validate_observations(
+                session_payload(e2e_passed=False),
+                observation_payload(),
+            )
+
+    def test_rejects_quality_before_v1_gate_passes(self):
+        with self.assertRaisesRegex(
+            validator.ObservationError,
+            "session v1_gate_passed must be true before quality evidence is complete",
+        ):
+            validator.validate_observations(
+                session_payload(v1_gate_passed=False),
+                observation_payload(),
+            )
+
+    def test_rejects_non_boolean_session_gate_state(self):
+        with self.assertRaisesRegex(
+            validator.ObservationError,
+            "session e2e_passed must be boolean",
+        ):
+            validator.validate_observations(
+                session_payload(e2e_passed="true"),
+                observation_payload(),
+            )
+
     def test_rejects_unperformed_screen_off_check(self):
         with self.assertRaisesRegex(validator.ObservationError, "screen_off_tested must be true"):
             validator.validate_observations(
