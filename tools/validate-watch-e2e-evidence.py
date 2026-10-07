@@ -12,6 +12,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,7 @@ SUCCESS_KEYS = COMMON_KEYS | {
 }
 FAILURE_KEYS = COMMON_KEYS | {"error_code"}
 MAX_FUTURE_SKEW_SECONDS = 60
+MAX_EVIDENCE_BYTES = 64 * 1024
 
 
 class EvidenceError(ValueError):
@@ -59,6 +62,57 @@ def _parse_timestamp(value: Any) -> dt.datetime:
 
 def _format_utc(value: dt.datetime) -> str:
     return value.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise EvidenceError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _load_evidence_file(path: Path) -> Any:
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise EvidenceError("safe no-follow evidence reads are unavailable on this platform")
+
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+
+    fd = os.open(path, flags)
+    try:
+        metadata = os.fstat(fd)
+        _require(stat.S_ISREG(metadata.st_mode), "evidence path must be a regular file")
+        _require(
+            metadata.st_size <= MAX_EVIDENCE_BYTES,
+            f"evidence file exceeds {MAX_EVIDENCE_BYTES} bytes",
+        )
+
+        chunks: list[bytes] = []
+        remaining = MAX_EVIDENCE_BYTES + 1
+        while remaining > 0:
+            chunk = os.read(fd, min(8192, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+
+        raw = b"".join(chunks)
+        _require(
+            len(raw) <= MAX_EVIDENCE_BYTES,
+            f"evidence file exceeds {MAX_EVIDENCE_BYTES} bytes",
+        )
+    finally:
+        os.close(fd)
+
+    try:
+        text = raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise EvidenceError("evidence must be valid UTF-8") from exc
+
+    return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
 
 
 def validate_evidence(
@@ -200,7 +254,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        payload = json.loads(args.evidence.read_text(encoding="utf-8"))
+        payload = _load_evidence_file(args.evidence)
         result = validate_evidence(
             payload,
             expect_route=args.expect_route,
