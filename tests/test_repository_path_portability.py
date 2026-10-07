@@ -1,0 +1,136 @@
+import subprocess
+import unicodedata
+import unittest
+
+
+WINDOWS_RESERVED_BASENAMES = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    *(f"com{index}" for index in range(1, 10)),
+    *(f"lpt{index}" for index in range(1, 10)),
+}
+WINDOWS_FORBIDDEN_CHARACTERS = set('<>:"\\|?*')
+
+
+def tracked_paths() -> list[str]:
+    raw = subprocess.check_output(["git", "ls-files", "-z"])
+    try:
+        decoded = raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("tracked repository paths must be strict UTF-8") from exc
+    return [item for item in decoded.split("\0") if item]
+
+
+def validate_portable_paths(paths: list[str]) -> None:
+    if not paths:
+        raise ValueError("repository path discovery must not be empty")
+
+    seen: dict[str, str] = {}
+    for path in paths:
+        if unicodedata.normalize("NFC", path) != path:
+            raise ValueError(f"{path!r}: repository path must already be NFC-normalized")
+
+        segments = path.split("/")
+        if not all(segments):
+            raise ValueError(f"{path!r}: repository path must not contain empty segments")
+
+        for segment in segments:
+            if segment in {".", ".."}:
+                raise ValueError(f"{path!r}: dot path segments are forbidden")
+            if segment.endswith((" ", ".")):
+                raise ValueError(
+                    f"{path!r}: path segments must not end in a space or period"
+                )
+            if any(ord(char) < 32 for char in segment):
+                raise ValueError(f"{path!r}: ASCII control characters are forbidden")
+            if any(char in WINDOWS_FORBIDDEN_CHARACTERS for char in segment):
+                raise ValueError(
+                    f"{path!r}: Windows-reserved filename characters are forbidden"
+                )
+
+            basename = segment.split(".", 1)[0].casefold()
+            if basename in WINDOWS_RESERVED_BASENAMES:
+                raise ValueError(
+                    f"{path!r}: Windows-reserved basename {basename!r} is forbidden"
+                )
+
+        portable_key = unicodedata.normalize("NFC", path).casefold()
+        previous = seen.get(portable_key)
+        if previous is not None:
+            raise ValueError(
+                f"portable repository path collision: {previous!r} vs {path!r}"
+            )
+        seen[portable_key] = path
+
+
+class RepositoryPathPortabilityTests(unittest.TestCase):
+    def test_every_tracked_path_is_portable_and_collision_free(self):
+        paths = tracked_paths()
+        self.assertTrue(paths)
+        validate_portable_paths(paths)
+
+    def test_accepts_normal_cross_platform_paths(self):
+        validate_portable_paths(
+            [
+                ".github/workflows/quality.yml",
+                "README.md",
+                "app/src/main/MainActivity.kt",
+                "gateway/src/server.mjs",
+            ]
+        )
+
+    def test_rejects_casefold_collisions(self):
+        with self.assertRaisesRegex(ValueError, "portable repository path collision"):
+            validate_portable_paths(["Docs/README.md", "docs/readme.md"])
+
+    def test_rejects_non_nfc_paths(self):
+        decomposed = "docs/cafe\u0301.md"
+        with self.assertRaisesRegex(ValueError, "NFC-normalized"):
+            validate_portable_paths([decomposed])
+
+    def test_rejects_windows_reserved_basenames(self):
+        for path in (
+            "CON",
+            "docs/aux.txt",
+            "nested/NUL.json",
+            "tools/Com1.py",
+            "artifacts/lPt9.log",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "Windows-reserved basename"):
+                    validate_portable_paths([path])
+
+    def test_rejects_windows_forbidden_filename_characters(self):
+        for char in '<>:"\\|?*':
+            with self.subTest(char=repr(char)):
+                path = f"docs/bad{char}name.md"
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Windows-reserved filename characters",
+                ):
+                    validate_portable_paths([path])
+
+    def test_rejects_trailing_space_or_period(self):
+        for path in ("docs/name. ", "docs/name.", "docs/name "):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "space or period"):
+                    validate_portable_paths([path])
+
+    def test_rejects_ascii_control_characters(self):
+        for codepoint in (1, 7, 27, 31):
+            with self.subTest(codepoint=codepoint):
+                path = f"docs/bad{chr(codepoint)}name.md"
+                with self.assertRaisesRegex(ValueError, "ASCII control"):
+                    validate_portable_paths([path])
+
+    def test_rejects_duplicate_or_empty_path_sets(self):
+        with self.assertRaisesRegex(ValueError, "must not be empty"):
+            validate_portable_paths([])
+        with self.assertRaisesRegex(ValueError, "portable repository path collision"):
+            validate_portable_paths(["README.md", "README.md"])
+
+
+if __name__ == "__main__":
+    unittest.main()
