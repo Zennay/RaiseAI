@@ -255,3 +255,155 @@ test("workflow leaves the checkout clean after validation", () => {
     /test -z "\$\(git ls-files --others --exclude-standard\)"/,
   );
 });
+
+
+test("workflow trigger, concurrency and env surfaces are exact", () => {
+  const lines = WORKFLOW.split("\n");
+  const onStart = lines.indexOf("on:") + 1;
+  const permissionsStart = lines.indexOf("permissions:");
+  const events = lines
+    .slice(onStart, permissionsStart)
+    .map((line) => line.match(/^  ([A-Za-z0-9_-]+):$/)?.[1])
+    .filter(Boolean);
+  assert.deepEqual(events, ["push", "pull_request"]);
+
+  function eventBlock(event) {
+    const start = lines.indexOf(`  ${event}:`) + 1;
+    const block = [];
+    for (const line of lines.slice(start)) {
+      if (line && !line.startsWith("    ")) {
+        break;
+      }
+      block.push(line);
+    }
+    return block;
+  }
+
+  const push = eventBlock("push");
+  assert.deepEqual(
+    push
+      .map((line) => line.match(/^    ([A-Za-z0-9_-]+):$/)?.[1])
+      .filter(Boolean),
+    ["branches", "paths"],
+  );
+  assert.equal(push[push.indexOf("    branches:") + 1], "      - main");
+
+  const pullRequest = eventBlock("pull_request");
+  assert.deepEqual(
+    pullRequest
+      .map((line) => line.match(/^    ([A-Za-z0-9_-]+):$/)?.[1])
+      .filter(Boolean),
+    ["paths"],
+    "pull_request must not gain type or branch filters that can skip synchronize validation",
+  );
+
+  const concurrencyStart = lines.indexOf("concurrency:") + 1;
+  const jobsStart = lines.indexOf("jobs:");
+  assert.deepEqual(
+    lines
+      .slice(concurrencyStart, jobsStart)
+      .map((line) => line.match(/^  ([A-Za-z0-9_-]+):.*$/)?.[1])
+      .filter(Boolean),
+    ["group", "cancel-in-progress"],
+  );
+
+  const envStart = lines.indexOf("    env:") + 1;
+  const envKeys = [];
+  for (const line of lines.slice(envStart)) {
+    const match = line.match(/^      ([A-Za-z0-9_-]+):.*$/);
+    if (!match) {
+      break;
+    }
+    envKeys.push(match[1]);
+  }
+  assert.deepEqual(
+    envKeys,
+    ["LANG", "LC_ALL", "TZ"],
+    "JavaScript runtime environment must not gain unreviewed controls",
+  );
+});
+
+test("workflow step and nested mapping surfaces are exact", () => {
+  const lines = WORKFLOW.split("\n");
+  const stepStarts = lines
+    .map((line, index) => (line.startsWith("      - name:") ? index : -1))
+    .filter((index) => index >= 0);
+  const expectedNames = [
+    "Checkout exact tested revision",
+    "Verify exact tested revision",
+    "Set up audited Node runtime",
+    "Verify Node runtime",
+    "Validate tracked JavaScript surface",
+    "Verify worktree remains clean",
+  ];
+  assert.deepEqual(
+    stepStarts.map((index) => lines[index].replace("      - name: ", "")),
+    expectedNames,
+    "JavaScript workflow must not gain unreviewed steps",
+  );
+
+  const expectedKeys = new Map([
+    ["Checkout exact tested revision", ["name", "uses", "with"]],
+    ["Verify exact tested revision", ["name", "shell", "env", "run"]],
+    ["Set up audited Node runtime", ["name", "uses", "with"]],
+    ["Verify Node runtime", ["name", "shell", "run"]],
+    ["Validate tracked JavaScript surface", ["name", "shell", "run"]],
+    ["Verify worktree remains clean", ["name", "shell", "run"]],
+  ]);
+
+  function stepNamed(name) {
+    const start = lines.indexOf(`      - name: ${name}`);
+    assert.notEqual(start, -1, `${name} step must exist`);
+    const following = stepStarts.filter((index) => index > start);
+    const end = following.length ? Math.min(...following) : lines.length;
+    return lines.slice(start, end);
+  }
+
+  for (const name of expectedNames) {
+    const step = stepNamed(name);
+    const keys = ["name"];
+    for (const line of step.slice(1)) {
+      const match = line.match(/^        ([A-Za-z0-9_-]+):.*$/);
+      if (match) {
+        keys.push(match[1]);
+      }
+    }
+    assert.deepEqual(keys, expectedKeys.get(name), `${name} mapping must stay exact`);
+  }
+
+  const checkout = stepNamed("Checkout exact tested revision");
+  const checkoutWith = checkout.indexOf("        with:") + 1;
+  const checkoutKeys = [];
+  for (const line of checkout.slice(checkoutWith)) {
+    const match = line.match(/^          ([A-Za-z0-9_-]+):.*$/);
+    if (!match) {
+      break;
+    }
+    checkoutKeys.push(match[1]);
+  }
+  assert.deepEqual(checkoutKeys, ["ref", "persist-credentials"]);
+
+  const verifier = stepNamed("Verify exact tested revision");
+  const verifierEnv = verifier.indexOf("        env:") + 1;
+  const verifierKeys = [];
+  for (const line of verifier.slice(verifierEnv)) {
+    const match = line.match(/^          ([A-Za-z0-9_-]+):.*$/);
+    if (!match) {
+      break;
+    }
+    verifierKeys.push(match[1]);
+  }
+  assert.deepEqual(verifierKeys, ["EXPECTED_SHA"]);
+
+  const setupNode = stepNamed("Set up audited Node runtime");
+  const setupWith = setupNode.indexOf("        with:") + 1;
+  const setupKeys = [];
+  for (const line of setupNode.slice(setupWith)) {
+    const match = line.match(/^          ([A-Za-z0-9_-]+):.*$/);
+    if (!match) {
+      break;
+    }
+    setupKeys.push(match[1]);
+  }
+  assert.deepEqual(setupKeys, ["node-version", "package-manager-cache"]);
+});
