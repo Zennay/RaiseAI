@@ -1,5 +1,6 @@
 from contextlib import chdir
 from pathlib import Path
+import os
 import stat
 import sys
 import unittest
@@ -15,8 +16,29 @@ def contract_exit_code(result: unittest.TestResult) -> int:
     return 0 if result.wasSuccessful() else 1
 
 
+def invalid_contract_package_links() -> list[str]:
+    invalid: list[str] = []
+    for root, dirnames, _ in os.walk(TESTS_DIR, topdown=True, followlinks=False):
+        root_path = Path(root)
+        for dirname in list(dirnames):
+            path = root_path / dirname
+            try:
+                mode = path.lstat().st_mode
+            except OSError as exc:
+                invalid.append(f"{path.relative_to(TESTS_DIR)}: lstat failed: {exc}")
+                dirnames.remove(dirname)
+                continue
+            if stat.S_ISLNK(mode):
+                invalid.append(
+                    f"{path.relative_to(TESTS_DIR).as_posix()}/: "
+                    "symbolic link directories are forbidden"
+                )
+                dirnames.remove(dirname)
+    return invalid
+
+
 def contract_module_paths() -> list[Path]:
-    return sorted(TESTS_DIR.glob("test_*.py"))
+    return sorted(TESTS_DIR.rglob("test_*.py"))
 
 
 def unsafe_contract_module_paths(paths: list[Path]) -> list[str]:
