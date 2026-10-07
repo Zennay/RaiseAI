@@ -9,7 +9,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
-SECRET_REF_RE = re.compile(r"\$\{\{[^}\n]*\bsecrets\b")
 EXTERNAL_ACTION_RE = re.compile(
     r"(?m)^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)"
 )
@@ -40,10 +39,16 @@ root = tree.children.fetch(0).root
 abort("workflow root must be a mapping") unless root.is_a?(Psych::Nodes::Mapping)
 
 on_node = nil
+jobs_node = nil
 root.children.each_slice(2) do |key_node, value_node|
-  next unless key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "on"
-  abort("workflow must declare on exactly once") if on_node
-  on_node = value_node
+  next unless key_node.is_a?(Psych::Nodes::Scalar)
+  if key_node.value == "on"
+    abort("workflow must declare on exactly once") if on_node
+    on_node = value_node
+  elsif key_node.value == "jobs"
+    abort("workflow must declare jobs exactly once") if jobs_node
+    jobs_node = value_node
+  end
 end
 
 events = []
@@ -66,9 +71,30 @@ else
   abort("workflow on trigger must be a scalar, sequence, or mapping")
 end
 
+environments = []
+if jobs_node
+  abort("workflow jobs must be a mapping") unless jobs_node.is_a?(Psych::Nodes::Mapping)
+  jobs_node.children.each_slice(2) do |job_name_node, job_node|
+    abort("workflow job names must be scalars") unless job_name_node.is_a?(Psych::Nodes::Scalar)
+    abort("workflow jobs must be mappings") unless job_node.is_a?(Psych::Nodes::Mapping)
+    job_node.children.each_slice(2) do |key_node, _value_node|
+      next unless key_node.is_a?(Psych::Nodes::Scalar)
+      environments << job_name_node.value if key_node.value == "environment"
+    end
+  end
+end
+
 writes = []
+secret_expressions = []
 walk = nil
 walk = lambda do |node|
+  if node.is_a?(Psych::Nodes::Scalar)
+    if node.value.match?(/\$\{\{[^}\n]*\bsecrets\b/)
+      secret_expressions << node.value
+    end
+    return
+  end
+
   if node.is_a?(Psych::Nodes::Mapping)
     node.children.each_slice(2) do |key_node, value_node|
       if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "permissions"
@@ -89,12 +115,22 @@ walk = lambda do |node|
     end
     return
   end
+
   children = node.respond_to?(:children) ? node.children : nil
   Array(children).each { |child| walk.call(child) }
 end
 walk.call(root)
 
-STDOUT.write(JSON.generate({"events" => events.uniq.sort, "writes" => writes}))
+STDOUT.write(
+  JSON.generate(
+    {
+      "events" => events.uniq.sort,
+      "writes" => writes,
+      "secret_expressions" => secret_expressions,
+      "environments" => environments,
+    }
+  )
+)
 """
     result = subprocess.run(
         ["ruby", "--disable-gems", "-e", script, str(path)],
@@ -132,26 +168,32 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                     "untrusted PR context with base-repository privileges",
                 )
 
-    def test_pull_request_workflows_cannot_receive_secrets_or_write_permissions(self):
+    def test_pull_request_workflows_cannot_receive_privileged_context(self):
         paths = workflow_paths()
         self.assertTrue(paths, "workflow privilege guard must inspect at least one workflow")
 
         for path in paths:
             relative = path.relative_to(ROOT).as_posix()
-            text = path.read_text(encoding="utf-8")
             metadata = workflow_security_metadata(path)
             if "pull_request" not in metadata["events"]:
                 continue
 
             with self.subTest(workflow=relative):
-                self.assertIsNone(
-                    SECRET_REF_RE.search(text),
-                    f"{relative}: pull_request workflows must not consume repository secrets",
+                self.assertEqual(
+                    metadata["secret_expressions"],
+                    [],
+                    f"{relative}: pull_request workflows must not consume repository "
+                    "or environment secrets",
                 )
                 self.assertEqual(
                     metadata["writes"],
                     [],
                     f"{relative}: pull_request workflows must not receive write token permissions",
+                )
+                self.assertEqual(
+                    metadata["environments"],
+                    [],
+                    f"{relative}: pull_request workflows must not bind deployment environments",
                 )
 
     def test_pull_request_external_actions_are_immutable(self):
@@ -226,6 +268,54 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                         expected[name],
                     )
 
+    def test_secret_scan_is_semantic_and_covers_expression_variants(self):
+        fixtures = {
+            "dot.yml": 'on: push\nenv: {TOKEN: "${{ secrets.API_TOKEN }}"}\n',
+            "bracket.yml": "on: push\nenv: {TOKEN: \"${{secrets['API_TOKEN']}}\"}\n",
+            "whole.yml": 'on: push\nenv: {BLOB: "${{ toJSON(secrets) }}"}\n',
+            "comment.yml": "on: push\n# ${{ secrets.COMMENT_ONLY }}\nenv: {VALUE: \"${{ vars.PUBLIC_VALUE }}\"}\n",
+        }
+        expected_counts = {
+            "dot.yml": 1,
+            "bracket.yml": 1,
+            "whole.yml": 1,
+            "comment.yml": 0,
+        }
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, source in fixtures.items():
+                path = root / name
+                path.write_text(source, encoding="utf-8")
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        len(workflow_security_metadata(path)["secret_expressions"]),
+                        expected_counts[name],
+                    )
+
+    def test_deployment_environment_scan_is_job_scoped(self):
+        fixtures = {
+            "scalar.yml": "on: push\njobs:\n  deploy:\n    environment: production\n    runs-on: ubuntu-24.04\n",
+            "mapping.yml": "on: push\njobs: {deploy: {environment: {name: production}, runs-on: ubuntu-24.04}}\n",
+            "action-input.yml": "on: push\njobs:\n  test:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: owner/action@0123456789012345678901234567890123456789\n        with:\n          environment: test\n",
+        }
+        expected = {
+            "scalar.yml": ["deploy"],
+            "mapping.yml": ["deploy"],
+            "action-input.yml": [],
+        }
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, source in fixtures.items():
+                path = root / name
+                path.write_text(source, encoding="utf-8")
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        workflow_security_metadata(path)["environments"],
+                        expected[name],
+                    )
+
     def test_semantic_scan_fails_closed_on_missing_or_invalid_security_surface(self):
         fixtures = {
             "missing-on.yml": "name: missing\njobs: {}\n",
@@ -241,16 +331,6 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "workflow security"):
                         workflow_security_metadata(path)
 
-    def test_secret_namespace_guard_covers_dot_bracket_and_whole_object_forms(self):
-        for expression in (
-            "${{ secrets.API_TOKEN }}",
-            "${{secrets['API_TOKEN']}}",
-            "${{ toJSON(secrets) }}",
-        ):
-            with self.subTest(expression=expression):
-                self.assertIsNotNone(SECRET_REF_RE.search(expression))
-        self.assertIsNone(SECRET_REF_RE.search("${{ vars.PUBLIC_VALUE }}"))
-
     def test_read_only_pull_request_fixture_is_allowed(self):
         fixture = """on:
   pull_request:
@@ -263,7 +343,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 """
-        self.assertIsNone(SECRET_REF_RE.search(fixture))
         self.assertEqual(
             external_action_refs(fixture),
             [
@@ -286,21 +365,6 @@ jobs:
         refs = external_action_refs(fixture)
         self.assertEqual(refs, [("actions/checkout", "v7")])
         self.assertIsNone(IMMUTABLE_ACTION_REF_RE.fullmatch(refs[0][1]))
-
-    def test_privileged_manual_fixture_secret_reference_is_detected(self):
-        fixture = """on:
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-jobs:
-  operate:
-    runs-on: ubuntu-24.04
-    steps:
-      - run: echo "${{ secrets.OPERATOR_TOKEN }}"
-"""
-        self.assertIsNotNone(SECRET_REF_RE.search(fixture))
 
 
 if __name__ == "__main__":
