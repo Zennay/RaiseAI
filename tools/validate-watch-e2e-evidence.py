@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ SUCCESS_KEYS = COMMON_KEYS | {
 }
 FAILURE_KEYS = COMMON_KEYS | {"error_code"}
 MAX_FUTURE_SKEW_SECONDS = 60
+MAX_EVIDENCE_BYTES = 16 * 1024
 
 
 class EvidenceError(ValueError):
@@ -44,6 +46,35 @@ class EvidenceError(ValueError):
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise EvidenceError(message)
+
+
+def _reject_duplicate_json_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        _require(key not in result, f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def load_evidence(path: Path) -> Any:
+    metadata = path.lstat()
+    _require(stat.S_ISREG(metadata.st_mode), "evidence must be a regular file")
+    _require(
+        metadata.st_size <= MAX_EVIDENCE_BYTES,
+        f"evidence exceeds maximum size of {MAX_EVIDENCE_BYTES} bytes",
+    )
+
+    raw = path.read_bytes()
+    _require(
+        len(raw) <= MAX_EVIDENCE_BYTES,
+        f"evidence exceeds maximum size of {MAX_EVIDENCE_BYTES} bytes",
+    )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise EvidenceError("evidence must be valid UTF-8") from exc
+
+    return json.loads(text, object_pairs_hook=_reject_duplicate_json_fields)
 
 
 def _parse_timestamp(value: Any) -> dt.datetime:
@@ -200,7 +231,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        payload = json.loads(args.evidence.read_text(encoding="utf-8"))
+        payload = load_evidence(args.evidence)
         result = validate_evidence(
             payload,
             expect_route=args.expect_route,
