@@ -393,7 +393,7 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             ),
             "flow.yml": (
                 "on: pull_request\njobs: {verify: {steps: "
-                f"[{{uses: actions/checkout@{sha}}}]}}\n"
+                f"[{{uses: actions/checkout@{sha}}}]}}}}\n"
             ),
             "local.yml": (
                 "on: pull_request\njobs: {verify: {steps: "
