@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import sys
 import zipfile
 from pathlib import Path
@@ -23,6 +25,16 @@ def _normalize_sha(value: str, *, label: str, length: int) -> str:
     return normalized
 
 
+def _sha256_open_file(apk_file) -> str:
+    digest = hashlib.sha256()
+    while True:
+        chunk = apk_file.read(1024 * 1024)
+        if not chunk:
+            break
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
 def verify_apk(
     path: Path,
     *,
@@ -30,9 +42,6 @@ def verify_apk(
     expected_sha256: str | None = None,
     expected_abi: str | None = "armeabi-v7a",
 ) -> dict[str, object]:
-    if not path.is_file():
-        raise ApkIdentityError(f"APK not found: {path}")
-
     revision = _normalize_sha(
         expected_source_revision,
         label="expected source revision",
@@ -44,39 +53,55 @@ def verify_apk(
         else None
     )
 
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    if expected_digest is not None and digest != expected_digest:
-        raise ApkIdentityError(
-            f"APK SHA-256 mismatch: expected {expected_digest}, got {digest}"
-        )
-
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise ApkIdentityError("safe no-follow APK reads are unavailable on this platform")
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
     try:
-        with zipfile.ZipFile(path) as archive:
-            names = archive.namelist()
-            dex_files = sorted(name for name in names if name.endswith(".dex"))
-            if not dex_files:
-                raise ApkIdentityError("APK contains no DEX files")
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise ApkIdentityError(f"APK cannot be opened safely: {path}") from exc
 
-            needle = revision.encode("ascii")
-            revision_hits = [
-                name for name in dex_files if needle in archive.read(name)
-            ]
-            if not revision_hits:
-                raise ApkIdentityError(
-                    "expected source revision is not embedded in APK DEX"
-                )
+    with os.fdopen(fd, "rb", closefd=True) as apk_file:
+        metadata = os.fstat(apk_file.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ApkIdentityError(f"APK must be a regular file: {path}")
 
-            abis = sorted(
-                {
-                    parts[1]
-                    for name in names
-                    if name.startswith("lib/") and name.endswith(".so")
-                    for parts in [name.split("/")]
-                    if len(parts) >= 3 and parts[1]
-                }
+        digest = _sha256_open_file(apk_file)
+        if expected_digest is not None and digest != expected_digest:
+            raise ApkIdentityError(
+                f"APK SHA-256 mismatch: expected {expected_digest}, got {digest}"
             )
-    except zipfile.BadZipFile as exc:
-        raise ApkIdentityError("APK is not a valid ZIP/APK archive") from exc
+
+        try:
+            apk_file.seek(0)
+            with zipfile.ZipFile(apk_file) as archive:
+                names = archive.namelist()
+                dex_files = sorted(name for name in names if name.endswith(".dex"))
+                if not dex_files:
+                    raise ApkIdentityError("APK contains no DEX files")
+
+                needle = revision.encode("ascii")
+                revision_hits = [
+                    name for name in dex_files if needle in archive.read(name)
+                ]
+                if not revision_hits:
+                    raise ApkIdentityError(
+                        "expected source revision is not embedded in APK DEX"
+                    )
+
+                abis = sorted(
+                    {
+                        parts[1]
+                        for name in names
+                        if name.startswith("lib/") and name.endswith(".so")
+                        for parts in [name.split("/")]
+                        if len(parts) >= 3 and parts[1]
+                    }
+                )
+        except zipfile.BadZipFile as exc:
+            raise ApkIdentityError("APK is not a valid ZIP/APK archive") from exc
 
     if expected_abi is not None:
         if abis != [expected_abi]:
