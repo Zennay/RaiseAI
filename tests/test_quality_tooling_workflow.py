@@ -178,6 +178,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_watch_e2e_evidence_validator.py",
             "tests/test_watch_sensor_trace_analyzer.py",
             "tests/test_watch_sensor_trial_analyzer.py",
+            ".github/actions/**/action.yml",
+            ".github/actions/**/action.yaml",
             ".github/workflows/*.yml",
             ".github/workflows/*.yaml",
         ]
