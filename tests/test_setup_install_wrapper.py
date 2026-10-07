@@ -103,6 +103,10 @@ class SetupWrapperWorkflowContractTest(unittest.TestCase):
         self.assertIn("    timeout-minutes: 5", self.workflow)
         self.assertNotIn("continue-on-error: true", self.workflow)
         self.assertNotIn("secrets.", self.workflow)
+        self.assertNotIn("pull_request_target:", self.workflow)
+        self.assertNotIn("contents: write", self.workflow)
+        self.assertNotIn("id-token: write", self.workflow)
+        self.assertNotIn("actions: write", self.workflow)
 
     def test_workflow_trigger_surface_covers_every_contract_input(self):
         for path in (
