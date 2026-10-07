@@ -14,30 +14,47 @@ on:
       - "tests/test_watch_data_analyzer.py"
       - ".github/workflows/watch-data-analyzer-quality.yml"
 
+permissions:
+  contents: read
+
 concurrency:
   group: raise-watch-data-analyzer-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   analyzer-quality:
-    runs-on: [self-hosted, vps-bb300bba]
+    runs-on: [self-hosted, linux, x64, vps-bb300bba]
     timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Verify exact revision
         shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
           test -z "$(git status --porcelain --untracked-files=normal)"
-          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-          test "$(git rev-parse HEAD)" = "$expected"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Compile analyzer
-        run: python3 -m py_compile analyze-watch-data.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile analyze-watch-data.py
 
       - name: Run analyzer regressions
-        run: python3 -m unittest tests/test_watch_data_analyzer.py -v
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests/test_watch_data_analyzer.py -v
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
