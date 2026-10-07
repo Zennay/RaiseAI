@@ -44,13 +44,19 @@ object SensorTrialRecorder {
         detectorConfig: String
     ) {
         val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) {
-            file.writeText(
-                "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config\n"
-            )
+        if (!file.exists() || file.length() == 0L) {
+            file.writeText(SensorTrialCsvPolicy.HEADER + "\n")
+        } else if (file.useLines { it.firstOrNull() }?.let(SensorTrialCsvPolicy::hasCanonicalHeader) != true) {
+            return
         }
+
+        val rawRow =
+            "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity,$appVersion,$sourceRevision,$detectorConfig"
+        val parsed = SensorTrialCsvPolicy.parseRow(rawRow) ?: return
         file.appendText(
-            "$label,$sessionId,$durationMs,$sampleCount,$detectorTriggered,$maxSimilarity,$appVersion,$sourceRevision,$detectorConfig\n"
+            "${parsed.label},${parsed.sessionId},${parsed.durationMs},${parsed.sampleCount}," +
+                "${parsed.detectorTriggered},${parsed.maxSimilarity},${parsed.appVersion}," +
+                "${parsed.sourceRevision},${parsed.detectorConfig}\n"
         )
     }
 
@@ -64,6 +70,13 @@ object SensorTrialRecorder {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return SensorTrialProgress()
 
+        val lines = file.readLines()
+        if (lines.isEmpty()) return SensorTrialProgress()
+
+        if (!SensorTrialCsvPolicy.hasCanonicalHeader(lines.first())) {
+            return SensorTrialProgress(rejectedTrials = (lines.size - 1).coerceAtLeast(0))
+        }
+
         var mouthTrials = 0
         var mouthDetections = 0
         var nonTriggerTrials = 0
@@ -71,51 +84,29 @@ object SensorTrialRecorder {
         var rejectedTrials = 0
         val identities = mutableSetOf<String>()
 
-        file.useLines { lines ->
-            lines.drop(1).forEach { line ->
-                val fields = line.split(',', limit = 9)
-                if (fields.size != 9) {
-                    rejectedTrials++
-                    return@forEach
-                }
+        lines.drop(1).forEach { line ->
+            val parsed = SensorTrialCsvPolicy.parseRow(line)
+            if (parsed == null) {
+                rejectedTrials++
+                return@forEach
+            }
 
-                val label = fields[0]
-                val durationMs = fields[2].toLongOrNull()
-                val sampleCount = fields[3].toIntOrNull()
-                val triggered = when (fields[4]) {
-                    "true" -> true
-                    "false" -> false
-                    else -> null
-                }
-                val appVersion = fields[6]
-                val sourceRevision = fields[7].lowercase()
-                val detectorConfig = fields[8]
+            if (parsed.durationMs < MIN_QUALIFYING_DURATION_MS ||
+                parsed.sampleCount < MIN_QUALIFYING_SAMPLES
+            ) {
+                rejectedTrials++
+                return@forEach
+            }
 
-                if (durationMs == null || sampleCount == null || triggered == null ||
-                    appVersion.isBlank() ||
-                    !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
-                    detectorConfig.isBlank() || detectorConfig == "missing"
-                ) {
-                    rejectedTrials++
-                    return@forEach
+            identities += "${parsed.appVersion}|${parsed.sourceRevision}|${parsed.detectorConfig}"
+            when (parsed.label) {
+                "mouth_raise" -> {
+                    mouthTrials++
+                    if (parsed.detectorTriggered) mouthDetections++
                 }
-
-                if (durationMs < MIN_QUALIFYING_DURATION_MS || sampleCount < MIN_QUALIFYING_SAMPLES) {
-                    rejectedTrials++
-                    return@forEach
-                }
-
-                identities += "$appVersion|$sourceRevision|$detectorConfig"
-                when (label) {
-                    "mouth_raise" -> {
-                        mouthTrials++
-                        if (triggered) mouthDetections++
-                    }
-                    "view_time", "normal_move" -> {
-                        nonTriggerTrials++
-                        if (triggered) falseTriggers++
-                    }
-                    else -> rejectedTrials++
+                "view_time", "normal_move" -> {
+                    nonTriggerTrials++
+                    if (parsed.detectorTriggered) falseTriggers++
                 }
             }
         }
