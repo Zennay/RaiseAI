@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   contract:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 5
     steps:
       - name: Checkout exact tested revision

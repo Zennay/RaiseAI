@@ -20,26 +20,37 @@ ADB="$SDK_DIR/platform-tools/adb"
 
 mkdir -p "$BIN_DIR" "$LOG_DIR" "$HOME/Library/LaunchAgents"
 
-cat > "$HELPER" <<EOF
-#!/bin/bash
-set -u
-ADB="$ADB"
-STATE_DIR="$STATE_DIR"
-ENDPOINT_FILE="$ENDPOINT_FILE"
+{
+  printf '%s\n' '#!/bin/bash' 'set -u'
+  printf 'ADB=%q\n' "$ADB"
+  printf 'STATE_DIR=%q\n' "$STATE_DIR"
+  printf 'ENDPOINT_FILE=%q\n' "$ENDPOINT_FILE"
+  cat <<'HELPER_EOF'
 
 "$ADB" start-server >/dev/null 2>&1 || exit 0
 
+is_expected_watch() {
+  local serial="${1:-}" model="" characteristics=""
+  [ -n "$serial" ] || return 1
+  model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+  characteristics="$("$ADB" -s "$serial" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+  case "$model" in
+    SM-L315F|SM_L315F)
+      printf '%s' "$characteristics" | grep -qi 'watch'
+      return $?
+      ;;
+  esac
+  return 1
+}
+
 find_watch() {
-  local serial="" model=""
+  local serial=""
   "$ADB" devices -l 2>/dev/null | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
-    [ -z "${serial:-}" ] && continue
-    model="$("$ADB" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
-    case "$model" in
-      SM-L315F|SM_L315F)
-        printf '%s\n' "$serial"
-        return 0
-        ;;
-    esac
+    [ -n "$serial" ] || continue
+    if is_expected_watch "$serial"; then
+      printf '%s\n' "$serial"
+      return 0
+    fi
   done
 }
 
@@ -51,23 +62,29 @@ if [ -f "$ENDPOINT_FILE" ]; then
   if [ -n "${CACHED:-}" ]; then
     "$ADB" connect "$CACHED" >/dev/null 2>&1 || true
     sleep 1
-    TARGET="$(find_watch)"
-    [ -n "${TARGET:-}" ] && exit 0
+    if is_expected_watch "$CACHED"; then
+      exit 0
+    fi
   fi
 fi
 
-ENDPOINT="$("$ADB" mdns services 2>/dev/null |
-  awk '/_adb-tls-connect[.]_tcp/ {print $3; exit}' || true)"
-if [ -n "${ENDPOINT:-}" ]; then
-  "$ADB" connect "$ENDPOINT" >/dev/null 2>&1 || true
+while IFS= read -r ENDPOINT; do
+  [ -n "${ENDPOINT:-}" ] || continue
+  "$ADB" connect "$ENDPOINT" >/dev/null 2>&1 || continue
   sleep 1
-  TARGET="$(find_watch)"
-  if [ -n "${TARGET:-}" ]; then
+  if is_expected_watch "$ENDPOINT"; then
     mkdir -p "$STATE_DIR"
     printf '%s\n' "$ENDPOINT" > "$ENDPOINT_FILE"
+    exit 0
   fi
-fi
-EOF
+done < <(
+  "$ADB" mdns services 2>/dev/null |
+    awk '/_adb-tls-connect[.]_tcp/ {print $3}'
+)
+
+exit 0
+HELPER_EOF
+} > "$HELPER"
 
 chmod +x "$HELPER"
 
@@ -111,7 +128,7 @@ if [ -f "$HOME/.android/adbkey" ]; then
 fi
 
 if [ "$QUIET" != "--quiet" ]; then
-  echo "Race AI ADB auto-connect installed."
+  echo "Raise AI ADB auto-connect installed."
   echo "macOS will retry the paired Watch every 30 seconds."
   echo "Pairing is still required only if the Watch revokes/forgets this Mac."
 fi
