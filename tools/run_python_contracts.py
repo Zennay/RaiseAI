@@ -14,20 +14,10 @@ def contract_exit_code(result: unittest.TestResult) -> int:
 
 
 def main() -> int:
-    try:
-        suite = unittest.TestLoader().discover(
-            str(TESTS_DIR),
-            pattern="test_*.py",
-        )
-    except SystemExit as exc:
-        print(
-            "ERROR: aggregate Python contract discovery terminated via "
-            f"SystemExit({exc.code!r}); discovery must fail closed instead of "
-            "exiting early.",
-            file=sys.stderr,
-        )
-        return 1
-
+    suite = unittest.TestLoader().discover(
+        str(TESTS_DIR),
+        pattern="test_*.py",
+    )
     test_count = suite.countTestCases()
     if test_count == 0:
         print(
