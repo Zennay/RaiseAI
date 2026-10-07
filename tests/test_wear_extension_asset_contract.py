@@ -1,0 +1,125 @@
+import json
+import pathlib
+import re
+import subprocess
+import unittest
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+EXTENSION_ROOT = ROOT / "app" / "src" / "main" / "assets" / "raiseai_wear"
+MANIFEST_PATH = EXTENSION_ROOT / "manifest.json"
+EXPECTED_ASSETS = {
+    "css": {"wear.css"},
+    "js": {"wear.js"},
+}
+ABSOLUTE_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", flags=re.IGNORECASE)
+
+
+def validate_asset_reference(value, *, kind):
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{kind} asset reference must be a non-empty string")
+    if "\\" in value:
+        raise ValueError(f"{kind} asset reference must use POSIX separators")
+    if value.startswith("/") or value.startswith("//") or ABSOLUTE_SCHEME.match(value):
+        raise ValueError(f"{kind} asset reference must be extension-relative")
+
+    raw_parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in raw_parts):
+        raise ValueError(f"{kind} asset reference must be canonical and traversal-free")
+
+    path = pathlib.PurePosixPath(value)
+    expected_suffix = f".{kind}"
+    if path.suffix.lower() != expected_suffix:
+        raise ValueError(f"{kind} asset reference must end in {expected_suffix}")
+    return path
+
+
+class WearExtensionAssetContractTests(unittest.TestCase):
+    def test_content_script_assets_are_local_regular_tracked_files(self):
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        scripts = manifest.get("content_scripts")
+        self.assertIsInstance(scripts, list)
+        self.assertTrue(scripts, "Wear extension must declare at least one content script")
+
+        discovered = {"css": set(), "js": set()}
+        for index, script in enumerate(scripts):
+            with self.subTest(content_script=index):
+                self.assertIsInstance(script, dict)
+                for kind in ("css", "js"):
+                    values = script.get(kind, [])
+                    self.assertIsInstance(values, list)
+                    self.assertTrue(
+                        all(isinstance(value, str) for value in values),
+                        f"content_scripts[{index}].{kind} must contain only strings",
+                    )
+                    self.assertEqual(
+                        len(values),
+                        len(set(values)),
+                        f"content_scripts[{index}].{kind} must not contain duplicates",
+                    )
+                    for value in values:
+                        relative = validate_asset_reference(value, kind=kind)
+                        discovered[kind].add(relative.as_posix())
+
+                        asset = EXTENSION_ROOT
+                        for part in relative.parts:
+                            asset = asset / part
+                            self.assertFalse(
+                                asset.is_symlink(),
+                                f"{value} must not traverse symlink indirection",
+                            )
+
+                        self.assertTrue(asset.is_file(), f"{value} must exist as a regular file")
+                        repo_relative = asset.relative_to(ROOT).as_posix()
+                        tracked = subprocess.run(
+                            ["git", "ls-files", "--error-unmatch", "--", repo_relative],
+                            cwd=ROOT,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            check=False,
+                        )
+                        self.assertEqual(
+                            tracked.returncode,
+                            0,
+                            f"{value} must be tracked by git",
+                        )
+
+        for kind, expected in EXPECTED_ASSETS.items():
+            self.assertTrue(
+                expected.issubset(discovered[kind]),
+                f"critical {kind} assets missing from manifest: "
+                f"{sorted(expected - discovered[kind])}",
+            )
+
+    def test_asset_reference_validator_rejects_ambiguous_or_external_paths(self):
+        cases = (
+            ("", "js"),
+            ("../wear.js", "js"),
+            ("./wear.js", "js"),
+            ("/wear.js", "js"),
+            ("nested//wear.js", "js"),
+            ("nested\\wear.js", "js"),
+            ("https://example.invalid/wear.js", "js"),
+            ("moz-extension:wear.js", "js"),
+            ("wear.css", "js"),
+            ("wear.js", "css"),
+        )
+        for value, kind in cases:
+            with self.subTest(value=value, kind=kind):
+                with self.assertRaises(ValueError):
+                    validate_asset_reference(value, kind=kind)
+
+    def test_asset_reference_validator_accepts_canonical_relative_assets(self):
+        self.assertEqual(
+            validate_asset_reference("wear.js", kind="js"),
+            pathlib.PurePosixPath("wear.js"),
+        )
+        self.assertEqual(
+            validate_asset_reference("nested/wear.css", kind="css"),
+            pathlib.PurePosixPath("nested/wear.css"),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
