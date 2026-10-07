@@ -27,16 +27,23 @@ TEXT_SUFFIXES = {
     ".yml",
 }
 EXACT_TEXT_PATHS = {".gitignore", "gradlew", "VERSION.txt"}
-FORBIDDEN_BIDI_CODEPOINTS = {
+FORBIDDEN_INVISIBLE_CODEPOINTS = {
+    0x00AD: "SOFT HYPHEN",
+    0x061C: "ARABIC LETTER MARK",
+    0x200B: "ZERO WIDTH SPACE",
+    0x200E: "LEFT-TO-RIGHT MARK",
+    0x200F: "RIGHT-TO-LEFT MARK",
     0x202A: "LEFT-TO-RIGHT EMBEDDING",
     0x202B: "RIGHT-TO-LEFT EMBEDDING",
     0x202C: "POP DIRECTIONAL FORMATTING",
     0x202D: "LEFT-TO-RIGHT OVERRIDE",
     0x202E: "RIGHT-TO-LEFT OVERRIDE",
+    0x2060: "WORD JOINER",
     0x2066: "LEFT-TO-RIGHT ISOLATE",
     0x2067: "RIGHT-TO-LEFT ISOLATE",
     0x2068: "FIRST STRONG ISOLATE",
     0x2069: "POP DIRECTIONAL ISOLATE",
+    0xFEFF: "ZERO WIDTH NO-BREAK SPACE",
 }
 
 
@@ -64,10 +71,11 @@ def validate_reviewable_text(raw: bytes, relative: str) -> None:
 
     for index, char in enumerate(text):
         codepoint = ord(char)
-        if codepoint in FORBIDDEN_BIDI_CODEPOINTS:
-            name = FORBIDDEN_BIDI_CODEPOINTS[codepoint]
+        if codepoint in FORBIDDEN_INVISIBLE_CODEPOINTS:
+            name = FORBIDDEN_INVISIBLE_CODEPOINTS[codepoint]
             raise ValueError(
-                f"{relative}: forbidden bidi control {name} U+{codepoint:04X} at character {index}"
+                f"{relative}: forbidden invisible control {name} U+{codepoint:04X} "
+                f"at character {index}"
             )
 
 
@@ -103,11 +111,11 @@ class SourceTextReviewIntegrityTests(unittest.TestCase):
                 self.assertTrue(path.is_file(), f"{relative} must be a regular file")
                 validate_reviewable_text(path.read_bytes(), relative)
 
-    def test_validator_rejects_nul_and_each_bidi_control(self):
+    def test_validator_rejects_nul_and_each_forbidden_invisible_control(self):
         with self.assertRaisesRegex(ValueError, "NUL"):
             validate_reviewable_text(b"safe\x00tail", "fixture.py")
 
-        for codepoint, name in FORBIDDEN_BIDI_CODEPOINTS.items():
+        for codepoint, name in FORBIDDEN_INVISIBLE_CODEPOINTS.items():
             with self.subTest(codepoint=f"U+{codepoint:04X}"):
                 payload = f"safe {chr(codepoint)} tail".encode("utf-8")
                 with self.assertRaisesRegex(ValueError, name):
