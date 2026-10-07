@@ -95,6 +95,18 @@ class GradlePropertiesContractTests(unittest.TestCase):
         self.assertEqual(self.workflow.count(expression), 2)
         self.assertIn("persist-credentials: false", self.workflow)
 
+    def test_workflow_pins_exact_python_runtime(self):
+        assertion = (
+            'python3 -c \'import platform, sys; '
+            'assert platform.python_implementation() == "CPython"; '
+            'assert sys.version_info[:2] == (3, 12), sys.version\''
+        )
+        self.assertEqual(
+            self.workflow.count(assertion),
+            1,
+            "Gradle properties validation must remain pinned to CPython 3.12",
+        )
+
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
