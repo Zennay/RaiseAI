@@ -82,6 +82,21 @@ def docker_action_image_values(path):
 
 
 
+def workflow_container_image_values(path):
+    return [
+        *yaml_scalar_values_for_key(path, "container"),
+        *yaml_scalar_values_for_key(path, "image"),
+    ]
+
+
+def immutable_container_image_error(value):
+    value = unquote_scalar(value)
+    name, separator, digest = value.rpartition("@sha256:")
+    if not separator or not name or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return f"{value} must pin workflow container images by an immutable sha256 digest"
+    return None
+
+
 def local_uses_error(value, root=ROOT):
     value = unquote_scalar(value)
     if not value.startswith("./"):
@@ -150,6 +165,64 @@ def immutable_uses_error(value):
 
 
 class AllWorkflowActionPinsTests(unittest.TestCase):
+    def test_workflow_container_images_are_immutable(self):
+        workflows, _ = github_action_documents()
+        for workflow in workflows:
+            for value in workflow_container_image_values(workflow):
+                with self.subTest(
+                    workflow=str(workflow.relative_to(ROOT)),
+                    image=value,
+                ):
+                    self.assertIsNone(
+                        immutable_container_image_error(value),
+                        f"{workflow.relative_to(ROOT)}: "
+                        f"{immutable_container_image_error(value)}",
+                    )
+
+    def test_workflow_container_image_parser_covers_block_flow_and_shorthand(self):
+        digest = "e" * 64
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            pinned = root / "pinned.yml"
+            pinned.write_text(
+                "jobs:\n"
+                "  block:\n"
+                "    container:\n"
+                f"      image: ghcr.io/example/build@sha256:{digest}\n"
+                "    services:\n"
+                f"      redis: {{image: redis@sha256:{digest}}}\n"
+                "  shorthand:\n"
+                f"    container: alpine@sha256:{digest}\n",
+                encoding="utf-8",
+            )
+            mutable = root / "mutable.yml"
+            mutable.write_text(
+                "jobs:\n"
+                "  block:\n"
+                "    container: ubuntu:24.04\n"
+                "    services:\n"
+                "      redis:\n"
+                "        image: redis:7\n",
+                encoding="utf-8",
+            )
+
+            pinned_values = workflow_container_image_values(pinned)
+            self.assertEqual(
+                set(pinned_values),
+                {
+                    f"ghcr.io/example/build@sha256:{digest}",
+                    f"redis@sha256:{digest}",
+                    f"alpine@sha256:{digest}",
+                },
+            )
+            for value in pinned_values:
+                self.assertIsNone(immutable_container_image_error(value))
+
+            mutable_values = workflow_container_image_values(mutable)
+            self.assertEqual(set(mutable_values), {"ubuntu:24.04", "redis:7"})
+            for value in mutable_values:
+                self.assertIsNotNone(immutable_container_image_error(value))
+
     def test_every_local_uses_ref_is_canonical_and_resolvable(self):
         workflows, action_manifests = github_action_documents()
 
