@@ -28,14 +28,11 @@ LEGACY_FOREIGN_WORKFLOWS = {
     "zcloud-workers-live-recovery-20261006.yml",
 }
 
-FOREIGN_PREFIXES = (
-    "ftmo-",
-    "lightup-",
-    "zcloud-",
-    "cancel-stale-zcloud-",
-)
-
 FOREIGN_MARKER_RE = re.compile(r"(?i)\b(?:ftmo|lightup|zcloud)\b")
+
+
+def is_foreign_workflow_name(name: str) -> bool:
+    return FOREIGN_MARKER_RE.search(name) is not None
 
 
 def foreign_workflows() -> list[Path]:
@@ -46,7 +43,7 @@ def foreign_workflows() -> list[Path]:
         and path.suffix in {".yml", ".yaml"}
         and (
             path.name in LEGACY_FOREIGN_WORKFLOWS
-            or path.name.startswith(FOREIGN_PREFIXES)
+            or is_foreign_workflow_name(path.name)
         )
     )
 
@@ -71,6 +68,25 @@ def push_section(text: str) -> list[str]:
 
 
 class WorkflowProjectBoundaryTests(unittest.TestCase):
+    def test_foreign_filename_detection_is_case_insensitive_and_position_independent(self):
+        for name in (
+            "FTMO-proof.yml",
+            "LightUp-check.yaml",
+            "ZCLOUD-recovery.yml",
+            "probe-ZCloud-dashboard.yml",
+            "legacy-lightup-proof.yml",
+        ):
+            with self.subTest(name=name):
+                self.assertTrue(is_foreign_workflow_name(name))
+
+        for name in (
+            "raise-quality.yml",
+            "workflow-project-boundary.yml",
+            "cloud-provider-contract.yml",
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(is_foreign_workflow_name(name))
+
     def test_no_new_foreign_project_workflows_are_added_to_raiseai(self):
         current = {path.name for path in foreign_workflows()}
         unexpected = current - LEGACY_FOREIGN_WORKFLOWS
