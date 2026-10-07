@@ -91,12 +91,14 @@ object SensorTrialRecorder {
                     "false" -> false
                     else -> null
                 }
+                val maxSimilarity = fields[5].toFloatOrNull()
                 val appVersion = fields[6]
                 val sourceRevision = fields[7].lowercase()
                 val detectorConfig = fields[8]
 
                 if (sessionId == null || sessionId <= 0L ||
                     durationMs == null || sampleCount == null || triggered == null ||
+                    maxSimilarity == null || !maxSimilarity.isFinite() ||
                     appVersion.isBlank() ||
                     !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
                     detectorConfig.isBlank() || detectorConfig == "missing"
