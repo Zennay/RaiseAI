@@ -59,6 +59,9 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                         "spki_sha256=" + ("b" * 64) + "\n",
                         encoding="utf-8",
                     )
+                drop_device_marker = os.environ.get("FAKE_DROP_DEVICE_MARKER")
+                if drop_device_marker:
+                    Path(drop_device_marker).write_text("dropped\n", encoding="utf-8")
 
                 launcher = output / "start-physical-handoff.command"
                 launcher.write_text(
@@ -150,6 +153,8 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 if [ "${1:-}" = "devices" ]; then
                   printf 'List of devices attached\n'
                   if [ "${FAKE_NO_DEVICES:-0}" = "1" ]; then
+                    :
+                  elif [ -n "${FAKE_DROP_DEVICE_MARKER:-}" ] && [ -f "$FAKE_DROP_DEVICE_MARKER" ]; then
                     :
                   elif [ "${FAKE_MULTIPLE_DEVICES:-0}" = "1" ]; then
                     printf 'watch-1\tdevice\nphone-1\tdevice\n'
@@ -428,6 +433,25 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
             "No APK was installed and no physical acceptance session was started.",
             result.stdout,
         )
+
+    def test_preflight_rejects_watch_disconnect_during_fetch_and_verify(self):
+        drop_marker = self.root / "watch-dropped"
+        result = self.run_launcher(
+            {"FAKE_DROP_DEVICE_MARKER": str(drop_marker)},
+            args=["--preflight-only", str(self.profile)],
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(self.fetch_marker.exists())
+        self.assertTrue(drop_marker.exists())
+        self.assertIn(
+            "Bound Watch changed or disconnected during frozen handoff verification",
+            result.stdout,
+        )
+        self.assertNotIn("FROZEN-ACCEPTANCE PREFLIGHT PASS", result.stdout)
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("verify:"))
 
     def test_preflight_rejects_extra_arguments_before_side_effects(self):
         result = self.run_launcher(

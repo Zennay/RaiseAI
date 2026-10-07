@@ -288,7 +288,33 @@ rm -rf "$VERIFY_SOURCE"
 
 echo
 echo "Frozen handoff verified."
-echo "Bound Watch: $MODEL ($TARGET)"
+
+POST_DEVICES="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
+POST_COUNT="$(printf '%s\n' "$POST_DEVICES" | awk 'NF {n++} END {print n+0}')"
+if [ "$POST_COUNT" -ne 1 ] ||
+   ! printf '%s\n' "$POST_DEVICES" | grep -Fxq "$TARGET"; then
+  echo "Bound Watch changed or disconnected during frozen handoff verification: $TARGET"
+  echo "Expected the same single active ADB target after verification; found $POST_COUNT."
+  exit 1
+fi
+
+POST_MODEL="$("$ADB" -s "$TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || true)"
+POST_CHARACTERISTICS="$("$ADB" -s "$TARGET" shell getprop ro.build.characteristics 2>/dev/null | tr -d '\r' || true)"
+POST_FEATURES="$("$ADB" -s "$TARGET" shell pm list features 2>/dev/null | tr -d '\r' || true)"
+case "$POST_MODEL" in
+  SM-L315F|SM_L315F) ;;
+  *)
+    echo "Bound Watch model changed during frozen handoff verification: ${POST_MODEL:-<unknown>} ($TARGET)"
+    exit 1
+    ;;
+esac
+if ! printf '%s' "$POST_CHARACTERISTICS" | grep -qi watch &&
+   ! printf '%s\n' "$POST_FEATURES" | grep -q 'android.hardware.type.watch'; then
+  echo "Bound ADB target stopped identifying as Wear OS during frozen handoff verification: $TARGET"
+  exit 1
+fi
+
+echo "Bound Watch: $POST_MODEL ($TARGET)"
 
 if [ "$MODE" = "preflight" ]; then
   echo "FROZEN-ACCEPTANCE PREFLIGHT PASS"
