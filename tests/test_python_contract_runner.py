@@ -120,6 +120,40 @@ class PassingContract(unittest.TestCase):
         )
         self.assertNotIn("linked contract target must not be imported", rendered)
 
+    def test_symlinked_contract_package_is_rejected_before_discovery(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-package-link-") as tmp:
+            root = Path(tmp)
+            tests_dir = root / "tests"
+            tests_dir.mkdir()
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+            target = root / "linked_package"
+            target.mkdir()
+            (target / "__init__.py").write_text("", encoding="utf-8")
+            (target / "test_linked_package.py").write_text(
+                'raise RuntimeError("linked package target must not be imported")\n',
+                encoding="utf-8",
+            )
+            (tests_dir / "linked_package").symlink_to(target, target_is_directory=True)
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("invalid package entries", rendered)
+        self.assertIn(
+            "INVALID-CONTRACT-PACKAGE: linked_package/: symbolic link directories are forbidden",
+            rendered,
+        )
+        self.assertNotIn("linked package target must not be imported", rendered)
+
     def test_named_contract_module_without_tests_returns_nonzero(self):
         exit_code, output = self.run_temporary_suite(
             """
