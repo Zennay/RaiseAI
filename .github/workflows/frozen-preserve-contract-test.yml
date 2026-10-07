@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: raise-frozen-preserve-contract-\${{ github.event.pull_request.number || github.ref }}
+  group: raise-frozen-preserve-contract-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,13 +35,13 @@ jobs:
       - name: Checkout exact tested revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
         with:
-          ref: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Verify exact tested revision
         shell: bash
         env:
-          EXPECTED_SHA: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
