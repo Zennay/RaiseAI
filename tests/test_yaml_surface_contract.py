@@ -43,9 +43,8 @@ def reject_duplicate_mapping_keys(node)
     return
   end
 
-  if node.respond_to?(:children)
-    node.children.each { |child| reject_duplicate_mapping_keys(child) }
-  end
+  children = node.respond_to?(:children) ? node.children : nil
+  Array(children).each { |child| reject_duplicate_mapping_keys(child) }
 end
 
 tree = Psych.parse_stream(raw)
