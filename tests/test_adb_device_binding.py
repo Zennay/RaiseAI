@@ -250,7 +250,7 @@ exit 2
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_installer(self, serial=None, extra_env=None):
+    def run_installer(self, serial=None, extra_env=None, args=None):
         env = os.environ.copy()
         env["HOME"] = str(self.home)
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
@@ -264,8 +264,10 @@ exit 2
         env["RAISE_INSTALLED_WATCH_SERIAL_FILE"] = str(self.serial_file)
         env["RAISE_INSTALLED_APK_SHA256_FILE"] = str(self.installed_apk_sha_file)
         env["PATH"] = f"{self.bin}:{env['PATH']}"
+        command = ["bash", str(ROOT / "install-watch-apk.command")]
+        command.extend([str(self.apk)] if args is None else args)
         return subprocess.run(
-            ["bash", str(ROOT / "install-watch-apk.command"), str(self.apk)],
+            command,
             cwd=ROOT,
             env=env,
             text=True,
@@ -281,6 +283,38 @@ exit 2
             for line in self.log.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
+
+    def test_installer_rejects_invalid_arity_before_state_or_adb(self):
+        invalid_argv = (
+            [],
+            [str(self.apk), "watch.example:5555", "unexpected"],
+        )
+        for argv in invalid_argv:
+            with self.subTest(argv=argv):
+                shutil.rmtree(self.home / ".raiseai", ignore_errors=True)
+                self.log.unlink(missing_ok=True)
+                result = self.run_installer(args=argv)
+
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn(
+                    "Usage: ./install-watch-apk.command /path/to/RaiseAI.apk [watch-ip:port]",
+                    result.stdout,
+                )
+                self.assertFalse((self.home / ".raiseai").exists())
+                self.assertFalse(self.log.exists())
+                self.assertFalse(self.serial_file.exists())
+                self.assertFalse(self.installed_apk_sha_file.exists())
+
+    def test_installer_rejects_missing_apk_before_state_or_adb(self):
+        missing_apk = self.root / "missing.apk"
+        result = self.run_installer(args=[str(missing_apk)])
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"APK not found: {missing_apk}", result.stdout)
+        self.assertFalse((self.home / ".raiseai").exists())
+        self.assertFalse(self.log.exists())
+        self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
 
     def test_installer_attests_exact_selected_watch(self):
         result = self.run_installer("watch-b")
@@ -450,13 +484,15 @@ exit 2
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_provisioner(self, serial):
+    def run_provisioner(self, serial, args=None):
         env = os.environ.copy()
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
         env["ANDROID_SERIAL"] = serial
         env["ADB_LOG"] = str(self.log)
+        command = ["bash", str(ROOT / "provision-watch-gateway.command")]
+        command.extend([str(self.profile)] if args is None else args)
         return subprocess.run(
-            ["bash", str(ROOT / "provision-watch-gateway.command"), str(self.profile)],
+            command,
             cwd=ROOT,
             env=env,
             text=True,
@@ -472,6 +508,20 @@ exit 2
             for line in self.log.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
+
+    def test_gateway_provisioning_rejects_extra_args_before_adb(self):
+        self.log.unlink(missing_ok=True)
+        result = self.run_provisioner(
+            "watch-b",
+            args=[str(self.profile), "unexpected"],
+        )
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn(
+            "Usage: ./provision-watch-gateway.command [/path/to/watch-gateway.properties]",
+            result.stdout,
+        )
+        self.assertFalse(self.log.exists())
 
     def test_gateway_provisioning_stays_on_bound_watch(self):
         result = self.run_provisioner("watch-b")
