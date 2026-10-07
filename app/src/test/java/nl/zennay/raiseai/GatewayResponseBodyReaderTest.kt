@@ -63,6 +63,34 @@ class GatewayResponseBodyReaderTest {
     }
 
     @Test
+    fun rejectsMalformedUtf8InsteadOfReplacingBytes() {
+        val malformed = byteArrayOf(0xC3.toByte(), 0x28)
+
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(ByteArrayInputStream(malformed))
+        }
+
+        assertEquals("gateway_response_invalid_utf8", error.message)
+    }
+
+    @Test
+    fun malformedUtf8ClosesInputStream() {
+        var closed = false
+        val stream = object : ByteArrayInputStream(byteArrayOf(0xC3.toByte(), 0x28)) {
+            override fun close() {
+                closed = true
+                super.close()
+            }
+        }
+
+        assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(stream)
+        }
+
+        assertTrue(closed)
+    }
+
+    @Test
     fun nullResponseBodyIsEmpty() {
         assertEquals("", GatewayResponseBodyReader.read(null))
     }
