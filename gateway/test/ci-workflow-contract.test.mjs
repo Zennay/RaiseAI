@@ -107,6 +107,7 @@ test("gateway test run steps use explicit strict Bash", () => {
     "Verify exact tested revision",
     "Gateway unit tests",
     "Deployment script syntax",
+    "Verify worktree remains clean",
   ]) {
     const start = lines.indexOf(`      - name: ${name}`);
     assert.notEqual(start, -1, `missing step: ${name}`);
@@ -120,6 +121,22 @@ test("gateway test run steps use explicit strict Bash", () => {
   }
 
   assert.doesNotMatch(TEST_WORKFLOW, /continue-on-error:\s*true\b/);
+});
+
+
+test("gateway test CI rejects repository side effects across the full checkout", () => {
+  assert.ok(TEST_WORKFLOW.includes("- name: Verify worktree remains clean"));
+  for (const command of [
+    'git -C "$GITHUB_WORKSPACE" diff --exit-code -- .',
+    'git -C "$GITHUB_WORKSPACE" diff --cached --exit-code -- .',
+    'test -z "$(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard)"',
+  ]) {
+    assert.equal(
+      TEST_WORKFLOW.split(command).length - 1,
+      1,
+      `expected exact clean-worktree command: ${command}`,
+    );
+  }
 });
 
 test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () => {
