@@ -12,6 +12,7 @@ EXPECTED_ENV = {
     "ARTIFACT_ID": "11317304352",
     "ARTIFACT_RUN_ID": "37241768528",
     "EXPECTED_ARTIFACT_DIGEST": "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce",
+    "EXPECTED_ARTIFACT_SIZE_BYTES": "84450954",
     "SOURCE_REVISION": "8f719bb273f9b997848864f342598e7df5f090e5",
     "RELEASE_TAG": "physical-handoff-v1.5.2-8f719bb",
     "ASSET_NAME": "RaiseAI-Watch7-v1.5.2-physical-handoff-37241768528.zip",
@@ -117,6 +118,32 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
             r"(?m)curl --(?!connect-timeout)",
             "no preservation curl call may bypass the per-request deadline",
         )
+
+    def test_source_and_preserved_asset_sizes_are_bound_before_digest(self):
+        self.assertEqual(
+            self.text.count('      EXPECTED_ARTIFACT_SIZE_BYTES: "84450954"'),
+            1,
+        )
+        source_size = '          actual_size="$(wc -c < "$archive" | tr -d \'[:space:]\')"'
+        source_gate = '          test "$actual_size" = "$EXPECTED_ARTIFACT_SIZE_BYTES" || {'
+        source_digest = '          actual_digest="$(sha256sum "$archive" | awk \'{print tolower($1)}\')"'
+        preserved_size = '          verify_size="$(wc -c < "$verify" | tr -d \'[:space:]\')"'
+        preserved_gate = '          test "$verify_size" = "$EXPECTED_ARTIFACT_SIZE_BYTES" || {'
+        preserved_digest = '          actual_digest="$(sha256sum "$verify" | awk \'{print tolower($1)}\')"'
+
+        for line in (
+            source_size,
+            source_gate,
+            source_digest,
+            preserved_size,
+            preserved_gate,
+            preserved_digest,
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.text.count(line), 1)
+
+        self.assertLess(self.text.index(source_gate), self.text.index(source_digest))
+        self.assertLess(self.text.index(preserved_gate), self.text.rindex(preserved_digest))
 
     def test_release_creation_stays_bound_to_frozen_source(self):
         self.assertIn('"target_commitish": os.environ["SOURCE_REVISION"]', self.text)
