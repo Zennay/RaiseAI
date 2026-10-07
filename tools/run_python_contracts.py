@@ -1,3 +1,4 @@
+from contextlib import chdir
 from pathlib import Path
 import sys
 import unittest
@@ -32,7 +33,7 @@ def discovered_test_modules(suite: unittest.TestSuite) -> set[str]:
     return modules
 
 
-def main() -> int:
+def run_contracts() -> int:
     suite = unittest.TestLoader().discover(
         str(TESTS_DIR),
         pattern="test_*.py",
@@ -85,6 +86,11 @@ def main() -> int:
     if missing_modules:
         return 1
     return contract_exit_code(result)
+
+
+def main() -> int:
+    with chdir(ROOT):
+        return run_contracts()
 
 
 if __name__ == "__main__":
