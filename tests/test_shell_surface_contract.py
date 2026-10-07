@@ -47,6 +47,10 @@ class ShellSurfaceContractTests(unittest.TestCase):
         for relative in tracked_shell_paths():
             with self.subTest(path=relative):
                 path = ROOT / relative
+                self.assertFalse(
+                    path.is_symlink(),
+                    f"{relative} must be a regular repository file, not a symlink",
+                )
                 lines = path.read_text(encoding="utf-8").splitlines()
                 self.assertGreaterEqual(len(lines), 2, f"{relative} must include shebang + strict mode")
                 self.assertIn(lines[0], ALLOWED_SHEBANGS, f"{relative} must declare Bash explicitly")
@@ -128,6 +132,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
         for token in (
             'subprocess.check_output(["git", "ls-files", "-z"])',
             "path.suffix in {\".command\", \".sh\"}",
+            'candidate.is_symlink()',
+            'tracked shell entrypoints must not be symlinks',
             'subprocess.run(["bash", "-n", path], check=True)',
             "python3 -m unittest tests.test_shell_surface_contract",
             "git diff --exit-code -- .",
