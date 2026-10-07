@@ -111,9 +111,9 @@ class YamlSurfaceContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "multiple.yml"
             path.write_text(
-                "name: primary\\n"
-                "---\\n"
-                "name: hidden-secondary\\n",
+                "name: primary\n"
+                "---\n"
+                "name: hidden-secondary\n",
                 encoding="utf-8",
             )
             parsed = parse_yaml_with_psych(path)
