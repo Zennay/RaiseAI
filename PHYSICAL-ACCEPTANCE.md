@@ -178,7 +178,7 @@ Record failures as failures. Do not discard missed raises or false triggers mere
 Issue #34 requires the observed screen-off/background behavior and visible UX failures to be explicit rather than inferred from a passing E2E or reliability score. Before closing the physical gate, create `operator-observations.json` inside the same evidence session directory. Prefer generating the fail-closed template directly from the session identity:
 
 ```bash
-python3 tools/create-physical-observation-template.py \\
+python3 tools/create-physical-observation-template.py \
   ~/.raiseai/evidence/<session>/session.json
 ```
 
