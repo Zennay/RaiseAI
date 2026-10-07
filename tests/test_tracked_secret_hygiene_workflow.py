@@ -56,6 +56,10 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         self.assertEqual(self.text.count(f"          ref: {expression}"), 1)
         self.assertEqual(self.text.count(f"          EXPECTED_SHA: {expression}"), 1)
         self.assertEqual(self.text.count("          persist-credentials: false"), 1)
+        self.assertEqual(
+            self.text.count('          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"'),
+            1,
+        )
 
     def test_runtime_and_test_command_are_pinned(self):
         for line in (
@@ -97,6 +101,7 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         ]
         self.assertEqual(len(run_indices), 4)
         self.assertNotIn("continue-on-error: true", self.text)
+        self.assertNotRegex(self.text, r"(?m)^\s+if:\s*")
 
         for run_index in run_indices:
             with self.subTest(line=run_index + 1):
