@@ -64,6 +64,29 @@ class TrackedSymlinkBoundaryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_target(path, target)
 
+
+    def test_index_parser_rejects_unmerged_entries(self):
+        from unittest import mock
+        sample = b"120000 deadbeef 1" + bytes([9]) + b"test-link" + bytes([0])
+        with mock.patch.object(subprocess, "check_output", return_value=sample):
+            with self.assertRaisesRegex(ValueError, "unmerged git index entry"):
+                list(tracked_symlinks())
+
+    def test_index_parser_detects_symlinks_only(self):
+        from unittest import mock
+        sample = b"100644 deadbeef 0" + bytes([9]) + b"README.md" + bytes([0])
+        sample += b"120000 facebeef 0" + bytes([9]) + b"safe-link" + bytes([0])
+        with mock.patch.object(subprocess, "check_output", return_value=sample):
+            self.assertEqual(list(tracked_symlinks()), ["safe-link"])
+
+    def test_index_parser_rejects_malformed_metadata(self):
+        from unittest import mock
+        for entry in (b"broken-entry" + bytes([0]), b"120000 facebeef" + bytes([9]) + b"link" + bytes([0])):
+            with self.subTest(entry=entry):
+                with mock.patch.object(subprocess, "check_output", return_value=entry):
+                    with self.assertRaisesRegex(ValueError, "invalid git index"):
+                        list(tracked_symlinks())
+
     def test_accepts_repository_local_relative_links(self):
         for path, target in (
             ("scripts/tool", "../tools/utility.sh"),
