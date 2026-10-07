@@ -587,8 +587,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             end = step_starts[position + 1] if position + 1 < len(step_starts) else len(lines)
             step = lines[start:end]
             name = lines[start].removeprefix("      - name: ")
-            keys = []
-            for line in step:
+            keys = ["name"]
+            for line in step[1:]:
                 match = re.fullmatch(r"        ([A-Za-z0-9_-]+):.*", line)
                 if match:
                     keys.append(match.group(1))
