@@ -14,7 +14,7 @@ def contract_exit_code(result: unittest.TestResult) -> int:
 
 
 def main() -> int:
-    suite = unittest.defaultTestLoader.discover(
+    suite = unittest.TestLoader().discover(
         str(TESTS_DIR),
         pattern="test_*.py",
     )
