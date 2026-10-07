@@ -28,27 +28,33 @@ require "psych"
 raw = File.binread(ARGV.fetch(0))
 raw.force_encoding(Encoding::UTF_8)
 abort("#{ARGV.fetch(0)}: invalid UTF-8") unless raw.valid_encoding?
-def reject_duplicate_mapping_keys(node)
+def validate_yaml_tree(node)
+  abort("YAML aliases are forbidden") if node.is_a?(Psych::Nodes::Alias)
+  if node.respond_to?(:anchor) && node.anchor && !node.anchor.empty?
+    abort("YAML anchors are forbidden")
+  end
+
   if node.is_a?(Psych::Nodes::Mapping)
     seen = {}
     node.children.each_slice(2) do |key, value|
       abort("YAML mapping keys must be scalar") unless key.is_a?(Psych::Nodes::Scalar)
       label = key.value
+      abort("YAML merge keys are forbidden") if label == "<<"
       abort("duplicate YAML mapping key: #{label}") if seen.key?(label)
       seen[label] = true
-      reject_duplicate_mapping_keys(key)
-      reject_duplicate_mapping_keys(value)
+      validate_yaml_tree(key)
+      validate_yaml_tree(value)
     end
     return
   end
 
   children = node.respond_to?(:children) ? node.children : nil
-  Array(children).each { |child| reject_duplicate_mapping_keys(child) }
+  Array(children).each { |child| validate_yaml_tree(child) }
 end
 
 tree = Psych.parse_stream(raw)
 abort("YAML stream must contain exactly one document") unless tree.children.length == 1
-reject_duplicate_mapping_keys(tree)
+validate_yaml_tree(tree)
 """
     return subprocess.run(
         ["ruby", "--disable-gems", "-e", script, str(path)],
@@ -133,6 +139,30 @@ class YamlSurfaceContractTests(unittest.TestCase):
                 parsed.stderr,
             )
 
+    def test_parser_rejects_yaml_anchors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "anchor.yml"
+            path.write_text("defaults: &defaults\n  runner: ubuntu-24.04\n", encoding="utf-8")
+            parsed = parse_yaml_with_psych(path)
+            self.assertNotEqual(parsed.returncode, 0)
+            self.assertIn("YAML anchors are forbidden", parsed.stderr)
+
+    def test_parser_rejects_yaml_aliases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "alias.yml"
+            path.write_text("copy: *defaults\n", encoding="utf-8")
+            parsed = parse_yaml_with_psych(path)
+            self.assertNotEqual(parsed.returncode, 0)
+            self.assertIn("YAML aliases are forbidden", parsed.stderr)
+
+    def test_parser_rejects_yaml_merge_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "merge-key.yml"
+            path.write_text("job:\n  <<: inherited\n", encoding="utf-8")
+            parsed = parse_yaml_with_psych(path)
+            self.assertNotEqual(parsed.returncode, 0)
+            self.assertIn("YAML merge keys are forbidden", parsed.stderr)
+
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
         start = lines.index(f"  {event}:") + 1
@@ -202,6 +232,9 @@ class YamlSurfaceContractTests(unittest.TestCase):
             'subprocess.run(["ruby", "--disable-gems", "-e", ruby_parser, path], check=True)',
             "duplicate YAML mapping key",
             "YAML mapping keys must be scalar",
+            "YAML anchors are forbidden",
+            "YAML aliases are forbidden",
+            "YAML merge keys are forbidden",
             "YAML stream must contain exactly one document",
             "python3 -m unittest tests.test_yaml_surface_contract",
             "git diff --exit-code -- .",
