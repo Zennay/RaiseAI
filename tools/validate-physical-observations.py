@@ -20,7 +20,6 @@ import re
 import secrets
 import stat
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
