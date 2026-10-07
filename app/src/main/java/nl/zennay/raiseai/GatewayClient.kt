@@ -127,11 +127,11 @@ class GatewayClient(private val settings: GatewaySettings) {
             }
 
             GatewayResponse(
-                route = GatewayResponseFieldPolicy.stringOrDefault(
+                route = GatewayResponseFieldPolicy.tokenOrDefault(
                     json.optionalValue("route"),
                     "unknown"
                 ),
-                status = GatewayResponseFieldPolicy.stringOrDefault(
+                status = GatewayResponseFieldPolicy.tokenOrDefault(
                     json.optionalValue("status"),
                     "unknown"
                 ),
@@ -139,12 +139,12 @@ class GatewayClient(private val settings: GatewaySettings) {
                     execution?.optionalValue("enabled"),
                     false
                 ),
-                executionReason = GatewayResponseFieldPolicy.optionalNonBlankString(
+                executionReason = GatewayResponseFieldPolicy.optionalToken(
                     execution?.optionalValue("reason")
                 ),
-                answer = GatewayResponseFieldPolicy.optionalNonBlankString(
+                answer = GatewayResponseFieldPolicy.optionalAnswer(
                     json.optionalValue("answer")
-                ) ?: GatewayResponseFieldPolicy.optionalNonBlankString(
+                ) ?: GatewayResponseFieldPolicy.optionalAnswer(
                     json.optionalValue("message")
                 )
             )
