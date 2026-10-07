@@ -80,6 +80,10 @@ def validate_portable_paths(paths: list[str]) -> None:
                 raise ValueError(
                     f"{path!r}: Unicode control and format characters are forbidden"
                 )
+            if any(unicodedata.category(char) in {"Zl", "Zp"} for char in segment):
+                raise ValueError(
+                    f"{path!r}: Unicode line and paragraph separators are forbidden"
+                )
             if any(char in WINDOWS_FORBIDDEN_CHARACTERS for char in segment):
                 raise ValueError(
                     f"{path!r}: Windows-reserved filename characters are forbidden"
@@ -214,6 +218,16 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     ValueError,
                     "Unicode control and format characters",
+                ):
+                    validate_portable_paths([path])
+
+    def test_rejects_unicode_line_and_paragraph_separators(self):
+        for codepoint in (0x2028, 0x2029):
+            with self.subTest(codepoint=f"U+{codepoint:04X}"):
+                path = f"docs/bad{chr(codepoint)}name.md"
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Unicode line and paragraph separators",
                 ):
                     validate_portable_paths([path])
 
