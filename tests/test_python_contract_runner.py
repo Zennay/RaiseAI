@@ -198,6 +198,28 @@ class PassingContract(unittest.TestCase):
             output,
         )
 
+    def test_inherited_only_contract_module_is_reported_empty(self):
+        exit_code, output = self.run_temporary_suite(
+            "from source_contract import SourceContract\n"
+            "class InheritedContract(SourceContract):\n"
+            "    pass\n",
+            "test_inherited_contract.py",
+            extra_files={
+                "source_contract.py": (
+                    "import unittest\n"
+                    "class SourceContract(unittest.TestCase):\n"
+                    "    def test_passes(self):\n"
+                    "        self.assertTrue(True)\n"
+                ),
+            },
+        )
+        self.assertEqual(exit_code, 1, output)
+        self.assertIn("contributed zero tests", output)
+        self.assertIn(
+            "EMPTY-CONTRACT-MODULE: test_inherited_contract",
+            output,
+        )
+
     def test_same_basename_nested_contracts_keep_distinct_module_identity(self):
         with tempfile.TemporaryDirectory(prefix="raiseai-runner-qualified-") as tmp:
             tests_dir = Path(tmp)
