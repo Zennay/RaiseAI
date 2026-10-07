@@ -61,6 +61,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json
+          import math
           import pathlib
           import subprocess
 
@@ -74,6 +75,12 @@ jobs:
 
           def reject_nonfinite(value):
               raise ValueError(f"non-finite JSON number: {value}")
+
+          def parse_finite_float(value):
+              parsed = float(value)
+              if not math.isfinite(parsed):
+                  raise ValueError(f"non-finite JSON number: {value}")
+              return parsed
 
           raw = subprocess.check_output(["git", "ls-files", "-z"])
           paths = sorted(
@@ -97,6 +104,7 @@ jobs:
                       text,
                       object_pairs_hook=reject_duplicate_keys,
                       parse_constant=reject_nonfinite,
+                      parse_float=parse_finite_float,
                   )
               except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                   raise SystemExit(f"{path}: invalid strict UTF-8 JSON: {exc}") from None
