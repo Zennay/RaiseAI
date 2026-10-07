@@ -12,6 +12,14 @@ FROZEN_ARCHIVE_SHA256 = "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b16
 
 
 class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
+    def test_version_file_is_canonical_single_line_utf8(self):
+        raw = (ROOT / "VERSION.txt").read_bytes()
+        text = raw.decode("utf-8")
+        self.assertIsNotNone(
+            re.fullmatch(r"\d+\.\d+\.\d+\n", text),
+            "VERSION.txt must contain exactly one canonical SemVer line terminated by LF",
+        )
+
     def test_repository_version_matches_android_version_name(self):
         version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
         self.assertRegex(version, VERSION_RE)
