@@ -225,6 +225,7 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            timeout=5,
         )
 
     def test_runs_verified_handoff_bound_to_single_galaxy_watch(self):
