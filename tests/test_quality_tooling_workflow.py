@@ -50,8 +50,25 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertGreaterEqual(self.text.count(expression), 2)
         self.assertIn('test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', self.text)
 
+    def _trigger_paths(self, event):
+        event_match = re.search(
+            rf"(?ms)^  {re.escape(event)}:\\n(?P<body>(?:    .*\\n|      .*\\n)*)",
+            self.text,
+        )
+        self.assertIsNotNone(event_match, f"{event} trigger must exist")
+        paths_match = re.search(
+            r"(?ms)^    paths:\\n(?P<paths>(?:      - .*\\n)+)",
+            event_match.group("body"),
+        )
+        self.assertIsNotNone(paths_match, f"{event} trigger must define paths")
+        return re.findall(
+            r'^      - "([^"]+)"$',
+            paths_match.group("paths"),
+            flags=re.MULTILINE,
+        )
+
     def test_push_and_pull_request_filters_cover_quality_surface(self):
-        paths = [
+        expected_paths = [
             *COMMAND_ENTRYPOINTS,
             "tools/analyze-watch-sensor-traces.py",
             "tools/analyze-watch-sensor-trials.py",
@@ -72,12 +89,13 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_watch_sensor_trial_analyzer.py",
             ".github/workflows/quality-tooling-test.yml",
         ]
-        for path in paths:
-            with self.subTest(path=path):
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                actual_paths = self._trigger_paths(event)
                 self.assertEqual(
-                    self.text.count(f'      - "{path}"'),
-                    2,
-                    f"{path} must trigger both push and pull_request quality CI",
+                    actual_paths,
+                    expected_paths,
+                    f"{event} quality paths must be complete, ordered and duplicate-free",
                 )
 
     def test_checks_shell_syntax_for_all_command_entrypoints(self):
