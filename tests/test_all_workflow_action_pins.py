@@ -83,9 +83,77 @@ def docker_action_image_values(path):
 
 
 def workflow_container_image_values(path):
+    script = r"""
+require "psych"
+raw = File.binread(ARGV.fetch(0))
+raw.force_encoding(Encoding::UTF_8)
+abort("invalid UTF-8") unless raw.valid_encoding?
+tree = Psych.parse_stream(raw)
+abort("YAML stream must contain exactly one document") unless tree.children.length == 1
+root = tree.children.fetch(0).root
+abort("workflow root must be a mapping") unless root.is_a?(Psych::Nodes::Mapping)
+
+lookup = lambda do |mapping, target|
+  next nil unless mapping.is_a?(Psych::Nodes::Mapping)
+  mapping.children.each_slice(2) do |key_node, value_node|
+    if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == target
+      break value_node
+    end
+  end
+end
+
+values = []
+jobs = lookup.call(root, "jobs")
+if jobs
+  abort("workflow jobs must be a mapping") unless jobs.is_a?(Psych::Nodes::Mapping)
+  jobs.children.each_slice(2) do |_job_name, job|
+    next unless job.is_a?(Psych::Nodes::Mapping)
+
+    container = lookup.call(job, "container")
+    if container.is_a?(Psych::Nodes::Scalar)
+      values << container.value
+    elsif container
+      abort("job container must be a scalar or mapping") unless container.is_a?(Psych::Nodes::Mapping)
+      image = lookup.call(container, "image")
+      if image
+        abort("job container image must be a scalar") unless image.is_a?(Psych::Nodes::Scalar)
+        values << image.value
+      end
+    end
+
+    services = lookup.call(job, "services")
+    if services
+      abort("job services must be a mapping") unless services.is_a?(Psych::Nodes::Mapping)
+      services.children.each_slice(2) do |_service_name, service|
+        abort("service definition must be a mapping") unless service.is_a?(Psych::Nodes::Mapping)
+        image = lookup.call(service, "image")
+        next unless image
+        abort("service image must be a scalar") unless image.is_a?(Psych::Nodes::Scalar)
+        values << image.value
+      end
+    end
+  end
+end
+
+STDOUT.write(values.join("\\0"))
+STDOUT.write("\\0") unless values.empty?
+"""
+    result = subprocess.run(
+        ["ruby", "--disable-gems", "-e", script, str(path)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{path}: workflow container scan failed with exit {result.returncode}: "
+            f"{result.stderr.decode('utf-8', errors='replace').strip()}"
+        )
     return [
-        *yaml_scalar_values_for_key(path, "container"),
-        *yaml_scalar_values_for_key(path, "image"),
+        value.decode("utf-8", errors="strict")
+        for value in result.stdout.split(b"\\0")
+        if value
     ]
 
 
@@ -205,6 +273,18 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                 "        image: redis:7\n",
                 encoding="utf-8",
             )
+            unrelated = root / "unrelated.yml"
+            unrelated.write_text(
+                "image: ubuntu:latest\n"
+                "jobs:\n"
+                "  audit:\n"
+                "    steps:\n"
+                "      - run: echo ok\n"
+                "        with:\n"
+                "          image: redis:latest\n"
+                "          container: alpine:latest\n",
+                encoding="utf-8",
+            )
 
             pinned_values = workflow_container_image_values(pinned)
             self.assertEqual(
@@ -222,6 +302,13 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
             self.assertEqual(set(mutable_values), {"ubuntu:24.04", "redis:7"})
             for value in mutable_values:
                 self.assertIsNotNone(immutable_container_image_error(value))
+
+            self.assertEqual(
+                workflow_container_image_values(unrelated),
+                [],
+                "unrelated image/container keys outside job container/service positions "
+                "must not be treated as executable workflow container images",
+            )
 
     def test_every_local_uses_ref_is_canonical_and_resolvable(self):
         workflows, action_manifests = github_action_documents()
