@@ -19,7 +19,8 @@ function writeExecutable(file, content) {
 function runIdempotencyCheck({
   beforeRevision,
   afterRevision,
-  expectedRevision
+  expectedRevision,
+  extraEnvLines = []
 }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-idempotency-revision-"));
   const deployDir = path.join(root, "deploy");
@@ -41,6 +42,7 @@ function runIdempotencyCheck({
     [
       "RAISE_GATEWAY_TOKEN=" + "t".repeat(40),
       "RAISE_DEPLOY_REVISION=" + beforeRevision,
+      ...extraEnvLines,
       ""
     ].join("\n"),
     "utf8"
@@ -167,5 +169,21 @@ test("expected revision mismatch fails before the redeploy side effect", () => {
   assert.match(
     result.stderr,
     /pre-redeploy revision does not match expected revision/
+  );
+});
+
+test("ambiguous pre-redeploy revision is rejected before installer execution", () => {
+  const revision = "f".repeat(40);
+  const result = runIdempotencyCheck({
+    beforeRevision: revision,
+    afterRevision: revision,
+    extraEnvLines: ["RAISE_DEPLOY_REVISION=shadow"]
+  });
+
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.installerCalled, false);
+  assert.match(
+    result.stderr,
+    /Expected exactly one RAISE_DEPLOY_REVISION in gateway env/
   );
 });
