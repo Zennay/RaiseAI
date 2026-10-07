@@ -70,6 +70,42 @@ class WatchApkIdentityTests(unittest.TestCase):
                     expected_source_revision="a" * 40,
                 )
 
+    def test_rejects_revision_spoofed_in_non_executable_dex_member(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("classes.dex", b"real-executable-dex-without-revision")
+                archive.writestr(
+                    "assets/fake.dex",
+                    b"spoof-" + REVISION.encode("ascii") + b"-payload",
+                )
+                archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "not embedded"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    def test_accepts_revision_in_secondary_executable_dex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("classes.dex", b"primary-without-revision")
+                archive.writestr(
+                    "classes2.dex",
+                    b"secondary-" + REVISION.encode("ascii") + b"-payload",
+                )
+                archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+
+            report = verifier.verify_apk(
+                path,
+                expected_source_revision=REVISION,
+            )
+
+            self.assertTrue(report["valid"])
+            self.assertEqual(report["revision_dex_files"], ["classes2.dex"])
+
     def test_rejects_wrong_abi(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "RaiseAI.apk"
