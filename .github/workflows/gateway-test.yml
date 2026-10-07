@@ -66,3 +66,11 @@ jobs:
           node --check deploy/write-deploy-evidence.mjs
           node --check deploy/validate-deploy-evidence.mjs
           node --check src/server.mjs
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C "$GITHUB_WORKSPACE" diff --exit-code -- .
+          git -C "$GITHUB_WORKSPACE" diff --cached --exit-code -- .
+          test -z "$(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard)"
