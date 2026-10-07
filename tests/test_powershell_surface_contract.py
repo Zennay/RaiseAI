@@ -143,6 +143,142 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
             "hosted Python harness must remain pinned to CPython 3.12",
         )
 
+    def test_workflow_execution_surface_is_exact(self):
+        lines = self.workflow.splitlines()
+        top_level = [
+            match.group(1)
+            for line in lines
+            if (match := re.fullmatch(r"([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(top_level, ["name", "on", "permissions", "concurrency", "jobs"])
+
+        on_start = lines.index("on:") + 1
+        permissions_start = lines.index("permissions:")
+        events = [
+            match.group(1)
+            for line in lines[on_start:permissions_start]
+            if (match := re.fullmatch(r"  ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(events, ["push", "pull_request"])
+
+        def event_block(event):
+            start = lines.index(f"  {event}:") + 1
+            block = []
+            for line in lines[start:]:
+                if line and not line.startswith("    "):
+                    break
+                block.append(line)
+            return block
+
+        push = event_block("push")
+        push_keys = [
+            match.group(1)
+            for line in push
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(push_keys, ["branches", "paths"])
+        self.assertEqual(push[push.index("    branches:") + 1], "      - main")
+
+        pull_request = event_block("pull_request")
+        pr_keys = [
+            match.group(1)
+            for line in pull_request
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):", line))
+        ]
+        self.assertEqual(pr_keys, ["paths"])
+
+        concurrency_start = lines.index("concurrency:") + 1
+        jobs_start = lines.index("jobs:")
+        concurrency_keys = [
+            match.group(1)
+            for line in lines[concurrency_start:jobs_start]
+            if (match := re.fullmatch(r"  ([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(concurrency_keys, ["group", "cancel-in-progress"])
+
+        jobs_block = self.workflow.split("\njobs:\n", 1)[1]
+        job_keys = [
+            match.group(1)
+            for line in jobs_block.splitlines()[1:]
+            if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line))
+        ]
+        self.assertEqual(job_keys, ["runs-on", "timeout-minutes", "env", "steps"])
+
+        env_start = lines.index("    env:") + 1
+        expected_env = [
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ]
+        self.assertEqual(lines[env_start : env_start + len(expected_env)], expected_env)
+
+        step_starts = [index for index, line in enumerate(lines) if line.startswith("      - name:")]
+        expected_names = [
+            "Checkout exact tested revision",
+            "Verify exact tested revision",
+            "Verify PowerShell runtime",
+            "Verify Python runtime",
+            "Validate tracked PowerShell surface",
+            "Run PowerShell surface regression contract",
+            "Verify worktree remains clean",
+        ]
+        names = [lines[index].removeprefix("      - name: ") for index in step_starts]
+        self.assertEqual(names, expected_names)
+
+        expected_keys = {
+            "Checkout exact tested revision": ["name", "uses", "with"],
+            "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Verify PowerShell runtime": ["name", "shell", "run"],
+            "Verify Python runtime": ["name", "shell", "run"],
+            "Validate tracked PowerShell surface": ["name", "shell", "run"],
+            "Run PowerShell surface regression contract": ["name", "shell", "run"],
+            "Verify worktree remains clean": ["name", "shell", "run"],
+        }
+        for position, start in enumerate(step_starts):
+            end = step_starts[position + 1] if position + 1 < len(step_starts) else len(lines)
+            step = lines[start:end]
+            name = names[position]
+            keys = ["name"]
+            for line in step[1:]:
+                match = re.fullmatch(r"        ([A-Za-z0-9_-]+):.*", line)
+                if match:
+                    keys.append(match.group(1))
+            self.assertEqual(keys, expected_keys[name])
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        checkout = step_named("Checkout exact tested revision")
+        with_start = checkout.index("        with:") + 1
+        checkout_keys = []
+        for line in checkout[with_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                checkout_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(checkout_keys, ["ref", "persist-credentials"])
+
+        verifier = step_named("Verify exact tested revision")
+        verifier_env_start = verifier.index("        env:") + 1
+        verifier_keys = []
+        for line in verifier[verifier_env_start:]:
+            match = re.fullmatch(r"          ([A-Za-z0-9_-]+):.*", line)
+            if match:
+                verifier_keys.append(match.group(1))
+                continue
+            break
+        self.assertEqual(verifier_keys, ["EXPECTED_SHA"])
+
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
