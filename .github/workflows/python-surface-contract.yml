@@ -1,0 +1,99 @@
+name: Python surface contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "*.py"
+      - "**/*.py"
+      - ".github/workflows/python-surface-contract.yml"
+  pull_request:
+    paths:
+      - "*.py"
+      - "**/*.py"
+      - ".github/workflows/python-surface-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-python-surface-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
+      - name: Validate tracked Python surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+
+          raw = subprocess.check_output(["git", "ls-files", "-z"])
+          paths = sorted(
+              item
+              for item in raw.decode("utf-8").split("\0")
+              if item and pathlib.PurePosixPath(item).suffix == ".py"
+          )
+          if not paths:
+              raise SystemExit("no tracked Python files discovered")
+
+          for path in paths:
+              candidate = pathlib.Path(path)
+              if candidate.is_symlink():
+                  raise SystemExit(f"{path}: tracked Python files must not be symlinks")
+              if not candidate.is_file():
+                  raise SystemExit(f"{path}: tracked Python path must be a regular file")
+              try:
+                  compile(candidate.read_bytes(), path, "exec", dont_inherit=True)
+              except (SyntaxError, ValueError) as exc:
+                  raise SystemExit(f"{path}: invalid Python syntax: {exc.__class__.__name__}") from None
+
+          print(f"validated {len(paths)} tracked Python files")
+          PY
+
+      - name: Run Python surface regression contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_python_surface_contract
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
