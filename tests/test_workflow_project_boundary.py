@@ -38,6 +38,9 @@ PULL_REQUEST_FLOW_MAP_RE = re.compile(
 PULL_REQUEST_FLOW_SEQUENCE_RE = re.compile(
     rf"(?ms)^\s{{0,2}}{ON_KEY}\s*:\s*\[[^\]]*{PULL_REQUEST_KEY}(?:\s+#[^\n]*)?\s*(?:,|\])"
 )
+PULL_REQUEST_SCALAR_RE = re.compile(
+    rf"(?m)^\\s{{0,2}}{ON_KEY}\\s*:\\s*{PULL_REQUEST_KEY}\\s*(?:#.*)?$"
+)
 
 
 def is_foreign_workflow_name(name: str) -> bool:
@@ -64,6 +67,7 @@ def declares_pull_request(text: str) -> bool:
             PULL_REQUEST_BLOCK_RE,
             PULL_REQUEST_FLOW_MAP_RE,
             PULL_REQUEST_FLOW_SEQUENCE_RE,
+            PULL_REQUEST_SCALAR_RE,
         )
     )
 
@@ -112,6 +116,9 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             'on: {"pull_request": null, workflow_dispatch: null}\n',
             "'on': {'pull_request': null, workflow_dispatch: null}\n",
             '"on": {pull_request: null, workflow_dispatch: null}\n',
+            "on: pull_request\\n",
+            '"on": "pull_request"\\n',
+            "'on': 'pull_request' # legacy scalar trigger\\n",
             "on: [push, pull_request]\n",
             "on: [\n  push,\n  pull_request,\n]\n",
             "on: [\n  push,\n  pull_request # guarded legacy trigger\n]\n",
