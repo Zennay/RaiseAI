@@ -161,6 +161,41 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
             "stage metadata and tracked-path discovery must describe the same ordered surface",
         )
 
+    def test_macos_command_entrypoints_are_executable(self):
+        entries = tracked_index_entries()
+        command_entries = [
+            (mode, stage, path)
+            for mode, stage, path in entries
+            if pathlib.PurePosixPath(path).suffix == ".command"
+        ]
+        self.assertTrue(
+            command_entries,
+            "repository must retain at least one macOS .command operator entrypoint",
+        )
+        offenders = [
+            path
+            for mode, stage, path in command_entries
+            if stage != "0" or mode != "100755"
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            "macOS .command operator entrypoints must remain executable (Git mode 100755)",
+        )
+
+    def test_command_mode_contract_detects_nonexecutable_entrypoint(self):
+        fixture = [
+            ("100755", "0", "good.command"),
+            ("100644", "0", "broken.command"),
+        ]
+        offenders = [
+            path
+            for mode, stage, path in fixture
+            if pathlib.PurePosixPath(path).suffix == ".command"
+            and (stage != "0" or mode != "100755")
+        ]
+        self.assertEqual(offenders, ["broken.command"])
+
     def test_git_discovery_is_bound_to_repository_root(self):
         original_cwd = pathlib.Path.cwd()
         with tempfile.TemporaryDirectory(prefix="raiseai-portability-cwd-") as temporary:
