@@ -22,7 +22,10 @@ import os from "node:os";
 import path from "node:path";
 import { httpsOrigin } from "./readiness-config.mjs";
 import { evaluateZCloudProbe, hasJsonMediaType } from "./smoke-policy.mjs";
-import { readSmokeResponseBody } from "./smoke-http.mjs";
+import {
+  armSmokeRequestDeadline,
+  readSmokeResponseBody
+} from "./smoke-http.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
@@ -66,6 +69,15 @@ function request(method, route, { auth = false, body = null } = {}) {
     }
     if (auth) headers.authorization = "Bearer " + token;
 
+    let settled = false;
+    let cancelDeadline = () => {};
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      cancelDeadline();
+      fn(value);
+    };
+
     const req = https.request(
       {
         method,
@@ -83,14 +95,21 @@ function request(method, route, { auth = false, body = null } = {}) {
             parseJson: jsonMediaType
           });
           if (bodyError) throw new Error(bodyError);
-          resolve({ status: res.statusCode, json, jsonMediaType });
-        })().catch(reject);
+          settle(resolve, { status: res.statusCode, json, jsonMediaType });
+        })().catch(error => settle(reject, error));
       }
     );
+
+    cancelDeadline = armSmokeRequestDeadline(req);
     req.on("timeout", () => req.destroy(new Error("timeout")));
-    req.on("error", reject);
-    if (payload) req.write(payload);
-    req.end();
+    req.on("error", error => settle(reject, error));
+
+    try {
+      if (payload) req.write(payload);
+      req.end();
+    } catch (error) {
+      settle(reject, error);
+    }
   });
 }
 
