@@ -198,6 +198,44 @@ class PassingContract(unittest.TestCase):
             output,
         )
 
+    def test_same_basename_nested_contracts_keep_distinct_module_identity(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-qualified-") as tmp:
+            tests_dir = Path(tmp)
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+            alpha = tests_dir / "alpha"
+            beta = tests_dir / "beta"
+            alpha.mkdir()
+            beta.mkdir()
+            (alpha / "__init__.py").write_text("", encoding="utf-8")
+            (beta / "__init__.py").write_text("", encoding="utf-8")
+            (alpha / "test_collision.py").write_text(
+                "import unittest\n\n"
+                "class AlphaContract(unittest.TestCase):\n"
+                "    def test_passes(self):\n"
+                "        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            (beta / "test_collision.py").write_text(
+                "CONTRACT_SENTINEL = True\n",
+                encoding="utf-8",
+            )
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("contributed zero tests", rendered)
+        self.assertIn("EMPTY-CONTRACT-MODULE: beta.test_collision", rendered)
+        self.assertNotIn("EMPTY-CONTRACT-MODULE: alpha.test_collision", rendered)
+
     def test_failing_suite_returns_nonzero(self):
         exit_code, _ = self.run_temporary_suite(
             """
