@@ -306,6 +306,28 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
                 self.assertFalse(self.fetch_marker.exists(), result.stdout)
                 self.assertFalse(self.log.exists(), result.stdout)
 
+    def test_rejects_oversized_gateway_profile_before_adb_or_fetch(self):
+        profile = self.root / "oversized.properties"
+        profile.write_text(
+            "url=https://raise.example.invalid\n"
+            "token=" + ("x" * 40) + "\n"
+            "spki_sha256=" + ("a" * 64) + "\n"
+            "#" + ("x" * 5000) + "\n",
+            encoding="utf-8",
+        )
+        adb_started = self.root / "oversized-adb-started"
+
+        result = self.run_launcher(
+            {"FAKE_ADB_START_MARKER": str(adb_started)},
+            args=[str(profile)],
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("exceeds 4096 byte limit", result.stdout)
+        self.assertFalse(adb_started.exists(), result.stdout)
+        self.assertFalse(self.fetch_marker.exists(), result.stdout)
+        self.assertFalse(self.log.exists(), result.stdout)
+
     def test_rejects_symlink_gateway_profile_before_fetch(self):
         linked_profile = self.root / "linked-watch-gateway.properties"
         linked_profile.symlink_to(self.profile)
