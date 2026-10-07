@@ -97,6 +97,17 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
                 "replacement-watch",
             )
 
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking opens unavailable",
+    )
+    def test_loader_rejects_fifo_without_blocking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "session.json"
+            os.mkfifo(path)
+            with self.assertRaisesRegex(generator.TemplateError, "session must be a regular file"):
+                generator.load_session(path)
+
     def test_loader_rejects_non_regular_session(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
