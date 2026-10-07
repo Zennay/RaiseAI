@@ -108,6 +108,39 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                     "legacy checklist must fail closed toward the canonical frozen acceptance path",
                 )
 
+    def test_legacy_fallback_guides_redirect_without_partial_carrier_identity(self):
+        guides = {
+            "REMOTE-LOGIN.md": (ROOT / "REMOTE-LOGIN.md").read_text(encoding="utf-8"),
+            "GEMINI-HOME-SETUP.md": (ROOT / "GEMINI-HOME-SETUP.md").read_text(encoding="utf-8"),
+            "CHATGPT-WEB-SETUP.md": (ROOT / "CHATGPT-WEB-SETUP.md").read_text(encoding="utf-8"),
+        }
+        required = (
+            "GitHub issue #34",
+            "bash ./start-frozen-acceptance.command [gateway-profile]",
+            "START-HERE.md",
+        )
+        forbidden = (
+            FROZEN_SOURCE_REVISION,
+            FROZEN_RELEASE_TAG,
+            FROZEN_RELEASE_ASSET_ID,
+            FROZEN_ARCHIVE_SHA256,
+        )
+        for guide, text in guides.items():
+            for marker in required:
+                with self.subTest(guide=guide, required=marker):
+                    self.assertIn(
+                        marker,
+                        text,
+                        f"{guide} must redirect operators to the canonical frozen acceptance path",
+                    )
+            for marker in forbidden:
+                with self.subTest(guide=guide, forbidden=marker):
+                    self.assertNotIn(
+                        marker,
+                        text,
+                        f"{guide} must not duplicate a partial frozen carrier identity; START-HERE.md is canonical",
+                    )
+
     def test_frozen_acceptance_version_is_not_derived_from_version_txt(self):
         current_version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
         self.assertNotEqual(
