@@ -10,6 +10,10 @@ PULL_REQUEST_TARGET_RE = re.compile(
     r"(?m)^  pull_request_target:\s*(?:\{\})?\s*(?:#.*)?$"
 )
 SECRET_REF_RE = re.compile(r"\$\{\{\s*secrets\.")
+EXTERNAL_ACTION_RE = re.compile(
+    r"(?m)^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)"
+)
+IMMUTABLE_ACTION_REF_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def workflow_paths() -> list[Path]:
@@ -48,6 +52,10 @@ def write_permissions(text: str) -> list[str]:
     return writes
 
 
+def external_action_refs(text: str) -> list[tuple[str, str]]:
+    return EXTERNAL_ACTION_RE.findall(text)
+
+
 class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
     def test_pull_request_target_is_forbidden_repository_wide(self):
         paths = workflow_paths()
@@ -84,6 +92,25 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                     f"{relative}: pull_request workflows must not receive write token permissions",
                 )
 
+    def test_pull_request_external_actions_are_immutable(self):
+        paths = workflow_paths()
+        self.assertTrue(paths, "workflow privilege guard must inspect at least one workflow")
+
+        for path in paths:
+            relative = path.relative_to(ROOT).as_posix()
+            text = path.read_text(encoding="utf-8")
+            if not PULL_REQUEST_RE.search(text):
+                continue
+
+            for action, ref in external_action_refs(text):
+                with self.subTest(workflow=relative, action=action):
+                    self.assertRegex(
+                        ref,
+                        IMMUTABLE_ACTION_REF_RE,
+                        f"{relative}: {action}@{ref} must use a full immutable commit SHA "
+                        "when untrusted pull-request code can reach the workflow",
+                    )
+
     def test_write_permission_parser_covers_top_level_and_job_scopes(self):
         fixture = """permissions:
   contents: write
@@ -102,10 +129,37 @@ jobs:
 
 permissions:
   contents: read
+
+jobs:
+  verify:
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 """
         self.assertIsNotNone(PULL_REQUEST_RE.search(fixture))
         self.assertIsNone(SECRET_REF_RE.search(fixture))
         self.assertEqual(write_permissions(fixture), [])
+        self.assertEqual(
+            external_action_refs(fixture),
+            [
+                (
+                    "actions/checkout",
+                    "3d3c42e5aac5ba805825da76410c181273ba90b1",
+                )
+            ],
+        )
+
+    def test_floating_action_fixture_is_detected(self):
+        fixture = """on:
+  pull_request:
+
+jobs:
+  verify:
+    steps:
+      - uses: actions/checkout@v7
+"""
+        refs = external_action_refs(fixture)
+        self.assertEqual(refs, [("actions/checkout", "v7")])
+        self.assertIsNone(IMMUTABLE_ACTION_REF_RE.fullmatch(refs[0][1]))
 
     def test_privileged_manual_fixture_stays_outside_pr_boundary(self):
         fixture = """on:
