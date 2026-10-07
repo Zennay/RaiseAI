@@ -36,7 +36,11 @@ internal object GatewayResponseBodyReader {
             var totalBytes = 0
 
             while (true) {
-                val read = input.read(buffer)
+                val read = try {
+                    input.read(buffer)
+                } catch (error: IOException) {
+                    throw IOException("gateway_response_read_failed", error)
+                }
                 if (read < 0) break
                 if (read == 0) throw IOException("gateway_response_read_stalled")
 
