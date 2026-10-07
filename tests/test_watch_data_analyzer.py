@@ -7,7 +7,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "analyze-watch-data.py"
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+MODULE_PATH = ROOT / "analyze-watch-data.py"
+WORKFLOW_PATH = ROOT / ".github" / "workflows" / "watch-data-analyzer-quality.yml"
 SPEC = importlib.util.spec_from_file_location("watch_data_analyzer", MODULE_PATH)
 analyzer = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -170,6 +172,66 @@ class WatchDataAnalyzerTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(analyzer.TraceError, "degenerate reference"):
             analyzer.render_analysis(sessions)
+
+
+class WatchDataAnalyzerWorkflowContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    def test_workflow_is_read_only_exact_head_and_runner_bound(self):
+        self.assertIn("permissions:\n  contents: read", self.workflow)
+        self.assertIn(
+            "    runs-on: [self-hosted, linux, x64, vps-bb300bba]",
+            self.workflow,
+        )
+        self.assertIn('      PYTHONDONTWRITEBYTECODE: "1"', self.workflow)
+        self.assertIn(
+            "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+            self.workflow,
+        )
+        exact_head = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        self.assertEqual(self.workflow.count(f"          ref: {exact_head}"), 1)
+        self.assertEqual(self.workflow.count(f"          EXPECTED_SHA: {exact_head}"), 1)
+        self.assertIn("          persist-credentials: false", self.workflow)
+        self.assertIn(
+            '          test "$(hostname)" = "vps-bb300bba"',
+            self.workflow,
+        )
+        self.assertIn(
+            '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
+            self.workflow,
+        )
+        self.assertNotIn("pull_request_target:", self.workflow)
+        self.assertNotIn("secrets.", self.workflow)
+        self.assertNotIn("continue-on-error: true", self.workflow)
+
+    def test_workflow_run_steps_are_strict_and_leave_clean_worktree(self):
+        self.assertEqual(self.workflow.count("        shell: bash"), 3)
+        self.assertEqual(self.workflow.count("        run: |"), 3)
+        self.assertEqual(self.workflow.count("          set -euo pipefail"), 3)
+        for command in (
+            "          python3 -m py_compile analyze-watch-data.py",
+            "          python3 -m unittest tests/test_watch_data_analyzer.py -v",
+            "          git diff --exit-code -- .",
+            "          git diff --cached --exit-code -- .",
+            '          test -z "$(git ls-files --others --exclude-standard)"',
+        ):
+            with self.subTest(command=command):
+                self.assertIn(command, self.workflow)
+
+    def test_workflow_triggers_on_every_owned_input(self):
+        for path in (
+            "analyze-watch-data.py",
+            "tests/test_watch_data_analyzer.py",
+            ".github/workflows/watch-data-analyzer-quality.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self.workflow.count(f'      - "{path}"'),
+                    2,
+                    f"{path} must trigger both push and pull_request validation",
+                )
 
 
 if __name__ == "__main__":
