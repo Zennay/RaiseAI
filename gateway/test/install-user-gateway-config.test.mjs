@@ -174,6 +174,8 @@ exit 0
     const envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
     const gatewayToken =
       envText.match(/^RAISE_GATEWAY_TOKEN=(.*)$/m)?.[1] ?? null;
+    const installDir = path.join(home, ".local", "share", "raise-gateway");
+    const unitPath = path.join(home, ".config", "systemd", "user", "raise-gateway.service");
     return {
       status: result.status,
       stderr: result.stderr,
@@ -181,6 +183,9 @@ exit 0
         ? fs.readFileSync(opensslLog, "utf8")
         : "",
       configDir: effectiveConfigDir,
+      installDir,
+      nodePath: path.join(bin, "node"),
+      unitText: fs.existsSync(unitPath) ? fs.readFileSync(unitPath, "utf8") : "",
       envCreated: fs.existsSync(envPath),
       gatewayToken,
       profileCreated: fs.existsSync(
@@ -240,6 +245,45 @@ test("installer Node floor stays aligned with package engine contract", () => {
   assert.match(installerText, /SYSTEMCTL_BIN="\$\(resolve_dependency systemctl\)"/);
   assert.match(installerText, /"\$OPENSSL_BIN" rand -hex 32/);
   assert.match(installerText, /"\$SYSTEMCTL_BIN" --user restart raise-gateway\.service/);
+});
+
+test("installer emits a hardened user service contract", () => {
+  const result = runInstallerWithStubbedRuntime("raise.example");
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.unitText, "installer must write the user service unit");
+
+  const lines = result.unitText.trimEnd().split("\n");
+  for (const directive of [
+    "After=network-online.target",
+    "Wants=network-online.target",
+    "Type=simple",
+    "Restart=on-failure",
+    "RestartSec=2",
+    "NoNewPrivileges=true",
+    "PrivateTmp=true",
+    "ProtectSystem=strict",
+    "WantedBy=default.target"
+  ]) {
+    assert.equal(
+      lines.filter((line) => line === directive).length,
+      1,
+      `expected exactly one ${directive}`
+    );
+  }
+
+  assert.ok(result.unitText.includes(`WorkingDirectory=${result.installDir}\n`));
+  assert.ok(
+    result.unitText.includes(
+      `EnvironmentFile=${path.join(result.configDir, "gateway.env")}\n`
+    )
+  );
+  assert.ok(
+    result.unitText.includes(
+      `ExecStart=${result.nodePath} ${path.join(result.installDir, "src", "server.mjs")}\n`
+    )
+  );
+  assert.equal(lines.some((line) => line.startsWith("User=")), false);
+  assert.equal(lines.some((line) => line.startsWith("Environment=")), false);
 });
 
 test("installer uses a certificate SAN matching the public host identity", () => {
