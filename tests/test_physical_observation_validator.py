@@ -171,6 +171,13 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 observation_payload(response_text="must not be captured here"),
             )
 
+    def test_rejects_noncanonical_app_version(self):
+        with self.assertRaisesRegex(validator.ObservationError, "canonical MAJOR.MINOR.PATCH"):
+            validator.validate_observations(
+                session_payload(app_version="1.5.2\nprivate-note"),
+                observation_payload(app_version="1.5.2\nprivate-note"),
+            )
+
     def test_rejects_mixed_source_identity(self):
         with self.assertRaisesRegex(validator.ObservationError, "source_revision does not match"):
             validator.validate_observations(
