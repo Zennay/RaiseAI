@@ -1,6 +1,9 @@
 import datetime as dt
 import importlib.util
+import json
+import os
 import pathlib
+import tempfile
 import unittest
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "validate-watch-e2e-evidence.py"
@@ -134,6 +137,40 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(validator.EvidenceError, "Watch E2E request failed"):
             validator.validate_evidence(failure)
+
+    def test_file_loader_rejects_duplicate_json_fields(self):
+        raw = json.dumps(success_payload())
+        raw = raw.replace('"status": "ok"', '"status": "ok", "status": "forged"')
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "evidence.json"
+            path.write_text(raw, encoding="utf-8")
+            with self.assertRaisesRegex(validator.EvidenceError, "duplicate JSON field: status"):
+                validator._load_evidence_file(path)
+
+    def test_file_loader_rejects_oversized_evidence_before_parse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "evidence.json"
+            path.write_bytes(b"{" + b" " * validator.MAX_EVIDENCE_BYTES + b"}")
+            with self.assertRaisesRegex(validator.EvidenceError, "exceeds"):
+                validator._load_evidence_file(path)
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlinks unavailable")
+    def test_file_loader_rejects_symlink_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            target = root / "real.json"
+            target.write_text(json.dumps(success_payload()), encoding="utf-8")
+            link = root / "evidence.json"
+            link.symlink_to(target)
+            with self.assertRaises(OSError):
+                validator._load_evidence_file(link)
+
+    def test_file_loader_rejects_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "evidence.json"
+            path.write_bytes(b"\xff")
+            with self.assertRaisesRegex(validator.EvidenceError, "valid UTF-8"):
+                validator._load_evidence_file(path)
 
 
 if __name__ == "__main__":
