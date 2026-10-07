@@ -71,6 +71,16 @@ class GradleCiRuntimeContractTests(unittest.TestCase):
                 self.assertEqual(lines[run_index + 1], "          set -euo pipefail")
         self.assertNotIn("continue-on-error: true", self.text)
 
+    def test_integrity_lane_rejects_repository_side_effects(self):
+        self.assertIn("- name: Verify worktree remains clean", self.text)
+        for command in (
+            "          git diff --exit-code -- .",
+            "          git diff --cached --exit-code -- .",
+            '          test -z "$(git ls-files --others --exclude-standard)"',
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.text.count(command), 1)
+
     def test_contract_test_is_triggered_and_executed(self):
         path = '      - "tests/test_gradle_ci_runtime_contract.py"'
         self.assertEqual(self.text.count(path), 2)
