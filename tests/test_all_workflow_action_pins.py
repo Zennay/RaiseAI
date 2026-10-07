@@ -193,7 +193,7 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                 "jobs:\n"
                 "  audit:\n"
                 "    steps: [{\"uses\" : "
-                f"\"actions/checkout@{sha}\"}]\n",
+                f"\"actions/checkout@{sha}\"}}]\n",
                 encoding="utf-8",
             )
             mutable = root / "mutable.yml"
