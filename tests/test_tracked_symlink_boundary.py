@@ -11,9 +11,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 def validate_target(path: str, target: str) -> None:
     """Only relative, repository-contained symlink targets are allowed."""
-    if not path or path.startswith("/") or "\\x00" in path:
+    if not path or path.startswith("/") or chr(0) in path or any(part == ".." for part in pathlib.PurePosixPath(path).parts):
         raise ValueError("invalid tracked symlink path")
-    if not target or "\\x00" in target or pathlib.PurePosixPath(target).is_absolute():
+    if not target or chr(0) in target or pathlib.PurePosixPath(target).is_absolute():
         raise ValueError(f"{path}: absolute or empty symlink target")
     parts = []
     for component in (pathlib.PurePosixPath(path).parent / target).parts:
@@ -57,6 +57,8 @@ class TrackedSymlinkBoundaryTests(unittest.TestCase):
             ("scripts/tool", "../../outside"),
             ("scripts/tool", ""),
             ("scripts/tool", "../.."),
+            ("scripts/tool", "bad" + chr(0) + "target"),
+            ("../unsafe", "tool"),
         ):
             with self.subTest(path=path, target=target):
                 with self.assertRaises(ValueError):
