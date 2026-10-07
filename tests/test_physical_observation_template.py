@@ -47,6 +47,37 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
         with self.assertRaises(validator.ObservationError):
             validator.validate_observations(session, payload)
 
+    def test_loader_rejects_duplicate_session_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "session.json"
+            path.write_text('{"schema_version":1,"schema_version":1}', encoding="utf-8")
+            with self.assertRaisesRegex(generator.TemplateError, "duplicate JSON field: schema_version"):
+                generator.load_session(path)
+
+    def test_loader_rejects_oversized_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "session.json"
+            path.write_bytes(b" " * (generator.MAX_SESSION_JSON_BYTES + 1))
+            with self.assertRaisesRegex(generator.TemplateError, "session exceeds maximum size"):
+                generator.load_session(path)
+
+    def test_loader_rejects_invalid_utf8_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "session.json"
+            path.write_bytes(bytes((0x7B, 0xFF, 0x7D)))
+            with self.assertRaisesRegex(generator.TemplateError, "session must be valid UTF-8"):
+                generator.load_session(path)
+
+    def test_loader_rejects_non_regular_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            target = root / "real-session.json"
+            target.write_text(json.dumps(session_payload()), encoding="utf-8")
+            path = root / "session.json"
+            path.symlink_to(target)
+            with self.assertRaisesRegex(generator.TemplateError, "session must be a regular file"):
+                generator.load_session(path)
+
     def test_rejects_missing_session_identity(self):
         session = session_payload()
         session.pop("apk_sha256")
