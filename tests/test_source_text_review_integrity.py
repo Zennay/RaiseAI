@@ -16,15 +16,17 @@ TEXT_SUFFIXES = {
     ".mjs",
     ".cjs",
     ".properties",
+    ".pro",
     ".ps1",
     ".py",
+    ".service",
     ".sh",
     ".toml",
     ".xml",
     ".yaml",
     ".yml",
 }
-EXACT_TEXT_PATHS = {"gradlew", "VERSION.txt"}
+EXACT_TEXT_PATHS = {".gitignore", "gradlew", "VERSION.txt"}
 FORBIDDEN_BIDI_CODEPOINTS = {
     0x202A: "LEFT-TO-RIGHT EMBEDDING",
     0x202B: "RIGHT-TO-LEFT EMBEDDING",
@@ -81,6 +83,9 @@ class SourceTextReviewIntegrityTests(unittest.TestCase):
             "gateway/src/server.mjs",
             "physical-validation.command",
             "gradle.properties",
+            "app/proguard-rules.pro",
+            "gateway/deploy/raise-gateway.service",
+            ".gitignore",
             "VERSION.txt",
             "PHYSICAL-ACCEPTANCE.md",
         ):
