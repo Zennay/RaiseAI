@@ -111,4 +111,48 @@ class WearBridgeStatePolicyTest {
             assertTrue(normalized == "unknown")
         }
     }
+
+    @Test
+    fun gestureStartsRequireGestureReadyState() {
+        listOf("cold", "ready").forEach { state ->
+            assertTrue(
+                WearBridgeStatePolicy.acceptsStartRequest(
+                    state = state,
+                    reason = "gesture",
+                    active = false
+                )
+            )
+        }
+
+        listOf("loading", "disconnected", "unknown").forEach { state ->
+            assertFalse(
+                "expected gesture start to be rejected from " + state,
+                WearBridgeStatePolicy.acceptsStartRequest(
+                    state = state,
+                    reason = "gesture",
+                    active = false
+                )
+            )
+        }
+    }
+
+    @Test
+    fun recoveryStartsRemainAvailableUnlessAlreadyActive() {
+        listOf("loading", "disconnected", "unknown").forEach { state ->
+            assertTrue(
+                WearBridgeStatePolicy.acceptsStartRequest(
+                    state = state,
+                    reason = "launch",
+                    active = false
+                )
+            )
+        }
+        assertFalse(
+            WearBridgeStatePolicy.acceptsStartRequest(
+                state = "starting",
+                reason = "launch",
+                active = true
+            )
+        )
+    }
 }
