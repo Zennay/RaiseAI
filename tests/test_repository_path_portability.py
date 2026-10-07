@@ -1,3 +1,4 @@
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -26,7 +27,7 @@ ALLOWED_EXECUTABLE_SHEBANGS = {
 
 
 def tracked_paths() -> list[str]:
-    raw = subprocess.check_output(["git", "ls-files", "-z"])
+    raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
     try:
         decoded = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
@@ -35,7 +36,7 @@ def tracked_paths() -> list[str]:
 
 
 def tracked_index_entries() -> list[tuple[str, str, str]]:
-    raw = subprocess.check_output(["git", "ls-files", "--stage", "-z"])
+    raw = subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=ROOT)
     entries: list[tuple[str, str, str]] = []
     for record in raw.split(b"\0"):
         if not record:
@@ -158,6 +159,23 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
             [path for _mode, _stage, path in entries],
             tracked_paths(),
             "stage metadata and tracked-path discovery must describe the same ordered surface",
+        )
+
+    def test_git_discovery_is_bound_to_repository_root(self):
+        original_cwd = pathlib.Path.cwd()
+        with tempfile.TemporaryDirectory(prefix="raiseai-portability-cwd-") as temporary:
+            try:
+                os.chdir(temporary)
+                paths = tracked_paths()
+                entries = tracked_index_entries()
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertIn("tests/test_repository_path_portability.py", paths)
+        self.assertEqual(
+            [path for _mode, _stage, path in entries],
+            paths,
+            "repository discovery must not depend on the caller's working directory",
         )
 
     def test_accepts_regular_file_modes(self):
