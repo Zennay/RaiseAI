@@ -63,7 +63,7 @@ class GradleDependencyPinningTests(unittest.TestCase):
             self.settings,
         )
 
-        custom_urls = re.findall(r'maven\("([^"]+)"\)', self.settings)
+        custom_urls = re.findall(r'maven\\("([^"]+)"\\)', self.settings)
         for raw_url in custom_urls:
             with self.subTest(url=raw_url):
                 parsed = urlsplit(raw_url)
@@ -73,6 +73,40 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 self.assertIsNone(parsed.password)
                 self.assertFalse(parsed.query)
                 self.assertFalse(parsed.fragment)
+
+    def test_repository_sources_are_explicitly_allowlisted(self):
+        custom_urls = re.findall(r'maven\("([^"]+)"\)', self.settings)
+        self.assertEqual(
+            custom_urls,
+            ["https://maven.mozilla.org/maven2/"],
+            "custom Maven repositories must stay on the reviewed Mozilla-only allowlist",
+        )
+
+        expected_builtin_counts = {
+            "google()": 2,
+            "mavenCentral()": 2,
+            "gradlePluginPortal()": 1,
+        }
+        for declaration, expected_count in expected_builtin_counts.items():
+            with self.subTest(declaration=declaration):
+                self.assertEqual(
+                    self.settings.count(declaration),
+                    expected_count,
+                    f"unexpected Gradle repository declaration drift: {declaration}",
+                )
+
+        for forbidden_form in (
+            r"(?m)^\s*maven\s*\{",
+            r"\bmaven\s*\(\s*url\s*=",
+            r"\bmaven\s*\(\s*uri\s*\(",
+            r"(?m)^\s*ivy\s*(?:\(|\{)",
+        ):
+            with self.subTest(forbidden_form=forbidden_form):
+                self.assertNotRegex(
+                    self.settings,
+                    forbidden_form,
+                    "repository declarations must use the reviewed canonical forms",
+                )
 
     def test_mozilla_repository_is_scoped_to_geckoview_only(self):
         self.assertEqual(
