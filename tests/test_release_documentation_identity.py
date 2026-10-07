@@ -173,5 +173,28 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
         )
 
 
+    def test_physical_acceptance_observation_template_command_uses_real_bash_continuation(self):
+        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        lines = text.splitlines()
+        command = "python3 tools/create-physical-observation-template.py " + "\\"
+
+        self.assertEqual(
+            lines.count(command),
+            1,
+            "physical runbook must contain one canonical observation-template command",
+        )
+        command_index = lines.index(command)
+        self.assertEqual(
+            lines[command_index + 1],
+            "  ~/.raiseai/evidence/<session>/session.json",
+            "session.json must remain the continued argument to the generator command",
+        )
+        self.assertNotIn(
+            command + "\\",
+            lines,
+            "two trailing backslashes break Bash line continuation and must fail the documentation contract",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
