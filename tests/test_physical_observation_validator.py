@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import tempfile
 import unittest
@@ -107,6 +108,22 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 json.loads(path.read_text(encoding="utf-8"))["watch_serial"],
                 "forged-watch",
             )
+
+    @unittest.skipUnless(hasattr(os, "O_NONBLOCK"), "O_NONBLOCK unavailable")
+    def test_loader_sets_nonblocking_before_file_type_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "session.json"
+            path.write_text(json.dumps(session_payload()), encoding="utf-8")
+            real_open = validator.os.open
+
+            def require_nonblocking(target, flags):
+                self.assertTrue(flags & os.O_NONBLOCK)
+                return real_open(target, flags)
+
+            with mock.patch.object(validator.os, "open", side_effect=require_nonblocking):
+                loaded = validator.load_json_document(path, "session")
+
+            self.assertEqual(loaded["schema_version"], 1)
 
     def test_loader_rejects_symlink_input(self):
         with tempfile.TemporaryDirectory() as tmp:
