@@ -39,16 +39,19 @@ export function attestWatchProfile({
     ? Number(profileUrl.port || (profileUrl.protocol === "https:" ? 443 : 80))
     : NaN;
 
+  const profileToken = profileValues.get("token") ?? "";
+  const gatewayToken = envValues.get("RAISE_GATEWAY_TOKEN") ?? "";
+
   const checks = {
     https_url: profileUrl?.protocol === "https:" && Boolean(profileUrl.hostname),
     port_match:
       Number.isInteger(configuredPort) &&
       configuredPort > 0 &&
       profilePort === configuredPort,
-    token_match: safeEqual(
-      profileValues.get("token"),
-      envValues.get("RAISE_GATEWAY_TOKEN")
-    ),
+    token_match:
+      profileToken.length >= 32 &&
+      gatewayToken.length >= 32 &&
+      safeEqual(profileToken, gatewayToken),
     spki_match:
       /^[a-f0-9]{64}$/i.test(profileValues.get("spki_sha256") ?? "") &&
       safeEqual(profileValues.get("spki_sha256"), certificateSpki),

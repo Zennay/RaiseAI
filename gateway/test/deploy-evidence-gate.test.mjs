@@ -42,7 +42,9 @@ function goodEvidence({ degraded = false } = {}) {
         outcome: "success",
         ok: true,
         source_digest: "a".repeat(64),
-        installed_digest: "a".repeat(64)
+        installed_digest: "a".repeat(64),
+        source_file_count: 4,
+        installed_file_count: 4
       },
       initial_runtime: {
         outcome: "success",
@@ -77,7 +79,9 @@ function goodEvidence({ degraded = false } = {}) {
         outcome: "success",
         ok: true,
         source_digest: "a".repeat(64),
-        installed_digest: "a".repeat(64)
+        installed_digest: "a".repeat(64),
+        source_file_count: 4,
+        installed_file_count: 4
       },
       repeat_runtime: {
         outcome: "success",
@@ -217,4 +221,76 @@ test("rejects incomplete deploy, smoke and idempotency outcomes", () => {
   assert.equal(errors.includes("initial live smoke did not succeed"), true);
   assert.equal(errors.includes("idempotent redeploy did not succeed"), true);
   assert.equal(errors.includes("repeat live smoke did not succeed"), true);
+});
+
+
+test("rejects self-asserted revision match when commit and live revision differ", () => {
+  const evidence = goodEvidence();
+  evidence.attestation.live_revision = "b".repeat(40);
+  evidence.attestation.exact_revision_match = true;
+
+  const errors = validateDeployEvidence(evidence, { expectedRevision: "" });
+  assert.equal(errors.includes("live revision does not match workflow commit"), true);
+});
+
+test("rejects incoherent attested expected revision without relying on CI environment", () => {
+  const evidence = goodEvidence();
+  evidence.attestation.expected_revision = "b".repeat(40);
+
+  const errors = validateDeployEvidence(evidence, { expectedRevision: "" });
+  assert.equal(
+    errors.includes("attestation.expected_revision does not match workflow.commit"),
+    true
+  );
+});
+
+test("rejects malformed revision identities and non-positive workflow identifiers", () => {
+  const evidence = goodEvidence();
+  evidence.workflow.run_id = 0;
+  evidence.workflow.run_attempt = 0;
+  evidence.workflow.commit = "not-a-sha";
+  evidence.attestation.expected_revision = "not-a-sha";
+  evidence.attestation.live_revision = "not-a-sha";
+  evidence.attestation.exact_revision_match = true;
+
+  const errors = validateDeployEvidence(evidence, { expectedRevision: "" });
+  assert.equal(errors.includes("workflow.run_id must be a positive integer"), true);
+  assert.equal(errors.includes("workflow.run_attempt must be a positive integer"), true);
+  assert.equal(
+    errors.includes("workflow.commit must be a 40-character hexadecimal revision"),
+    true
+  );
+  assert.equal(
+    errors.includes("attestation.expected_revision must be a 40-character hexadecimal revision"),
+    true
+  );
+  assert.equal(
+    errors.includes("attestation.live_revision must be a 40-character hexadecimal revision"),
+    true
+  );
+});
+
+test("rejects payload proof with fake equal digests or mismatched file counts", () => {
+  const fakeDigest = goodEvidence();
+  fakeDigest.verification.initial_payload.source_digest = "same";
+  fakeDigest.verification.initial_payload.installed_digest = "same";
+
+  const fakeDigestErrors = validateDeployEvidence(fakeDigest, {
+    expectedRevision: revision
+  });
+  assert.equal(
+    fakeDigestErrors.includes("initial payload attestation did not succeed"),
+    true
+  );
+
+  const mismatchedCounts = goodEvidence();
+  mismatchedCounts.verification.repeat_payload.installed_file_count = 5;
+
+  const countErrors = validateDeployEvidence(mismatchedCounts, {
+    expectedRevision: revision
+  });
+  assert.equal(
+    countErrors.includes("repeat payload attestation did not succeed"),
+    true
+  );
 });

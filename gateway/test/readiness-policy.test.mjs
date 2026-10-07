@@ -18,13 +18,13 @@ test("readiness passes only for healthy exact revision", () => {
 test("readiness rejects stale live revision", () => {
   const result = evaluateReadinessResponse({
     status: 200,
-    json: { ok: true, revision: "stale" },
+    json: { ok: true, revision: "b".repeat(40) },
     expectedRevision: revision
   });
 
   assert.equal(result.ok, false);
   assert.equal(result.reason, "health_revision_mismatch");
-  assert.equal(result.revision, "stale");
+  assert.equal(result.revision, "b".repeat(40));
 });
 
 test("readiness rejects unhealthy and malformed health responses", () => {
@@ -54,4 +54,28 @@ test("readiness rejects unhealthy and malformed health responses", () => {
     }).reason,
     "health_revision_missing"
   );
+});
+
+
+test("readiness rejects placeholder or malformed expected revisions", () => {
+  const result = evaluateReadinessResponse({
+    status: 200,
+    json: { ok: true, revision: "unknown" },
+    expectedRevision: "unknown"
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "expected_revision_invalid");
+});
+
+test("readiness rejects malformed live revisions even when health is otherwise ok", () => {
+  const result = evaluateReadinessResponse({
+    status: 200,
+    json: { ok: true, revision: "not-a-sha" },
+    expectedRevision: revision
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "health_revision_invalid");
+  assert.equal(result.revision, null);
 });

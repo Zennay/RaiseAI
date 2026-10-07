@@ -12,8 +12,10 @@ function textOrNull(value) {
 }
 
 function integerOrNull(value) {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(parsed) ? parsed : null;
+  const normalized = String(value ?? "").trim();
+  if (!/^[1-9][0-9]*$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function outcome(value) {

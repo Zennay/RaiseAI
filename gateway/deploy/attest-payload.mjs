@@ -37,8 +37,12 @@ function regularFiles(root, relativeDir) {
 
 export function payloadManifest(root) {
   const packageFile = path.join(root, "package.json");
-  if (!fs.existsSync(packageFile) || !fs.statSync(packageFile).isFile()) {
+  if (!fs.existsSync(packageFile)) {
     throw new Error(`package.json missing in ${root}`);
+  }
+  const packageStat = fs.lstatSync(packageFile);
+  if (packageStat.isSymbolicLink() || !packageStat.isFile()) {
+    throw new Error(`package.json must be a regular file in ${root}`);
   }
 
   const files = ["package.json", ...regularFiles(root, "src")].sort();
