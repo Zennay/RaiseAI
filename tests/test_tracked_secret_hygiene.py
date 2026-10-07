@@ -74,6 +74,18 @@ def tracked_paths() -> list[str]:
     ]
 
 
+def gitignore_matches(path: str) -> bool:
+    result = run_git(["check-ignore", "--no-index", "-q", "--", path])
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    raise RuntimeError(
+        f"git check-ignore failed with exit {result.returncode}: "
+        f"{result.stderr.decode('utf-8', errors='replace').strip()}"
+    )
+
+
 def cached_grep_paths(patterns: tuple[str, ...], *, extended: bool) -> list[str]:
     args = ["grep", "--cached", "-I", "-l", "-z"]
     args.append("-E" if extended else "-F")
@@ -187,6 +199,43 @@ class TrackedSecretHygieneTests(unittest.TestCase):
         self.assertIn('"grep", "--cached"', source)
         self.assertNotIn(".open(", source)
         self.assertNotIn(".is_file()", source)
+
+    def test_gitignore_semantics_block_secret_material_but_allow_templates(self):
+        forbidden_examples = (
+            ".env",
+            ".env.production",
+            "nested/.env.local",
+            "local.properties",
+            "nested/secrets.properties",
+            "nested/keystore.properties",
+            "nested/signing.properties",
+            "nested/credentials.json",
+            "nested/release.jks",
+            "nested/release.ks",
+            "nested/release.keystore",
+            "nested/release.pk8",
+            "nested/release.p12",
+            "nested/release.pfx",
+            "nested/release.pem",
+            "nested/release.key",
+            "nested/id_rsa",
+            "nested/id_dsa",
+            "nested/id_ecdsa",
+            "nested/id_ed25519",
+        )
+        for path in forbidden_examples:
+            with self.subTest(path=path):
+                self.assertTrue(
+                    gitignore_matches(path),
+                    f"{path} must remain ignored by effective gitignore semantics",
+                )
+
+        for template in (".env.example", ".env.sample"):
+            with self.subTest(template=template):
+                self.assertFalse(
+                    gitignore_matches(template),
+                    f"{template} must remain available as a tracked template",
+                )
 
     def test_gitignore_retains_defense_in_depth_patterns(self):
         text = (ROOT / ".gitignore").read_text(encoding="utf-8")
