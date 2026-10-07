@@ -209,6 +209,14 @@ def validate_css_source(data: bytes, *, label: str) -> None:
         )
     if re.search(r"(?i)(?<![-_a-z0-9])@import\b", visible):
         raise ValueError(f"{label}: CSS @import is forbidden; bundle assets locally")
+    if re.search(
+        r"(?i)(?<![-_a-z0-9])(?:image-set|-webkit-image-set|image)\s*\(",
+        visible,
+    ):
+        raise ValueError(
+            f"{label}: CSS image()/image-set() string URL surfaces are forbidden; "
+            "use audited url() targets"
+        )
 
     for target in _css_url_targets(text, label=label):
         lowered = target.lower()
@@ -311,6 +319,23 @@ class CssSurfaceContractTests(unittest.TestCase):
             with self.subTest(payload=payload):
                 with self.assertRaisesRegex(ValueError, expected):
                     validate_css_source(payload, label="fixture.css")
+
+    def test_validator_rejects_string_url_image_functions(self):
+        for function in ("image", "image-set", "-webkit-image-set"):
+            with self.subTest(function=function):
+                payload = (
+                    f'.a {{ background-image: {function}("https://example.invalid/x.png" 1x); }}\n'
+                    if "image-set" in function
+                    else f'.a {{ background-image: {function}("https://example.invalid/x.png"); }}\n'
+                ).encode("utf-8")
+                with self.assertRaisesRegex(ValueError, "string URL surfaces"):
+                    validate_css_source(payload, label="fixture.css")
+
+        validate_css_source(
+            b'/* image("https://example.invalid/x.png") */\n'
+            b'.a { content: "image-set(https://example.invalid/x.png)"; }\n',
+            label="fixture.css",
+        )
 
     def test_validator_rejects_remote_url_assets_but_allows_local_and_data_targets(self):
         for target in (
