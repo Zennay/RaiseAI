@@ -12,6 +12,24 @@ EXPECTED_CRITICAL = {
     "tests/test_quality_tooling_workflow.py",
     "tools/validate-physical-observations.py",
 }
+UTF8_BOM = b"\xef\xbb\xbf"
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def decode_canonical_python_source(data: bytes, *, label: str) -> str:
+    if data.startswith(UTF8_BOM):
+        raise ValueError(f"{label} must not start with a UTF-8 BOM")
+    if b"\x00" in data:
+        raise ValueError(f"{label} must not contain NUL bytes")
+    if b"\r" in data:
+        raise ValueError(f"{label} must use LF-only line endings")
+    try:
+        source = data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{label} must be strict UTF-8") from exc
+    if BIDI_CONTROL_RE.search(source):
+        raise ValueError(f"{label} must not contain bidirectional control characters")
+    return source
 
 
 def tracked_python_paths():
@@ -45,12 +63,25 @@ class PythonSurfaceContractTests(unittest.TestCase):
                 )
                 self.assertTrue(path.is_file(), f"{relative} must resolve to a regular file")
                 try:
-                    source = path.read_bytes().decode("utf-8")
+                    source = decode_canonical_python_source(path.read_bytes(), label=relative)
                     compile(source, relative, "exec", dont_inherit=True)
-                except UnicodeDecodeError as exc:
-                    self.fail(f"{relative} must be strict UTF-8 Python source: {exc}")
-                except (SyntaxError, ValueError) as exc:
+                except ValueError as exc:
+                    self.fail(str(exc))
+                except SyntaxError as exc:
                     self.fail(f"{relative} must compile as Python: {exc.__class__.__name__}")
+
+    def test_canonical_decoder_rejects_ambiguous_python_source_bytes(self):
+        cases = (
+            (UTF8_BOM + b"VALUE = 1\n", "UTF-8 BOM"),
+            (b"VALUE = 1\r\n", "LF-only line endings"),
+            (b"VALUE = 1\x00\n", "NUL bytes"),
+            (b"VALUE = '\xff'\n", "strict UTF-8"),
+            ("VALUE = 'safe\u202eunsafe'\n".encode("utf-8"), "bidirectional control"),
+        )
+        for payload, expected in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    decode_canonical_python_source(payload, label="fixture.py")
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -110,7 +141,11 @@ class PythonSurfaceContractTests(unittest.TestCase):
             "candidate.is_symlink()",
             "tracked Python files must not be symlinks",
             "candidate.is_file()",
-            'candidate.read_bytes().decode("utf-8")',
+            'UTF8_BOM = b"\\xef\\xbb\\xbf"',
+            'if data.startswith(UTF8_BOM):',
+            'if b"\\x00" in data:',
+            'if b"\\r" in data:',
+            "BIDI_CONTROL_RE.search(source)",
             'compile(source, path, "exec", dont_inherit=True)',
             "python3 -m unittest tests.test_python_surface_contract",
             "git diff --exit-code -- .",
