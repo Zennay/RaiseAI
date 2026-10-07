@@ -73,6 +73,7 @@ object SensorTrialRecorder {
         var falseTriggers = 0
         var rejectedTrials = 0
         val identities = mutableSetOf<String>()
+        val acceptedSessionIds = mutableSetOf<Long>()
 
         lines.drop(1).forEach { line ->
                 val fields = line.split(',', limit = 9)
@@ -82,6 +83,7 @@ object SensorTrialRecorder {
                 }
 
                 val label = fields[0]
+                val sessionId = fields[1].toLongOrNull()
                 val durationMs = fields[2].toLongOrNull()
                 val sampleCount = fields[3].toIntOrNull()
                 val triggered = when (fields[4]) {
@@ -93,7 +95,8 @@ object SensorTrialRecorder {
                 val sourceRevision = fields[7].lowercase()
                 val detectorConfig = fields[8]
 
-                if (durationMs == null || sampleCount == null || triggered == null ||
+                if (sessionId == null || sessionId <= 0L ||
+                    durationMs == null || sampleCount == null || triggered == null ||
                     appVersion.isBlank() ||
                     !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
                     detectorConfig.isBlank() || detectorConfig == "missing"
@@ -107,18 +110,27 @@ object SensorTrialRecorder {
                     return@forEach
                 }
 
-                when (label) {
-                    "mouth_raise" -> {
-                        identities += "$appVersion|$sourceRevision|$detectorConfig"
-                        mouthTrials++
-                        if (triggered) mouthDetections++
+                val acceptedLabel = when (label) {
+                    "mouth_raise" -> true
+                    "view_time", "normal_move" -> false
+                    else -> {
+                        rejectedTrials++
+                        return@forEach
                     }
-                    "view_time", "normal_move" -> {
-                        identities += "$appVersion|$sourceRevision|$detectorConfig"
-                        nonTriggerTrials++
-                        if (triggered) falseTriggers++
-                    }
-                    else -> rejectedTrials++
+                }
+
+                if (!acceptedSessionIds.add(sessionId)) {
+                    rejectedTrials++
+                    return@forEach
+                }
+
+                identities += "$appVersion|$sourceRevision|$detectorConfig"
+                if (acceptedLabel) {
+                    mouthTrials++
+                    if (triggered) mouthDetections++
+                } else {
+                    nonTriggerTrials++
+                    if (triggered) falseTriggers++
                 }
             }
 
