@@ -23,6 +23,35 @@ def tracked_paths() -> list[str]:
     return [item for item in decoded.split("\0") if item]
 
 
+def tracked_index_entries() -> list[tuple[str, str, str]]:
+    raw = subprocess.check_output(["git", "ls-files", "--stage", "-z"])
+    entries: list[tuple[str, str, str]] = []
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        try:
+            metadata, raw_path = record.split(b"\t", 1)
+            mode, _object_id, stage = metadata.decode("ascii").split()
+            path = raw_path.decode("utf-8", errors="strict")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise ValueError("tracked index entry must have canonical Git stage metadata") from exc
+        entries.append((mode, stage, path))
+    return entries
+
+
+def validate_regular_file_entries(entries: list[tuple[str, str, str]]) -> None:
+    if not entries:
+        raise ValueError("repository index discovery must not be empty")
+
+    for mode, stage, path in entries:
+        if stage != "0":
+            raise ValueError(f"{path!r}: unmerged Git index stage {stage} is forbidden")
+        if mode not in {"100644", "100755"}:
+            raise ValueError(
+                f"{path!r}: tracked entry mode {mode} is not a regular file"
+            )
+
+
 def validate_portable_paths(paths: list[str]) -> None:
     if not paths:
         raise ValueError("repository path discovery must not be empty")
@@ -70,6 +99,40 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
         paths = tracked_paths()
         self.assertTrue(paths)
         validate_portable_paths(paths)
+
+    def test_every_tracked_entry_is_a_merged_regular_file(self):
+        entries = tracked_index_entries()
+        self.assertTrue(entries)
+        validate_regular_file_entries(entries)
+        self.assertEqual(
+            [path for _mode, _stage, path in entries],
+            tracked_paths(),
+            "stage metadata and tracked-path discovery must describe the same ordered surface",
+        )
+
+    def test_accepts_regular_file_modes(self):
+        validate_regular_file_entries(
+            [
+                ("100644", "0", "README.md"),
+                ("100755", "0", "gradlew"),
+            ]
+        )
+
+    def test_rejects_symlink_gitlink_and_nonregular_modes(self):
+        for mode in ("120000", "160000", "100664"):
+            with self.subTest(mode=mode):
+                with self.assertRaisesRegex(ValueError, "not a regular file"):
+                    validate_regular_file_entries([(mode, "0", "fixture")])
+
+    def test_rejects_unmerged_index_stages(self):
+        for stage in ("1", "2", "3"):
+            with self.subTest(stage=stage):
+                with self.assertRaisesRegex(ValueError, "unmerged Git index stage"):
+                    validate_regular_file_entries([("100644", stage, "fixture")])
+
+    def test_rejects_empty_index_surface(self):
+        with self.assertRaisesRegex(ValueError, "index discovery must not be empty"):
+            validate_regular_file_entries([])
 
     def test_accepts_normal_cross_platform_paths(self):
         validate_portable_paths(
