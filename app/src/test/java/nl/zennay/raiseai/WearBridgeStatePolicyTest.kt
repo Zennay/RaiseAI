@@ -80,4 +80,35 @@ class WearBridgeStatePolicyTest {
             )
         }
     }
+
+    @Test
+    fun knownInboundStatesRemainCanonical() {
+        listOf(
+            "loading",
+            "ready",
+            "starting",
+            "listening",
+            "finalizing",
+            "sending",
+            "speaking",
+            "disconnected"
+        ).forEach { state ->
+            assertTrue(
+                "expected known state to remain unchanged",
+                WearBridgeStatePolicy.normalizeInboundState(state) == state
+            )
+        }
+    }
+
+    @Test
+    fun unknownInboundStatesNormalizeToBlockedState() {
+        listOf("", "transcribing", "READY", "future-state").forEach { state ->
+            val normalized = WearBridgeStatePolicy.normalizeInboundState(state)
+            assertTrue(
+                "expected unknown inbound state to fail closed",
+                WearBridgeStatePolicy.blocksGesture(normalized)
+            )
+            assertTrue(normalized == "unknown")
+        }
+    }
 }
