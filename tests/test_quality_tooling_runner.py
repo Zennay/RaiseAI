@@ -2,6 +2,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 import importlib.util
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -40,6 +41,21 @@ class QualityToolingRunnerTests(unittest.TestCase):
     def test_allowlist_is_exact_ordered_and_duplicate_free(self):
         self.assertEqual(runner.QUALITY_MODULES, EXPECTED_MODULES)
         self.assertEqual(len(runner.QUALITY_MODULES), len(set(runner.QUALITY_MODULES)))
+
+    def test_nonisolated_process_is_rejected_before_loading_contracts(self):
+        completed = subprocess.run(
+            [sys.executable, str(RUNNER)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn(
+            "requires CPython isolated mode (-I)",
+            completed.stderr,
+        )
+        self.assertNotIn("Ran ", completed.stdout + completed.stderr)
 
     def test_empty_allowlist_fails_closed(self):
         output = StringIO()
