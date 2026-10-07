@@ -29,6 +29,11 @@ LEGACY_FOREIGN_WORKFLOWS = {
 }
 
 FOREIGN_MARKER_RE = re.compile(r"(?i)\b(?:ftmo|lightup|zcloud)\b")
+PULL_REQUEST_KEY = r"""(?:"pull_request"|'pull_request'|pull_request)"""
+PULL_REQUEST_BLOCK_RE = re.compile(rf"(?m)^\s{{0,2}}{PULL_REQUEST_KEY}\s*:")
+PULL_REQUEST_FLOW_RE = re.compile(
+    rf"(?m)^\s{{0,2}}on\s*:\s*\{{[^}}\n]*{PULL_REQUEST_KEY}\s*:"
+)
 
 
 def is_foreign_workflow_name(name: str) -> bool:
@@ -49,7 +54,10 @@ def foreign_workflows() -> list[Path]:
 
 
 def declares_pull_request(text: str) -> bool:
-    return re.search(r"(?m)^\s{0,2}pull_request\s*:", text) is not None
+    return (
+        PULL_REQUEST_BLOCK_RE.search(text) is not None
+        or PULL_REQUEST_FLOW_RE.search(text) is not None
+    )
 
 
 def push_section(text: str) -> list[str]:
@@ -86,6 +94,21 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertFalse(is_foreign_workflow_name(name))
+
+    def test_pull_request_detection_covers_quoted_and_flow_yaml_keys(self):
+        for text in (
+            "on:\n  pull_request:\n",
+            "on:\n  \"pull_request\":\n",
+            "on:\n  'pull_request':\n",
+            "on: {pull_request: null, workflow_dispatch: null}\n",
+            'on: {"pull_request": null, workflow_dispatch: null}\n',
+            "on: {'pull_request': null, workflow_dispatch: null}\n",
+        ):
+            with self.subTest(text=text):
+                self.assertTrue(declares_pull_request(text))
+
+        self.assertFalse(declares_pull_request("on:\n  push:\n"))
+        self.assertFalse(declares_pull_request("# pull_request:\non:\n  push:\n"))
 
     def test_no_new_foreign_project_workflows_are_added_to_raiseai(self):
         current = {path.name for path in foreign_workflows()}
