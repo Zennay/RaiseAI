@@ -65,6 +65,7 @@ jobs:
           import xml.etree.ElementTree as ET
 
           FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
+          UTF8_BOM = b"\xef\xbb\xbf"
 
           raw = subprocess.check_output(["git", "ls-files", "-z"])
           paths = sorted(
@@ -83,8 +84,14 @@ jobs:
                   raise SystemExit(f"{path}: tracked XML path must be a regular file")
 
               data = candidate.read_bytes()
+              if data.startswith(UTF8_BOM):
+                  raise SystemExit(f"{path}: XML source must not start with a UTF-8 BOM")
+              if b"\x00" in data:
+                  raise SystemExit(f"{path}: XML source must not contain NUL bytes")
+              if b"\r" in data:
+                  raise SystemExit(f"{path}: XML source must use LF-only line endings")
               try:
-                  text = data.decode("utf-8")
+                  text = data.decode("utf-8", errors="strict")
               except UnicodeDecodeError as exc:
                   raise SystemExit(f"{path}: XML source must be strict UTF-8: {exc}") from None
               upper = text.upper()
