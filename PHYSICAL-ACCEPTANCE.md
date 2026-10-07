@@ -232,7 +232,15 @@ A passing session must contain provenance-bound summary evidence including:
 
 Keep the raw trace/trial evidence from that same session. Do **not** upload gateway profiles, tokens, provider credentials, transcript text, or assistant response text.
 
-Attach or link the resulting safe evidence to GitHub issue #34. PR #35 (battery evidence) and PR #36 (acceptance reporter) remain downstream and intentionally unmerged until this physical gate is complete.
+Default GitHub issue #34 share set:
+
+- `e2e-result.json`
+- `v1-result.json`
+- `quality-result.json`
+
+Keep `session.json`, `operator-observations.json`, raw diagnostics directories, and raw trace/trial CSV files local unless each file has been deliberately reviewed and scrubbed for sharing. In particular, `session.json` contains the Watch serial and is not part of the default share set.
+
+Attach or link only the reviewed safe evidence to GitHub issue #34. PR #35 (battery evidence) and PR #36 (acceptance reporter) remain downstream and intentionally unmerged until this physical gate is complete.
 
 ## Stop conditions
 
