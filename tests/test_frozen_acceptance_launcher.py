@@ -304,6 +304,25 @@ class FrozenAcceptanceLauncherTest(unittest.TestCase):
         self.assertEqual(token_marker.read_text(encoding="utf-8"), token)
         self.assertIn("FROZEN-ACCEPTANCE PREFLIGHT PASS", result.stdout)
 
+    def test_run_mode_keeps_github_token_scrubbed_after_verification(self):
+        token_marker = self.root / "run-fetch-token"
+        token = "operator-run-token"
+        result = self.run_launcher(
+            {
+                "GITHUB_TOKEN": token,
+                "FAKE_FETCH_TOKEN_MARKER": str(token_marker),
+                "FAKE_REQUIRE_GITHUB_TOKEN_SCRUBBED": "1",
+            },
+            args=[str(self.profile)],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(token_marker.read_text(encoding="utf-8"), token)
+        lines = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("verify:"))
+        self.assertTrue(lines[1].startswith("run:watch-1:"))
+
     def test_rejects_malformed_gateway_profiles_before_adb_or_fetch(self):
         cases = {
             "http-url": (
