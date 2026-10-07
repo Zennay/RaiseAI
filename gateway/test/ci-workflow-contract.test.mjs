@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1";
 const SETUP_NODE_SHA = "820762786026740c76f36085b0efc47a31fe5020";
+const UPLOAD_ARTIFACT_SHA = "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
 const TEST_WORKFLOW = fs.readFileSync(
@@ -184,4 +185,49 @@ test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () 
       `missing deploy trigger for ${requiredPath.trim()}`,
     );
   }
+});
+
+
+test("gateway deploy exceptional execution controls stay narrow", () => {
+  assert.ok(
+    DEPLOY_WORKFLOW.includes(
+      `uses: actions/upload-artifact@${UPLOAD_ARTIFACT_SHA} # v7.0.1 (node24)`,
+    ),
+    "deploy evidence upload must stay on the audited Node 24 artifact action",
+  );
+
+  assert.equal(
+    DEPLOY_WORKFLOW.split("continue-on-error: true").length - 1,
+    1,
+    "only the pre-deploy baseline probe may be best-effort",
+  );
+  assert.match(
+    DEPLOY_WORKFLOW,
+    /- name: Baseline health \(pre-deploy, best-effort\)[\s\S]*?continue-on-error: true[\s\S]*?curl --fail/,
+  );
+
+  assert.equal(
+    DEPLOY_WORKFLOW.split("if: always()").length - 1,
+    3,
+    "only evidence recording, artifact upload and evidence gate may run unconditionally",
+  );
+  for (const name of [
+    "Record machine-readable deploy evidence",
+    "Upload deploy evidence artifact",
+    "Gate workflow on deploy evidence contract",
+  ]) {
+    const marker = `      - name: ${name}`;
+    const start = DEPLOY_WORKFLOW.indexOf(marker);
+    assert.notEqual(start, -1, `missing deploy step: ${name}`);
+    const next = DEPLOY_WORKFLOW.indexOf("\n      - name:", start + marker.length);
+    const step = DEPLOY_WORKFLOW.slice(start, next === -1 ? undefined : next);
+    assert.match(
+      step,
+      /^        if: always\(\)$/m,
+      `${name} must remain explicitly always-run`,
+    );
+  }
+
+  assert.doesNotMatch(DEPLOY_WORKFLOW, /\$\{\{\s*secrets\./);
+  assert.doesNotMatch(DEPLOY_WORKFLOW, /^\s*environment\s*:/m);
 });
