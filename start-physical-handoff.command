@@ -2,12 +2,33 @@
 set -euo pipefail
 
 ARTIFACT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROFILE="${1:-}"
+PROFILE=""
 VERIFY_ONLY=0
-if [ "${1:-}" = "--verify-only" ]; then
-  VERIFY_ONLY=1
-  PROFILE=""
-fi
+
+usage() {
+  echo "Usage: bash ./start-physical-handoff.command /path/to/watch-gateway.properties"
+  echo "       bash ./start-physical-handoff.command --verify-only"
+}
+
+case "$#" in
+  1)
+    if [ "$1" = "--verify-only" ]; then
+      VERIFY_ONLY=1
+    else
+      case "$1" in
+        --*)
+          usage
+          exit 2
+          ;;
+      esac
+      PROFILE="$1"
+    fi
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
 
 IDENTITY="$ARTIFACT_DIR/BUILD-IDENTITY.txt"
 
@@ -39,12 +60,9 @@ bundle_version="${bundle_version%-source.bundle}"
   exit 1
 }
 
-if [ "$VERIFY_ONLY" -eq 0 ]; then
-  if [ -z "$PROFILE" ] || [ ! -f "$PROFILE" ]; then
-    echo "Usage: bash ./start-physical-handoff.command /path/to/watch-gateway.properties"
-    echo "       bash ./start-physical-handoff.command --verify-only"
-    exit 2
-  fi
+if [ "$VERIFY_ONLY" -eq 0 ] && [ ! -f "$PROFILE" ]; then
+  usage
+  exit 2
 fi
 
 for command_name in git python3; do
@@ -63,7 +81,15 @@ done
 
 read_identity() {
   local key="$1"
-  sed -n "s/^${key}=//p" "$IDENTITY" | head -n 1 | tr -d '\r\n'
+  local count
+
+  count="$(grep -c "^${key}=" "$IDENTITY" || true)"
+  if [ "$count" -ne 1 ]; then
+    echo "BUILD-IDENTITY.txt must contain exactly one ${key} entry." >&2
+    return 1
+  fi
+
+  sed -n "s/^${key}=//p" "$IDENTITY" | tr -d '\r\n'
 }
 
 revision="$(read_identity source_revision | tr 'A-F' 'a-f')"
