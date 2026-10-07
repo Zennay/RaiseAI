@@ -113,6 +113,28 @@ class GatewayResponseBodyReaderTest {
     }
 
     @Test
+    fun readFailureIsNormalizedAndClosesStream() {
+        var closed = false
+        val stream = object : InputStream() {
+            override fun read(): Int = throw IOException("socket detail")
+
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+                throw IOException("socket detail")
+
+            override fun close() {
+                closed = true
+            }
+        }
+
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(stream)
+        }
+
+        assertEquals("gateway_response_read_failed", error.message)
+        assertTrue(closed)
+    }
+
+    @Test
     fun acceptsBodyMatchingDeclaredLength() {
         val payload = """{"status":"answered"}""".toByteArray(Charsets.UTF_8)
 
