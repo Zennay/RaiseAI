@@ -57,6 +57,32 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
         self.assertIn("  cancel-in-progress: false", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
 
+    def test_production_python_runtime_is_pinned_and_isolated(self):
+        for line in (
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.text.count(line), 1)
+
+        self.assertEqual(
+            len(re.findall(r'(?m)^\s+PYTHONNOUSERSITE:\s*', self.text)),
+            1,
+            "production preserve job must expose exactly one PYTHONNOUSERSITE binding",
+        )
+        self.assertEqual(
+            self.text.count(
+                'python3 -c \'import platform, sys; assert platform.python_implementation() == "CPython"; '
+                'assert sys.version_info[:2] == (3, 12), sys.version\''
+            ),
+            1,
+            "production preservation must fail before parsing if the VPS Python runtime drifts",
+        )
+
     def test_frozen_identity_constants_are_exact_and_unique(self):
         for key, value in EXPECTED_ENV.items():
             with self.subTest(key=key):
