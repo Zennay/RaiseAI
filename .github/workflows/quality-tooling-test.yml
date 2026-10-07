@@ -1,0 +1,75 @@
+name: Raise quality tooling CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "tools/analyze-watch-sensor-traces.py"
+      - "tools/analyze-watch-sensor-trials.py"
+      - "tools/create-physical-observation-template.py"
+      - "tools/validate-physical-observations.py"
+      - "tools/validate-watch-e2e-evidence.py"
+      - "tools/verify-watch-apk-identity.py"
+      - "tests/test_adb_device_binding.py"
+      - "tests/test_physical_observation_template.py"
+      - "tests/test_physical_observation_validator.py"
+      - "tests/test_watch_apk_identity.py"
+      - "tests/test_watch_e2e_evidence_validator.py"
+      - "tests/test_watch_sensor_trace_analyzer.py"
+      - "tests/test_watch_sensor_trial_analyzer.py"
+      - ".github/workflows/quality-tooling-test.yml"
+  pull_request:
+    paths:
+      - "tools/analyze-watch-sensor-traces.py"
+      - "tools/analyze-watch-sensor-trials.py"
+      - "tools/create-physical-observation-template.py"
+      - "tools/validate-physical-observations.py"
+      - "tools/validate-watch-e2e-evidence.py"
+      - "tools/verify-watch-apk-identity.py"
+      - "tests/test_adb_device_binding.py"
+      - "tests/test_physical_observation_template.py"
+      - "tests/test_physical_observation_validator.py"
+      - "tests/test_watch_apk_identity.py"
+      - "tests/test_watch_e2e_evidence_validator.py"
+      - "tests/test_watch_sensor_trace_analyzer.py"
+      - "tests/test_watch_sensor_trial_analyzer.py"
+      - ".github/workflows/quality-tooling-test.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-quality-tooling-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile             tools/analyze-watch-sensor-traces.py             tools/analyze-watch-sensor-trials.py             tools/create-physical-observation-template.py             tools/validate-physical-observations.py             tools/validate-watch-e2e-evidence.py             tools/verify-watch-apk-identity.py
+
+      - name: Quality tooling regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest             tests.test_adb_device_binding             tests.test_physical_observation_template             tests.test_physical_observation_validator             tests.test_watch_apk_identity             tests.test_watch_e2e_evidence_validator             tests.test_watch_sensor_trace_analyzer             tests.test_watch_sensor_trial_analyzer
