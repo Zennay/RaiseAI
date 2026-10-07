@@ -72,8 +72,7 @@ def discovered_test_modules(suite: unittest.TestSuite) -> set[str]:
         if isinstance(item, unittest.TestSuite):
             modules.update(discovered_test_modules(item))
             continue
-        module = item.__class__.__module__.rsplit(".", 1)[-1]
-        modules.add(module)
+        modules.add(item.__class__.__module__)
     return modules
 
 
