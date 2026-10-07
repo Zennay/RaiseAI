@@ -74,6 +74,9 @@ export function readKeyValueFile(
     }
 
     const text = readBoundedUtf8(fd, maxBytes, file);
+    if (text.includes("\0")) {
+      throw new Error(`deployment state file contains NUL bytes: ${file}`);
+    }
     const values = new Map();
 
     for (const rawLine of text.split("\n")) {
