@@ -47,7 +47,12 @@ def parse_finite_float(value):
 
 
 def load_strict_json(path):
-    text = path.read_bytes().decode("utf-8")
+    raw = path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raise ValueError("UTF-8 BOM is not allowed")
+    if b"\r" in raw:
+        raise ValueError("CR bytes are not allowed; JSON must use LF line endings")
+    text = raw.decode("utf-8")
     return json.loads(
         text,
         object_pairs_hook=reject_duplicate_keys,
@@ -81,6 +86,20 @@ class JsonSurfaceContractTests(unittest.TestCase):
                     load_strict_json(path)
                 except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                     self.fail(f"{relative} must be strict UTF-8 JSON: {exc}")
+
+    def test_strict_loader_rejects_bom_and_cr_line_endings(self):
+        import tempfile
+
+        for payload, message in (
+            (b"\xef\xbb\xbf{\"ok\": true}\n", "UTF-8 BOM is not allowed"),
+            (b"{\"ok\": true}\r\n", "CR bytes are not allowed"),
+        ):
+            with self.subTest(message=message):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = pathlib.Path(directory) / "sample.json"
+                    path.write_bytes(payload)
+                    with self.assertRaisesRegex(ValueError, message):
+                        load_strict_json(path)
 
     def test_strict_loader_rejects_duplicate_keys_and_nonfinite_numbers(self):
         with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
@@ -254,6 +273,8 @@ class JsonSurfaceContractTests(unittest.TestCase):
             "object_pairs_hook=reject_duplicate_keys",
             "parse_constant=reject_nonfinite",
             "parse_float=parse_finite_float",
+            'raw.startswith(b"\\xef\\xbb\\xbf")',
+            'b"\\r" in raw',
             'decode("utf-8")',
             "python3 -m unittest tests.test_json_surface_contract",
             "git diff --exit-code -- .",
