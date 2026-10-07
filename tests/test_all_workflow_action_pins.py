@@ -1,5 +1,6 @@
 import pathlib
 import re
+import subprocess
 import tempfile
 import unittest
 
@@ -23,13 +24,61 @@ def unquote_scalar(value):
     return value
 
 
-def docker_action_image_values(text):
-    values = []
-    for match in re.finditer(r"(?m)^  image:\s*([^\s#]+)", text):
-        raw = match.group(1)
-        if unquote_scalar(raw).startswith("docker://"):
-            values.append(raw)
-    return values
+def yaml_scalar_values_for_key(path, key):
+    script = r"""
+require "psych"
+raw = File.binread(ARGV.fetch(0))
+raw.force_encoding(Encoding::UTF_8)
+abort("invalid UTF-8") unless raw.valid_encoding?
+target = ARGV.fetch(1)
+tree = Psych.parse_stream(raw)
+abort("YAML stream must contain exactly one document") unless tree.children.length == 1
+values = []
+walk = nil
+walk = lambda do |node|
+  if node.is_a?(Psych::Nodes::Mapping)
+    node.children.each_slice(2) do |key_node, value_node|
+      if key_node.is_a?(Psych::Nodes::Scalar) &&
+         key_node.value == target &&
+         value_node.is_a?(Psych::Nodes::Scalar)
+        values << value_node.value
+      end
+      walk.call(value_node)
+    end
+    return
+  end
+  children = node.respond_to?(:children) ? node.children : nil
+  Array(children).each { |child| walk.call(child) }
+end
+walk.call(tree)
+STDOUT.write(values.join("\\0"))
+STDOUT.write("\\0") unless values.empty?
+"""
+    result = subprocess.run(
+        ["ruby", "--disable-gems", "-e", script, str(path), key],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{path}: YAML semantic scan failed with exit {result.returncode}: "
+            f"{result.stderr.decode('utf-8', errors='replace').strip()}"
+        )
+    return [
+        value.decode("utf-8", errors="strict")
+        for value in result.stdout.split(b"\\0")
+        if value
+    ]
+
+
+def docker_action_image_values(path):
+    return [
+        value
+        for value in yaml_scalar_values_for_key(path, "image")
+        if value.startswith("docker://")
+    ]
 
 
 def immutable_uses_error(value):
@@ -63,13 +112,7 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
 
         remote_refs = []
         for document in [*workflows, *action_manifests]:
-            text = document.read_text(encoding="utf-8")
-            for match in re.finditer(
-                r"^\s*(?:-\s*)?uses:\s*([^\s#]+)",
-                text,
-                flags=re.MULTILINE,
-            ):
-                value = match.group(1)
+            for value in yaml_scalar_values_for_key(document, "uses"):
                 if value.startswith("./"):
                     continue
                 remote_refs.append((str(document.relative_to(ROOT)), value))
@@ -85,8 +128,7 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
     def test_docker_action_manifest_images_are_immutable(self):
         _, action_manifests = github_action_documents()
         for manifest in action_manifests:
-            text = manifest.read_text(encoding="utf-8")
-            for value in docker_action_image_values(text):
+            for value in docker_action_image_values(manifest):
                 with self.subTest(
                     manifest=str(manifest.relative_to(ROOT)),
                     image=value,
@@ -99,40 +141,83 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
 
     def test_docker_action_image_parser_covers_remote_images_only(self):
         digest = "c" * 64
-        pinned = (
-            "name: pinned\n"
-            "runs:\n"
-            "  using: 'docker'\n"
-            f"  image: 'docker://ghcr.io/example/tool@sha256:{digest}'\n"
-        )
-        mutable = (
-            "name: mutable\n"
-            "runs:\n"
-            "  using: docker\n"
-            "  image: docker://ghcr.io/example/tool:latest\n"
-        )
-        local = (
-            "name: local\n"
-            "runs:\n"
-            "  using: docker\n"
-            "  image: Dockerfile\n"
-        )
+        fixtures = {
+            "pinned.yml": (
+                "name: pinned\n"
+                "runs: {using: docker, image: "
+                f"'docker://ghcr.io/example/tool@sha256:{digest}'}}\n"
+            ),
+            "mutable.yml": (
+                "name: mutable\n"
+                "runs:\n"
+                "  using: docker\n"
+                "  image : docker://ghcr.io/example/tool:latest\n"
+            ),
+            "local.yml": (
+                "name: local\n"
+                "runs:\n"
+                "  using: docker\n"
+                "  image: Dockerfile\n"
+            ),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            paths = {}
+            for name, content in fixtures.items():
+                path = root / name
+                path.write_text(content, encoding="utf-8")
+                paths[name] = path
 
-        self.assertEqual(
-            docker_action_image_values(pinned),
-            [f"'docker://ghcr.io/example/tool@sha256:{digest}'"],
-        )
-        self.assertEqual(
-            docker_action_image_values(mutable),
-            ["docker://ghcr.io/example/tool:latest"],
-        )
-        self.assertEqual(docker_action_image_values(local), [])
-        self.assertIsNone(
-            immutable_uses_error(docker_action_image_values(pinned)[0])
-        )
-        self.assertIsNotNone(
-            immutable_uses_error(docker_action_image_values(mutable)[0])
-        )
+            self.assertEqual(
+                docker_action_image_values(paths["pinned.yml"]),
+                [f"docker://ghcr.io/example/tool@sha256:{digest}"],
+            )
+            self.assertEqual(
+                docker_action_image_values(paths["mutable.yml"]),
+                ["docker://ghcr.io/example/tool:latest"],
+            )
+            self.assertEqual(docker_action_image_values(paths["local.yml"]), [])
+            self.assertIsNone(
+                immutable_uses_error(docker_action_image_values(paths["pinned.yml"])[0])
+            )
+            self.assertIsNotNone(
+                immutable_uses_error(docker_action_image_values(paths["mutable.yml"])[0])
+            )
+
+    def test_yaml_semantic_scan_catches_quoted_spaced_and_flow_uses_keys(self):
+        sha = "d" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            pinned = root / "pinned.yml"
+            pinned.write_text(
+                "jobs:\n"
+                "  audit:\n"
+                "    steps: [{\"uses\" : "
+                f"\"actions/checkout@{sha}\"}}]\n",
+                encoding="utf-8",
+            )
+            mutable = root / "mutable.yml"
+            mutable.write_text(
+                "jobs:\n"
+                "  audit:\n"
+                "    steps: [{uses : actions/checkout@v7}]\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                yaml_scalar_values_for_key(pinned, "uses"),
+                [f"actions/checkout@{sha}"],
+            )
+            self.assertIsNone(
+                immutable_uses_error(yaml_scalar_values_for_key(pinned, "uses")[0])
+            )
+            self.assertEqual(
+                yaml_scalar_values_for_key(mutable, "uses"),
+                ["actions/checkout@v7"],
+            )
+            self.assertIsNotNone(
+                immutable_uses_error(yaml_scalar_values_for_key(mutable, "uses")[0])
+            )
 
     def test_composite_action_manifest_discovery_is_recursive(self):
         with tempfile.TemporaryDirectory() as temp:
