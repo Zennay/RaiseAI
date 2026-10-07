@@ -26,6 +26,7 @@ RELEASE_ASSET_ID = 611084738
 EXPECTED_ARCHIVE_SHA256 = (
     "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce"
 )
+EXPECTED_ARCHIVE_SIZE_BYTES = 84_450_954
 EXPECTED_SOURCE_REVISION = "8f719bb273f9b997848864f342598e7df5f090e5"
 ASSET_API_URL = (
     f"https://api.github.com/repos/{REPOSITORY}/releases/assets/{RELEASE_ASSET_ID}"
@@ -195,6 +196,27 @@ class _SafeReleaseRedirect(urllib.request.HTTPRedirectHandler):
         return redirected
 
 
+def _copy_exact_release_asset(source, destination) -> None:
+    copied = 0
+    while True:
+        chunk = source.read(1024 * 1024)
+        if not chunk:
+            break
+        copied += len(chunk)
+        if copied > EXPECTED_ARCHIVE_SIZE_BYTES:
+            raise HandoffError(
+                "Frozen handoff download exceeded expected size "
+                f"{EXPECTED_ARCHIVE_SIZE_BYTES} bytes"
+            )
+        destination.write(chunk)
+
+    if copied != EXPECTED_ARCHIVE_SIZE_BYTES:
+        raise HandoffError(
+            "Frozen handoff download size mismatch: "
+            f"expected {EXPECTED_ARCHIVE_SIZE_BYTES} bytes, got {copied}"
+        )
+
+
 def download_release_asset(destination: Path) -> None:
     headers = {
         "Accept": "application/octet-stream",
@@ -207,11 +229,15 @@ def download_release_asset(destination: Path) -> None:
 
     request = urllib.request.Request(ASSET_API_URL, headers=headers)
     opener = urllib.request.build_opener(_SafeReleaseRedirect())
+    created_destination = False
     try:
         with opener.open(request, timeout=60) as response:
-            with destination.open("wb") as handle:
-                shutil.copyfileobj(response, handle)
+            with destination.open("xb") as handle:
+                created_destination = True
+                _copy_exact_release_asset(response, handle)
     except Exception as exc:
+        if created_destination:
+            destination.unlink(missing_ok=True)
         raise HandoffError(
             "Could not download the preserved GitHub Release asset "
             f"{RELEASE_ASSET_ID} from tag {RELEASE_TAG}: {exc}"
