@@ -17,6 +17,9 @@ function healthySystemctl() {
     "WorkingDirectory=" + installDir,
     "ExecStart={ path=/usr/bin/node ; argv[]=/usr/bin/node " + serverFile + " ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }",
     "EnvironmentFiles=" + envFile + " (ignore_errors=no)",
+    "NoNewPrivileges=yes",
+    "PrivateTmp=yes",
+    "ProtectSystem=strict",
     "ActiveState=active",
     "SubState=running"
   ].join("\n");
@@ -30,7 +33,10 @@ test("accepts the exact loaded Raise gateway runtime wiring", () => {
     fragment_path: true,
     working_directory: true,
     exec_start: true,
-    environment_file: true
+    environment_file: true,
+    no_new_privileges: true,
+    private_tmp: true,
+    protect_system: true
   });
   assert.equal(report.active_state, "active");
   assert.equal(report.sub_state, "running");
@@ -46,6 +52,21 @@ test("rejects a stale or miswired loaded systemd service", () => {
   assert.equal(report.reason, "runtime_wiring_mismatch");
   assert.equal(report.checks.exec_start, false);
   assert.equal(report.checks.environment_file, false);
+});
+
+test("rejects a loaded service with weakened systemd hardening", () => {
+  for (const [property, weakened] of [
+    ["NoNewPrivileges=yes", "NoNewPrivileges=no"],
+    ["PrivateTmp=yes", "PrivateTmp=no"],
+    ["ProtectSystem=strict", "ProtectSystem=full"]
+  ]) {
+    const report = attestRuntimeWiring({
+      systemctlOutput: healthySystemctl().replace(property, weakened),
+      home
+    });
+    assert.equal(report.ok, false, property);
+    assert.equal(report.reason, "runtime_wiring_mismatch", property);
+  }
 });
 
 test("rejects an inactive service even when paths are correct", () => {
