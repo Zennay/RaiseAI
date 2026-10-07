@@ -26,6 +26,8 @@ local.properties
 .env.*
 !.env.example
 !.env.sample
+.envrc
+.direnv/
 secrets.properties
 keystore.properties
 signing.properties
