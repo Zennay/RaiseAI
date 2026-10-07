@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import stat
 import tempfile
 import unittest
 
@@ -56,6 +57,18 @@ def foreign_workflows() -> list[Path]:
 
 
 PULL_REQUEST_EVENTS = {"pull_request", "pull_request_target"}
+
+
+def read_workflow_text(path: Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
 
 
 def pull_request_events(path: Path) -> set[str]:
@@ -152,7 +165,7 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
                 pull_request_events(path)
 
     def test_boundary_workflow_pins_semantic_parser_runtime(self):
-        workflow = BOUNDARY_WORKFLOW.read_text(encoding="utf-8")
+        workflow = read_workflow_text(BOUNDARY_WORKFLOW)
         self.assertIn("Verify Ruby/Psych runtime", workflow)
         self.assertIn('expected = ["3.2.3", "5.0.1"]', workflow)
         self.assertIn('ruby --disable-gems -e \'require "psych";', workflow)
@@ -191,7 +204,7 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
 
     def test_legacy_push_triggers_are_self_scoped_to_main(self):
         for path in foreign_workflows():
-            text = path.read_text(encoding="utf-8")
+            text = read_workflow_text(path)
             section = push_section(text)
             with self.subTest(workflow=path.name):
                 self.assertTrue(section, f"{path.name}: legacy workflow must keep an explicit push block")
@@ -209,7 +222,7 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
         for path in sorted(WORKFLOWS.glob("*.y*ml")):
             if path.name in LEGACY_FOREIGN_WORKFLOWS:
                 continue
-            text = path.read_text(encoding="utf-8")
+            text = read_workflow_text(path)
             if FOREIGN_MARKER_RE.search(text):
                 offenders.append(path.name)
 
@@ -219,6 +232,26 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
             "RaiseAI workflow files outside the legacy allowlist must not embed "
             f"FTMO/LightUp/zCloud orchestration markers: {offenders}",
         )
+
+    def test_workflow_text_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            symlink = root / "linked.yml"
+            symlink.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(symlink)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_allowlist_is_cleanup_friendly(self):
         current = {path.name for path in foreign_workflows()}
