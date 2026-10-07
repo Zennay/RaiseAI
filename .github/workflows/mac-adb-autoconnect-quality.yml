@@ -1,0 +1,57 @@
+name: Mac ADB autoconnect quality CI
+
+on:
+  pull_request:
+    paths:
+      - "install-mac-adb-autoconnect.command"
+      - "tests/test_install_mac_adb_autoconnect.py"
+      - ".github/workflows/mac-adb-autoconnect-quality.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "install-mac-adb-autoconnect.command"
+      - "tests/test_install_mac_adb_autoconnect.py"
+      - ".github/workflows/mac-adb-autoconnect-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-mac-adb-autoconnect-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision and runner
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(hostname)" = "vps-bb300bba"
+
+      - name: Validate launcher contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install-mac-adb-autoconnect.command
+          python3 -m unittest tests.test_install_mac_adb_autoconnect
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
