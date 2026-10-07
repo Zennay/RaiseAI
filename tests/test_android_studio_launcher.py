@@ -64,10 +64,9 @@ class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
     def test_workflow_is_exact_head_read_only_and_immutable(self):
-        self.assertIn(
-            "    runs-on: [self-hosted, linux, x64, vps-bb300bba]",
-            self.workflow,
-        )
+        self.assertIn("    runs-on: ubuntu-24.04", self.workflow)
+        self.assertNotIn("self-hosted", self.workflow)
+        self.assertNotIn("vps-bb300bba", self.workflow)
         self.assertIn("permissions:\n  contents: read", self.workflow)
         self.assertEqual(self.workflow.count("        uses:"), 1)
         self.assertIn(
@@ -82,10 +81,12 @@ class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
             '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
             self.workflow,
         )
-        self.assertIn(
-            '          test "$(hostname)" = "vps-bb300bba"',
-            self.workflow,
+        runtime = (
+            '          python3 -c \'import platform, sys; '
+            'assert platform.python_implementation() == "CPython"; '
+            'assert sys.version_info[:2] == (3, 12), sys.version\''
         )
+        self.assertEqual(self.workflow.count(runtime), 1)
         self.assertNotIn("pull_request_target:", self.workflow)
         self.assertNotIn("contents: write", self.workflow)
         self.assertNotIn("id-token: write", self.workflow)
@@ -99,6 +100,18 @@ class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
         ):
             with self.subTest(clean_worktree_command=command):
                 self.assertIn(command, self.workflow)
+
+    def test_hosted_environment_is_deterministic(self):
+        for line in (
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.workflow.count(line), 1)
 
     def test_workflow_trigger_surface_covers_all_contract_inputs(self):
         for path in (
