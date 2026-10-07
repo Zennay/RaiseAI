@@ -51,21 +51,29 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn('test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', self.text)
 
     def _trigger_paths(self, event):
-        event_match = re.search(
-            rf"(?ms)^  {re.escape(event)}:\\n(?P<body>(?:    .*\\n|      .*\\n)*)",
-            self.text,
-        )
-        self.assertIsNotNone(event_match, f"{event} trigger must exist")
-        paths_match = re.search(
-            r"(?ms)^    paths:\\n(?P<paths>(?:      - .*\\n)+)",
-            event_match.group("body"),
-        )
-        self.assertIsNotNone(paths_match, f"{event} trigger must define paths")
-        return re.findall(
-            r'^      - "([^"]+)"$',
-            paths_match.group("paths"),
-            flags=re.MULTILINE,
-        )
+        lines = self.text.splitlines()
+        event_line = f"  {event}:"
+        self.assertIn(event_line, lines, f"{event} trigger must exist")
+        event_start = lines.index(event_line) + 1
+
+        body = []
+        for line in lines[event_start:]:
+            if line and not line.startswith("    "):
+                break
+            body.append(line)
+
+        self.assertIn("    paths:", body, f"{event} trigger must define paths")
+        paths_start = body.index("    paths:") + 1
+        paths = []
+        for line in body[paths_start:]:
+            if not line.startswith("      - "):
+                break
+            match = re.fullmatch(r'      - "([^"]+)"', line)
+            self.assertIsNotNone(match, f"unexpected {event} path entry: {line}")
+            paths.append(match.group(1))
+
+        self.assertTrue(paths, f"{event} trigger must include at least one path")
+        return paths
 
     def test_push_and_pull_request_filters_cover_quality_surface(self):
         expected_paths = [
