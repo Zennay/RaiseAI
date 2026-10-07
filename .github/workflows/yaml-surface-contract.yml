@@ -1,0 +1,114 @@
+name: YAML surface contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "*.yml"
+      - "**/*.yml"
+      - "*.yaml"
+      - "**/*.yaml"
+      - "tests/test_yaml_surface_contract.py"
+      - ".github/workflows/yaml-surface-contract.yml"
+  pull_request:
+    paths:
+      - "*.yml"
+      - "**/*.yml"
+      - "*.yaml"
+      - "**/*.yaml"
+      - "tests/test_yaml_surface_contract.py"
+      - ".github/workflows/yaml-surface-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-yaml-surface-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify YAML parser runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ruby >/dev/null
+          ruby --disable-gems -e 'require "psych"; abort "Psych unavailable" unless defined?(Psych); puts "Ruby #{RUBY_VERSION} / Psych #{Psych::VERSION}"'
+
+      - name: Validate tracked YAML surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+
+          raw = subprocess.check_output(["git", "ls-files", "-z"])
+          paths = sorted(
+              item
+              for item in raw.decode("utf-8").split("\0")
+              if item and pathlib.PurePosixPath(item).suffix.lower() in {".yml", ".yaml"}
+          )
+          if not paths:
+              raise SystemExit("no tracked YAML files discovered")
+
+          ruby_parser = r'''
+          require "psych"
+          raw = File.binread(ARGV.fetch(0))
+          raw.force_encoding(Encoding::UTF_8)
+          abort("#{ARGV.fetch(0)}: invalid UTF-8") unless raw.valid_encoding?
+          Psych.parse_stream(raw)
+          '''
+          for path in paths:
+              candidate = pathlib.Path(path)
+              if candidate.is_symlink():
+                  raise SystemExit(f"{path}: tracked YAML files must not be symlinks")
+              if not candidate.is_file():
+                  raise SystemExit(f"{path}: tracked YAML path must be a regular file")
+              try:
+                  candidate.read_bytes().decode("utf-8")
+              except UnicodeDecodeError as exc:
+                  raise SystemExit(f"{path}: invalid UTF-8: {exc}") from None
+              subprocess.run(["ruby", "--disable-gems", "-e", ruby_parser, path], check=True)
+
+          print(f"validated {len(paths)} tracked YAML files")
+          PY
+
+      - name: Run YAML surface regression contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_yaml_surface_contract
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
