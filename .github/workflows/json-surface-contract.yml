@@ -1,0 +1,119 @@
+name: JSON surface contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "*.json"
+      - "**/*.json"
+      - "tests/test_json_surface_contract.py"
+      - ".github/workflows/json-surface-contract.yml"
+  pull_request:
+    paths:
+      - "*.json"
+      - "**/*.json"
+      - "tests/test_json_surface_contract.py"
+      - ".github/workflows/json-surface-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-json-surface-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
+      - name: Validate tracked JSON surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import subprocess
+
+          def reject_duplicate_keys(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError(f"duplicate JSON key: {key}")
+                  result[key] = value
+              return result
+
+          def reject_nonfinite(value):
+              raise ValueError(f"non-finite JSON number: {value}")
+
+          raw = subprocess.check_output(["git", "ls-files", "-z"])
+          paths = sorted(
+              item
+              for item in raw.decode("utf-8").split("\0")
+              if item and pathlib.PurePosixPath(item).suffix.lower() == ".json"
+          )
+          if not paths:
+              raise SystemExit("no tracked JSON files discovered")
+
+          for path in paths:
+              candidate = pathlib.Path(path)
+              if candidate.is_symlink():
+                  raise SystemExit(f"{path}: tracked JSON files must not be symlinks")
+              if not candidate.is_file():
+                  raise SystemExit(f"{path}: tracked JSON path must be a regular file")
+
+              try:
+                  text = candidate.read_bytes().decode("utf-8")
+                  json.loads(
+                      text,
+                      object_pairs_hook=reject_duplicate_keys,
+                      parse_constant=reject_nonfinite,
+                  )
+              except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                  raise SystemExit(f"{path}: invalid strict UTF-8 JSON: {exc}") from None
+
+          print(f"validated {len(paths)} tracked JSON files")
+          PY
+
+      - name: Run JSON surface regression contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_json_surface_contract
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
