@@ -14,6 +14,7 @@ STRICT_COMMAND_ENTRYPOINTS = [
     "start-frozen-acceptance.command",
     "start-physical-handoff.command",
 ]
+POWERSHELL_SYNTAX_ENTRYPOINTS = ["install-watch-windows.ps1"]
 SHELL_SYNTAX_ENTRYPOINTS = [
     "upgrade-watch.command",
     "watch-preflight.command",
@@ -162,6 +163,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         expected_paths = [
             "*.command",
             "*.py",
+            "*.ps1",
             "tools/*.py",
             "tests/test_adb_device_binding.py",
             "tests/test_frozen_acceptance_launcher.py",
@@ -224,6 +226,29 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         for path in discovered:
             with self.subTest(path=path):
                 self.assertTrue(path.endswith(".py"))
+
+    def test_root_powershell_entrypoints_trigger_and_parse_automatically(self):
+        discovered = sorted(path.name for path in ROOT.glob("*.ps1"))
+        self.assertEqual(
+            POWERSHELL_SYNTAX_ENTRYPOINTS,
+            discovered,
+            "every root .ps1 entrypoint must be covered by hosted syntax validation",
+        )
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                self.assertEqual(
+                    self._trigger_paths(event)[:3],
+                    ["*.command", "*.py", "*.ps1"],
+                )
+        self.assertIn("- name: PowerShell syntax", self.text)
+        self.assertIn("command -v pwsh >/dev/null", self.text)
+        self.assertIn(
+            "System.Management.Automation.Language.Parser]::ParseFile",
+            self.text,
+        )
+        for path in POWERSHELL_SYNTAX_ENTRYPOINTS:
+            with self.subTest(path=path):
+                self.assertIn(path, self.text)
 
     def test_compiles_all_python_quality_tools(self):
         self.assertIn("tools/*.py", self._trigger_paths("push"))
@@ -592,6 +617,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 "Verify Python runtime",
                 "Shell syntax",
                 "Python syntax",
+                "PowerShell syntax",
                 "Quality tooling regressions",
                 "Verify worktree remains clean",
             ],
@@ -604,6 +630,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "Verify Python runtime": ["name", "shell", "run"],
             "Shell syntax": ["name", "shell", "run"],
             "Python syntax": ["name", "shell", "run"],
+            "PowerShell syntax": ["name", "shell", "run"],
             "Quality tooling regressions": ["name", "shell", "run"],
             "Verify worktree remains clean": ["name", "shell", "run"],
         }
@@ -748,6 +775,11 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "Python syntax": [
                 "set -euo pipefail",
                 "python3 -m py_compile *.py tools/*.py",
+            ],
+            "PowerShell syntax": [
+                "set -euo pipefail",
+                "command -v pwsh >/dev/null",
+                "pwsh -NoLogo -NoProfile -NonInteractive -Command '$tokens = $null; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path \"./install-watch-windows.ps1\"), [ref]$tokens, [ref]$errors); if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }'",
             ],
             "Quality tooling regressions": [
                 "set -euo pipefail",
