@@ -118,6 +118,21 @@ class SensorTrialProgressTest {
     }
 
     @Test
+    fun duplicateSessionFromDifferentIdentityFailsClosedAsMixedEvidence() {
+        val progress = SensorTrialRecorder.progressFromLines(
+            sequenceOf(
+                HEADER,
+                row(label = "mouth_raise", revision = REV_A, sessionId = 42),
+                row(label = "mouth_raise", revision = REV_B, sessionId = 42)
+            )
+        )
+
+        assertEquals(1, progress.mouthTrials)
+        assertEquals(1, progress.rejectedTrials)
+        assertTrue(progress.mixedEvidenceIdentity)
+    }
+
+    @Test
     fun rejectedRowDoesNotReserveSessionIdForLaterValidEvidence() {
         val progress = SensorTrialRecorder.progressFromLines(
             sequenceOf(
