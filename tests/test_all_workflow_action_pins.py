@@ -9,7 +9,7 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 
 class AllWorkflowActionPinsTests(unittest.TestCase):
     def test_every_remote_uses_ref_is_immutable(self):
-        workflows = sorted(WORKFLOWS.glob("*.yml"))
+        workflows = sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
         self.assertTrue(workflows, "repository must retain GitHub Actions workflows")
 
         remote_refs = []
