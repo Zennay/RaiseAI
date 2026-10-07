@@ -122,7 +122,7 @@ class RepositoryBlobBudgetTests(unittest.TestCase):
     def test_workflow_is_read_only_exact_head_and_vps_bound(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("permissions:\n  contents: read", text)
-        self.assertNotRegex(text, r"^\s+[A-Za-z0-9_-]+:\s*write\s*$")
+        self.assertNotRegex(text, r"(?m)^\s+[A-Za-z0-9_-]+:\s*write\s*$")
         self.assertNotRegex(text, r"\$\{\{\s*secrets\.")
         self.assertIn(
             "    runs-on: [self-hosted, linux, x64, vps-bb300bba]",
