@@ -75,6 +75,7 @@ jobs:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
       PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc
       TZ: UTC
