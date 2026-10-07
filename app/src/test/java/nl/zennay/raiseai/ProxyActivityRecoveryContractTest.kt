@@ -11,9 +11,9 @@ class ProxyActivityRecoveryContractTest {
             "src/main/java/nl/zennay/raiseai/ChatGptProxyActivity.kt"
         ).readText()
 
-        val launch = source.indexOf("ChatGptLauncher.launchFromActivity(this)")
-        val failure = source.indexOf("if (!ChatGptLauncher.launchFromActivity(this))", launch)
-        val recoveryCall = source.indexOf("openSetup()", failure)
+        val failure = source.indexOf("if (!ChatGptLauncher.launchFromActivity(this))")
+        val launch = source.indexOf("ChatGptLauncher.launchFromActivity(this)", failure)
+        val recoveryCall = source.indexOf("openSetup()", launch)
         val finish = source.indexOf("finish()", recoveryCall)
         val setupIntent = source.indexOf("Intent(this, MainActivity::class.java)")
         val setupFlags = source.indexOf(
@@ -21,9 +21,9 @@ class ProxyActivityRecoveryContractTest {
             setupIntent
         )
 
-        assertTrue("ChatGPT proxy must inspect launch failure", launch >= 0)
         assertTrue("failed ChatGPT launch must enter recovery", failure >= 0)
-        assertTrue("failed ChatGPT launch must call setup recovery", recoveryCall > failure)
+        assertTrue("ChatGPT proxy must inspect launch result inside recovery guard", launch > failure)
+        assertTrue("failed ChatGPT launch must call setup recovery", recoveryCall > launch)
         assertTrue("proxy must finish after handing off to setup recovery", finish > recoveryCall)
         assertTrue("setup recovery must route to MainActivity", setupIntent >= 0)
         assertTrue(
@@ -33,7 +33,7 @@ class ProxyActivityRecoveryContractTest {
     }
 
     private fun findSource(relativePath: String): File {
-        var current = File(System.getProperty("user.dir")).canonicalFile
+        var current = File(requireNotNull(System.getProperty("user.dir"))).canonicalFile
         repeat(6) {
             listOf(
                 File(current, relativePath),
