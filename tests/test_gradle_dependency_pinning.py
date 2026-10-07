@@ -10,6 +10,11 @@ APP_BUILD = ROOT / "app" / "build.gradle.kts"
 SETTINGS = ROOT / "settings.gradle.kts"
 
 DYNAMIC_VERSION_MARKERS = ("+", "latest.", "snapshot")
+CANONICAL_DEPENDENCY_DECLARATION = re.compile(
+    r'^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(\s*"'
+    r'([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[^"\n]+)"'
+    r'\s*\)\s*$'
+)
 
 
 def literal_custom_maven_urls(settings_text: str) -> list[str]:
@@ -32,6 +37,40 @@ def dynamic_version_markers(version: str) -> list[str]:
     ):
         markers.append("version-range")
     return markers
+
+
+def dependency_declaration_lines(build_text: str) -> list[str]:
+    lines = build_text.splitlines()
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if re.fullmatch(r"\s*dependencies\s*\{\s*", line.split("//", 1)[0])
+    ]
+    if len(starts) != 1:
+        raise ValueError("build script must contain exactly one canonical dependencies block")
+
+    declarations: list[str] = []
+    depth = 1
+    for line in lines[starts[0] + 1 :]:
+        code = line.split("//", 1)[0].strip()
+        if not code:
+            continue
+
+        depth += code.count("{") - code.count("}")
+        if depth == 0:
+            return declarations
+        if depth != 1:
+            raise ValueError(
+                "dependencies block must use flat canonical dependency declarations"
+            )
+        declarations.append(code)
+
+    raise ValueError("dependencies block is not closed")
+
+
+def canonical_dependency_coordinate(line: str) -> str | None:
+    match = CANONICAL_DEPENDENCY_DECLARATION.fullmatch(line)
+    return match.group(1) if match else None
 
 
 def literal_dependency_coordinates(build_text: str) -> list[str]:
@@ -75,6 +114,47 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 version = parts[1].strip()
                 self.assertTrue(version, f"dependency version must not be empty: {coordinate}")
                 self._assert_non_dynamic(version, coordinate)
+
+    def test_every_dependency_declaration_uses_reviewed_literal_coordinate_form(self):
+        declarations = dependency_declaration_lines(self.app_build)
+        self.assertTrue(declarations, "dependencies block must not be empty")
+
+        parsed = []
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                coordinate = canonical_dependency_coordinate(declaration)
+                self.assertIsNotNone(
+                    coordinate,
+                    "dependency declarations must use configuration(\"group:artifact:version\") "
+                    "so every version remains visible to the pinning contract",
+                )
+                parsed.append(coordinate)
+
+        self.assertEqual(
+            parsed,
+            literal_dependency_coordinates(self.app_build),
+            "canonical declaration scan and coordinate discovery must cover the same surface",
+        )
+
+    def test_unsupported_dependency_declaration_forms_fail_closed(self):
+        unsupported = (
+            'implementation("example.group:artifact")',
+            'implementation(platform("example.group:bom:1.0.0"))',
+            'add("implementation", "example.group:artifact:1.0.0")',
+            'implementation(group = "example.group", name = "artifact", version = "1.0.0")',
+        )
+        for declaration in unsupported:
+            with self.subTest(declaration=declaration):
+                self.assertIsNone(canonical_dependency_coordinate(declaration))
+
+        with self.assertRaisesRegex(ValueError, "flat canonical"):
+            dependency_declaration_lines(
+                "dependencies {\n"
+                "    constraints {\n"
+                '        implementation("example.group:artifact:1.0.0")\n'
+                "    }\n"
+                "}\n"
+            )
 
     def test_dependency_coordinate_discovery_is_configuration_name_agnostic(self):
         fixture = """
