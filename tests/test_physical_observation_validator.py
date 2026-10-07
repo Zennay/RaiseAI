@@ -5,6 +5,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "validate-physical-observations.py"
 SPEC = importlib.util.spec_from_file_location("physical_observation_validator", MODULE_PATH)
@@ -220,6 +221,39 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
                 second = validator.main([str(session), str(observations), "--output", str(result)])
             self.assertEqual(second, 1)
             self.assertIn("refusing to overwrite", second_output.getvalue())
+
+    def test_cli_output_publish_failure_leaves_no_partial_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session = root / "session.json"
+            observations = root / "operator-observations.json"
+            result = root / "quality-result.json"
+            session.write_text(json.dumps(session_payload()), encoding="utf-8")
+            observations.write_text(json.dumps(observation_payload()), encoding="utf-8")
+
+            failed_output = io.StringIO()
+            with mock.patch.object(
+                validator.os,
+                "link",
+                side_effect=OSError("simulated publish failure"),
+            ), contextlib.redirect_stdout(failed_output):
+                failed = validator.main(
+                    [str(session), str(observations), "--output", str(result)]
+                )
+
+            self.assertEqual(failed, 1)
+            self.assertFalse(result.exists())
+            self.assertEqual(list(root.glob(".quality-result.json.*.tmp")), [])
+            self.assertIn("simulated publish failure", failed_output.getvalue())
+
+            success_output = io.StringIO()
+            with contextlib.redirect_stdout(success_output):
+                success = validator.main(
+                    [str(session), str(observations), "--output", str(result)]
+                )
+
+            self.assertEqual(success, 0, success_output.getvalue())
+            self.assertTrue(json.loads(result.read_text(encoding="utf-8"))["quality_evidence_complete"])
 
     def test_cli_output_refuses_broken_symlink_without_creating_target(self):
         with tempfile.TemporaryDirectory() as tmp:
