@@ -443,23 +443,43 @@ run_all() {
   verify_v1 "$session"
 }
 
+reject_extra_args() {
+  local command="$1"
+  local maximum="$2"
+  local actual="$3"
+  if [ "$actual" -gt "$maximum" ]; then
+    echo "Too many arguments for $command."
+    usage
+    exit 2
+  fi
+}
+
 case "${1:-}" in
   prepare)
+    reject_extra_args prepare 2 "$#"
     prepare_session "${2:-}"
     ;;
   verify-e2e)
+    reject_extra_args verify-e2e 2 "$#"
     verify_e2e "${2:-}"
     ;;
   verify-v1)
+    reject_extra_args verify-v1 2 "$#"
     verify_v1 "${2:-}"
     ;;
   status)
+    reject_extra_args status 2 "$#"
     show_status "${2:-}"
     ;;
   all)
+    reject_extra_args all 2 "$#"
     run_all "${2:-}"
     ;;
-  -h|--help|help|"")
+  -h|--help|help)
+    reject_extra_args help 1 "$#"
+    usage
+    ;;
+  "")
     usage
     ;;
   *)
