@@ -83,6 +83,7 @@ import os
 import re
 import stat
 import sys
+import unicodedata
 from urllib.parse import urlsplit
 
 source = os.path.abspath(os.path.expanduser(sys.argv[1]))
@@ -170,7 +171,9 @@ if (
     raise SystemExit("Gateway profile is invalid: expected HTTPS origin")
 
 token = values["token"]
-if len(token) < 32 or any(char.isspace() for char in token):
+if len(token) < 32 or any(
+    char.isspace() or unicodedata.category(char) == "Cc" for char in token
+):
     raise SystemExit("Gateway profile is invalid: token is missing or malformed")
 
 if re.fullmatch(r"[0-9a-fA-F]{64}", values["spki_sha256"]) is None:
