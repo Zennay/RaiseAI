@@ -63,6 +63,25 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                     f"{path} must trigger both push and pull_request quality CI",
                 )
 
+    def test_checks_shell_syntax_for_all_command_entrypoints(self):
+        scripts = [
+            "pull-diagnostics.command",
+            "pull-watch-data.command",
+            "install-watch-apk.command",
+            "provision-watch-gateway.command",
+            "physical-validation.command",
+            "start-frozen-acceptance.command",
+        ]
+        self.assertIn("- name: Shell syntax", self.text)
+        self.assertIn("bash -n", self.text)
+        for path in scripts:
+            with self.subTest(path=path):
+                self.assertGreaterEqual(
+                    self.text.count(path),
+                    3,
+                    f"{path} must be trigger-covered and syntax-checked",
+                )
+
     def test_compiles_all_python_quality_tools(self):
         tools = [
             "tools/analyze-watch-sensor-traces.py",
