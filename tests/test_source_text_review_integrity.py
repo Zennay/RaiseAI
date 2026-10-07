@@ -5,9 +5,12 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TEXT_SUFFIXES = {
+    ".cfg",
     ".command",
+    ".conf",
     ".css",
     ".gradle",
+    ".ini",
     ".js",
     ".json",
     ".kt",
@@ -22,11 +25,16 @@ TEXT_SUFFIXES = {
     ".service",
     ".sh",
     ".toml",
+    ".txt",
     ".xml",
     ".yaml",
     ".yml",
 }
 EXACT_TEXT_PATHS = {".gitignore", "gradlew", "VERSION.txt"}
+
+
+def is_reviewable_text_path(item: str) -> bool:
+    return item in EXACT_TEXT_PATHS or pathlib.PurePosixPath(item).suffix.lower() in TEXT_SUFFIXES
 FORBIDDEN_INVISIBLE_CODEPOINTS = {
     0x00AD: "SOFT HYPHEN",
     0x034F: "COMBINING GRAPHEME JOINER",
@@ -60,11 +68,7 @@ def tracked_reviewable_text_paths():
     return sorted(
         item
         for item in raw.decode("utf-8").split("\0")
-        if item
-        and (
-            item in EXACT_TEXT_PATHS
-            or pathlib.PurePosixPath(item).suffix.lower() in TEXT_SUFFIXES
-        )
+        if item and is_reviewable_text_path(item)
     )
 
 
@@ -88,6 +92,16 @@ def validate_reviewable_text(raw: bytes, relative: str) -> None:
 
 
 class SourceTextReviewIntegrityTests(unittest.TestCase):
+    def test_common_text_config_extensions_are_reviewable(self):
+        for relative in ("notes.txt", "config.ini", "policy.cfg", "service.conf", "nested/README.TXT"):
+            with self.subTest(relative=relative):
+                self.assertTrue(is_reviewable_text_path(relative))
+
+    def test_unrelated_binary_extensions_are_not_reviewable(self):
+        for relative in ("artifact.apk", "image.png", "archive.zip"):
+            with self.subTest(relative=relative):
+                self.assertFalse(is_reviewable_text_path(relative))
+
     def test_reviewable_text_surface_is_nonempty_and_covers_critical_sources(self):
         paths = tracked_reviewable_text_paths()
         self.assertTrue(paths, "review-integrity discovery must find tracked text sources")
