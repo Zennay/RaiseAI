@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1";
+const SETUP_NODE_SHA = "820762786026740c76f36085b0efc47a31fe5020";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
 const TEST_WORKFLOW = fs.readFileSync(
@@ -48,6 +49,12 @@ test("gateway test CI pins external actions and exact PR-head checkout", () => {
       `uses: actions/checkout@${CHECKOUT_SHA} # v7.0.1 (node24)`,
     ),
     "gateway test checkout must stay on the audited Node 24 release",
+  );
+  assert.ok(
+    TEST_WORKFLOW.includes(
+      `uses: actions/setup-node@${SETUP_NODE_SHA} # v7.0.0 (node24)`,
+    ),
+    "gateway test setup-node must stay on the audited Node 24 release",
   );
   assert.match(TEST_WORKFLOW, /runs-on:\s*ubuntu-24\.04\b/);
   assert.doesNotMatch(TEST_WORKFLOW, /ubuntu-latest/);
