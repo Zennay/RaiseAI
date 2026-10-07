@@ -116,6 +116,57 @@ class SensorTrialProgressTest {
     }
 
     @Test
+    fun staleBuildIdentityFailsClosed() {
+        val lines = listOf(
+            SensorTrialCsvPolicy.HEADER,
+            row("mouth_raise", 1, true, revision = revisionA),
+            row("normal_move", 2, false, revision = revisionA)
+        )
+
+        val progress = SensorTrialRecorder.progress(
+            lines,
+            expectedAppVersion = "1.5.3",
+            expectedSourceRevision = revisionB
+        )
+
+        assertTrue(progress.unexpectedEvidenceIdentity)
+        assertFalse(progress.v1GatePassed)
+        assertEquals(
+            0,
+            SensorTrialRecorder.trialCount(
+                lines,
+                expectedAppVersion = "1.5.3",
+                expectedSourceRevision = revisionB
+            )
+        )
+    }
+
+    @Test
+    fun invalidExpectedBuildIdentityFailsClosed() {
+        val lines = listOf(
+            SensorTrialCsvPolicy.HEADER,
+            row("mouth_raise", 1, true)
+        )
+
+        val progress = SensorTrialRecorder.progress(
+            lines,
+            expectedAppVersion = "",
+            expectedSourceRevision = "not-a-revision"
+        )
+
+        assertTrue(progress.invalidEvidenceStructure)
+        assertFalse(progress.v1GatePassed)
+        assertEquals(
+            0,
+            SensorTrialRecorder.trialCount(
+                lines,
+                expectedAppVersion = "",
+                expectedSourceRevision = "not-a-revision"
+            )
+        )
+    }
+
+    @Test
     fun mixedEvidenceCanNeverPass() {
         val progress = SensorTrialProgress(
             mouthTrials = 40,
