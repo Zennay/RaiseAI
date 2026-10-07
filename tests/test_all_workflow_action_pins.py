@@ -1,11 +1,21 @@
 import pathlib
 import re
+import tempfile
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 ACTIONS = ROOT / ".github" / "actions"
+
+
+def github_action_documents(root=ROOT):
+    workflows = root / ".github" / "workflows"
+    actions = root / ".github" / "actions"
+    return (
+        sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")]),
+        sorted([*actions.glob("**/action.yml"), *actions.glob("**/action.yaml")]),
+    )
 
 
 def immutable_uses_error(value):
@@ -36,14 +46,8 @@ def immutable_uses_error(value):
 
 class AllWorkflowActionPinsTests(unittest.TestCase):
     def test_every_remote_uses_ref_is_immutable(self):
-        workflows = sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
+        workflows, action_manifests = github_action_documents()
         self.assertTrue(workflows, "repository must retain GitHub Actions workflows")
-        action_manifests = sorted(
-            [
-                *ACTIONS.glob("**/action.yml"),
-                *ACTIONS.glob("**/action.yaml"),
-            ]
-        )
 
         remote_refs = []
         for document in [*workflows, *action_manifests]:
@@ -65,6 +69,31 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                     immutable_uses_error(value),
                     f"{document}: {immutable_uses_error(value)}",
                 )
+
+    def test_composite_action_manifest_discovery_is_recursive(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            workflow = root / ".github" / "workflows" / "quality.yml"
+            nested_yaml = root / ".github" / "actions" / "nested" / "action.yaml"
+            nested_yml = root / ".github" / "actions" / "deeper" / "check" / "action.yml"
+            ignored = root / ".github" / "actions" / "nested" / "README.md"
+            for document in (workflow, nested_yaml, nested_yml, ignored):
+                document.parent.mkdir(parents=True, exist_ok=True)
+                document.write_text("name: fixture\n", encoding="utf-8")
+
+            workflows, action_manifests = github_action_documents(root)
+
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in workflows],
+                [".github/workflows/quality.yml"],
+            )
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in action_manifests],
+                [
+                    ".github/actions/deeper/check/action.yml",
+                    ".github/actions/nested/action.yaml",
+                ],
+            )
 
     def test_docker_uses_requires_sha256_digest(self):
         digest = "a" * 64
