@@ -21,8 +21,13 @@ data class GatewayResponse(
 internal object GatewayResponseBodyReader {
     const val MAX_RESPONSE_BYTES = 64 * 1024
 
-    fun read(stream: InputStream?): String {
-        if (stream == null) return ""
+    fun read(stream: InputStream?, expectedLength: Long = -1L): String {
+        if (stream == null) {
+            if (expectedLength > 0L) {
+                throw IOException("gateway_response_length_mismatch")
+            }
+            return ""
+        }
 
         return stream.use { input ->
             val output = ByteArrayOutputStream()
@@ -39,6 +44,10 @@ internal object GatewayResponseBodyReader {
                     throw IOException("gateway_response_too_large")
                 }
                 output.write(buffer, 0, read)
+            }
+
+            if (expectedLength >= 0L && totalBytes.toLong() != expectedLength) {
+                throw IOException("gateway_response_length_mismatch")
             }
 
             decodeUtf8(output.toByteArray())
@@ -93,15 +102,17 @@ class GatewayClient(private val settings: GatewaySettings) {
 
             val code = connection.responseCode
             val successful = code in 200..299
+            val contentLength = connection.contentLengthLong
             if (successful) {
                 GatewayResponseMetadataPolicy.validateSuccessfulResponse(
                     connection.contentType,
-                    connection.contentLengthLong
+                    contentLength
                 )
             }
 
             val responseText = GatewayResponseBodyReader.read(
-                if (successful) connection.inputStream else connection.errorStream
+                if (successful) connection.inputStream else connection.errorStream,
+                if (successful) contentLength else -1L
             )
 
             if (!successful) {
