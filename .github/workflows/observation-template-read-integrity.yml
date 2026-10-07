@@ -1,0 +1,43 @@
+name: Observation template read integrity CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "tools/create-physical-observation-template.py"
+      - "tests/test_physical_observation_template.py"
+      - ".github/workflows/observation-template-read-integrity.yml"
+  pull_request:
+    paths:
+      - "tools/create-physical-observation-template.py"
+      - "tests/test_physical_observation_template.py"
+      - ".github/workflows/observation-template-read-integrity.yml"
+
+concurrency:
+  group: raise-observation-template-read-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observation-template-read-integrity:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+
+      - name: Compile observation tooling
+        run: python3 -m py_compile tools/create-physical-observation-template.py
+
+      - name: Run observation template regressions
+        run: python3 -m unittest tests/test_physical_observation_template.py -v
