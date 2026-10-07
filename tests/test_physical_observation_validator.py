@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import tempfile
 import unittest
@@ -121,7 +122,7 @@ class PhysicalObservationValidatorTests(unittest.TestCase):
     def test_loader_rejects_fifo_without_blocking(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "session.json"
-            pathlib.os.mkfifo(path)
+            os.mkfifo(path)
             with self.assertRaisesRegex(
                 validator.ObservationError,
                 "session must be a regular file",
