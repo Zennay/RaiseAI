@@ -3,6 +3,8 @@ import importlib.util
 import json
 import os
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -164,6 +166,24 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
             link.symlink_to(target)
             with self.assertRaises(OSError):
                 validator._load_evidence_file(link)
+
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking file opens unavailable",
+    )
+    def test_cli_rejects_fifo_without_blocking_for_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "evidence.json"
+            os.mkfifo(path)
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), str(path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn("evidence path must be a regular file", result.stdout)
 
     def test_file_loader_rejects_invalid_utf8(self):
         with tempfile.TemporaryDirectory() as directory:
