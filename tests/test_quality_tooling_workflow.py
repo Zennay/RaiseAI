@@ -190,6 +190,14 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                     f"{event} quality paths must be complete, ordered and duplicate-free",
                 )
 
+    def test_shell_syntax_surface_matches_every_root_command_entrypoint(self):
+        discovered = sorted(path.name for path in ROOT.glob("*.command"))
+        self.assertEqual(
+            sorted(SHELL_SYNTAX_ENTRYPOINTS),
+            discovered,
+            "every root .command entrypoint must be covered by hosted syntax validation",
+        )
+
     def test_checks_shell_syntax_for_all_command_entrypoints(self):
         self.assertIn("- name: Shell syntax", self.text)
         self.assertIn("bash -n", self.text)
