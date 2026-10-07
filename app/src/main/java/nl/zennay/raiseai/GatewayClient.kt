@@ -58,6 +58,9 @@ internal object GatewayResponseBodyReader {
         }
 }
 
+private fun JSONObject.optionalValue(name: String): Any? =
+    opt(name).takeUnless { it === JSONObject.NULL }
+
 class GatewayClient(private val settings: GatewaySettings) {
 
     fun send(text: String): GatewayResponse {
@@ -106,16 +109,33 @@ class GatewayClient(private val settings: GatewaySettings) {
             }
 
             val json = JSONObject(responseText)
-            val execution = json.optJSONObject("execution")
+            val execution = when (val value = json.optionalValue("execution")) {
+                null -> null
+                is JSONObject -> value
+                else -> GatewayResponseFieldPolicy.invalidSchema()
+            }
 
             GatewayResponse(
-                route = json.optString("route", "unknown"),
-                status = json.optString("status", "unknown"),
-                executionEnabled = execution?.optBoolean("enabled", false) ?: false,
-                executionReason = execution?.optString("reason")?.takeIf { it.isNotBlank() },
-                answer = json.optString("answer")
-                    .takeIf { it.isNotBlank() }
-                    ?: json.optString("message").takeIf { it.isNotBlank() }
+                route = GatewayResponseFieldPolicy.stringOrDefault(
+                    json.optionalValue("route"),
+                    "unknown"
+                ),
+                status = GatewayResponseFieldPolicy.stringOrDefault(
+                    json.optionalValue("status"),
+                    "unknown"
+                ),
+                executionEnabled = GatewayResponseFieldPolicy.booleanOrDefault(
+                    execution?.optionalValue("enabled"),
+                    false
+                ),
+                executionReason = GatewayResponseFieldPolicy.optionalNonBlankString(
+                    execution?.optionalValue("reason")
+                ),
+                answer = GatewayResponseFieldPolicy.optionalNonBlankString(
+                    json.optionalValue("answer")
+                ) ?: GatewayResponseFieldPolicy.optionalNonBlankString(
+                    json.optionalValue("message")
+                )
             )
         } finally {
             connection.disconnect()
