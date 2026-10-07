@@ -42,6 +42,18 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("persist-credentials: false", self.text)
         self.assertNotIn("pull_request_target:", self.text)
 
+    def test_checkout_action_uses_audited_node24_release(self):
+        self.assertIn(
+            "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 "
+            "# v7.0.1 (node24)",
+            self.text,
+        )
+        self.assertNotIn(
+            "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+            self.text,
+            "deprecated checkout v4/Node 20 pin must not return",
+        )
+
     def test_action_execution_surface_is_checkout_only(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
