@@ -22,6 +22,8 @@ internal object SensorTrialCsvPolicy {
     fun hasCanonicalHeader(line: String): Boolean = line == HEADER
 
     fun parseRow(line: String): ParsedSensorTrialRow? {
+        if (line.count { it == ',' } != 8) return null
+
         val fields = line.split(',', limit = 9)
         if (fields.size != 9) return null
 
