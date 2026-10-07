@@ -7,6 +7,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "frozen-acceptance-tooling-test.yml"
 START_GUIDE = ROOT / "START-HERE.md"
 DEVICE_TEST_GUIDE = ROOT / "DEVICE-TEST.md"
+FALLBACK_GUIDES = {
+    "GEMINI-HOME-SETUP.md": "Fallback integration only.",
+    "CHATGPT-WEB-SETUP.md": "Legacy fallback setup only.",
+    "REMOTE-LOGIN.md": "Alleen voor de legacy ChatGPT Web-fallback.",
+}
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
@@ -180,6 +185,23 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
             2,
             "legacy checklist warning changes must trigger both push and pull_request validation",
         )
+
+    def test_legacy_fallback_guides_cannot_pose_as_current_acceptance(self):
+        for path, warning in FALLBACK_GUIDES.items():
+            with self.subTest(path=path):
+                guide = (ROOT / path).read_text(encoding="utf-8")
+                self.assertIn(warning, guide)
+                self.assertIn("8f719bb273f9b997848864f342598e7df5f090e5", guide)
+                self.assertIn("start-frozen-acceptance.command", guide)
+
+    def test_legacy_fallback_guides_trigger_frozen_tooling_contract(self):
+        for path in FALLBACK_GUIDES:
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self.text.count(f'      - "{path}"'),
+                    2,
+                    f"{path} changes must trigger both push and pull_request validation",
+                )
 
     def test_all_run_steps_fail_closed_under_bash(self):
         lines = self.text.splitlines()

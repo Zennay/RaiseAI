@@ -1,5 +1,7 @@
 # ChatGPT Web setup (v1.0)
 
+> **Legacy fallback setup only.** ChatGPT Web/GeckoView is not the current physical acceptance path. For GitHub issue #34, use the preserved Raise AI v1.5.2 native handoff from source `8f719bb273f9b997848864f342598e7df5f090e5` through `bash ./start-frozen-acceptance.command [gateway-profile]` as documented in `START-HERE.md`.
+
 Raise AI v1.0 uses the official `https://chatgpt.com` website. It does not use an OpenAI API key and does not create API charges.
 
 On the tested Galaxy Watch 7 there is no Android System WebView service. Raise AI therefore bundles Mozilla GeckoView and applies a local Wear presentation layer to the official site. Samsung Internet is used only if the bundled engine cannot start.
