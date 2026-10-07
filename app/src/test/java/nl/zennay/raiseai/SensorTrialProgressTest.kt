@@ -87,6 +87,22 @@ class SensorTrialProgressTest {
     }
 
     @Test
+    fun nonFiniteSimilarityIsRejectedWithoutContaminatingIdentity() {
+        val progress = SensorTrialRecorder.progressFromLines(
+            sequenceOf(
+                HEADER,
+                row(label = "mouth_raise", revision = REV_A),
+                row(label = "view_time", revision = REV_B, sessionId = 2, maxSimilarity = "NaN")
+            )
+        )
+
+        assertEquals(1, progress.mouthTrials)
+        assertEquals(0, progress.nonTriggerTrials)
+        assertEquals(1, progress.rejectedTrials)
+        assertFalse(progress.mixedEvidenceIdentity)
+    }
+
+    @Test
     fun duplicateAcceptedSessionCannotInflateTrialCounts() {
         val progress = SensorTrialRecorder.progressFromLines(
             sequenceOf(
@@ -136,9 +152,10 @@ class SensorTrialProgressTest {
         revision: String,
         sessionId: Long = 1,
         durationMs: Long = 3_000,
-        samples: Int = 20
+        samples: Int = 20,
+        maxSimilarity: String = "0.98"
     ): String =
-        "$label,$sessionId,$durationMs,$samples,false,0.98,1.5.2,$revision,raise-detector-v1"
+        "$label,$sessionId,$durationMs,$samples,false,$maxSimilarity,1.5.2,$revision,raise-detector-v1"
 
     companion object {
         private const val HEADER =
