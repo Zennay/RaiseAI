@@ -98,7 +98,7 @@ else
       WATCH="${WATCHES[0]}"
       ;;
     *)
-      echo "Meerdere Galaxy Watch 7-apparaten gevonden. Stel ANDROID_SERIAL expliciet in of verbind precies één Watch."
+      echo "Meerdere Galaxy Watch 7-apparaten gevonden. Verbind precies één Watch of stel ANDROID_SERIAL expliciet in."
       exit 1
       ;;
   esac
