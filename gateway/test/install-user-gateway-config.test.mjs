@@ -38,6 +38,54 @@ function writeExecutable(file, content) {
   fs.writeFileSync(file, content, { mode: 0o755 });
 }
 
+function runInstallerWithShadowedDependency(dependency) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-installer-dependency-"));
+  const home = path.join(root, "home");
+  const bin = path.join(root, "bin");
+  const bashEnv = path.join(root, "bash-env");
+  fs.mkdirSync(home);
+  fs.mkdirSync(bin);
+
+  writeExecutable(
+    path.join(bin, "node"),
+    `#!/usr/bin/env bash
+if [ "\${1:-}" = "-p" ]; then
+  printf '%s\\n' '22'
+  exit 0
+fi
+exit 0
+`
+  );
+  fs.writeFileSync(
+    bashEnv,
+    `${dependency}() { :; }\n`,
+    "utf8"
+  );
+
+  try {
+    const result = spawnSync("/bin/bash", [installer], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        BASH_ENV: bashEnv,
+        HOME: home,
+        PATH: bin + path.delimiter + process.env.PATH,
+        RAISE_DEPLOY_REVISION: "a".repeat(40),
+        RAISE_PUBLIC_HOST: "raise.example",
+        RAISE_PUBLIC_PORT: "8787"
+      }
+    });
+    return {
+      status: result.status,
+      stderr: result.stderr,
+      configCreated: fs.existsSync(path.join(home, ".config", "raiseai")),
+      installCreated: fs.existsSync(path.join(home, ".local", "share", "raise-gateway"))
+    };
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runInstallerWithStubbedRuntime(host, { configDir, existingToken, nodeMajor = "22" } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "raise-installer-san-"));
   const home = path.join(root, "home");
@@ -147,6 +195,20 @@ exit 0
   }
 }
 
+test("installer requires deploy dependencies before filesystem mutation", () => {
+  for (const dependency of ["openssl", "systemctl"]) {
+    const result = runInstallerWithShadowedDependency(dependency);
+    assert.notEqual(result.status, 0, dependency);
+    assert.match(
+      result.stderr,
+      new RegExp(`absolute executable ${dependency} binary`),
+      dependency
+    );
+    assert.equal(result.configCreated, false, dependency);
+    assert.equal(result.installCreated, false, dependency);
+  }
+});
+
 test("installer requires Node.js 22+ before deployment side effects", () => {
   for (const nodeMajor of ["", "not-a-number", "0", "21"]) {
     const result = runInstallerWithStubbedRuntime("raise.example", { nodeMajor });
@@ -174,6 +236,10 @@ test("installer Node floor stays aligned with package engine contract", () => {
   assert.match(installerText, /^NODE_MIN_MAJOR=22$/m);
   assert.match(installerText, /ExecStart=\$NODE_BIN \$INSTALL_DIR\/src\/server\.mjs/);
   assert.match(installerText, /"\$NODE_BIN" "\$SCRIPT_DIR\/wait-for-live\.mjs"/);
+  assert.match(installerText, /OPENSSL_BIN="\$\(resolve_dependency openssl\)"/);
+  assert.match(installerText, /SYSTEMCTL_BIN="\$\(resolve_dependency systemctl\)"/);
+  assert.match(installerText, /"\$OPENSSL_BIN" rand -hex 32/);
+  assert.match(installerText, /"\$SYSTEMCTL_BIN" --user restart raise-gateway\.service/);
 });
 
 test("installer uses a certificate SAN matching the public host identity", () => {

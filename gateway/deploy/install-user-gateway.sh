@@ -62,6 +62,19 @@ if [[ ! "$NODE_MAJOR" =~ ^[0-9]+$ ]] || (( 10#$NODE_MAJOR < NODE_MIN_MAJOR )); t
   exit 1
 fi
 
+resolve_dependency() {
+  local name="$1" resolved
+  resolved="$(command -v "$name" || true)"
+  if [ -z "$resolved" ] || [[ "$resolved" != /* ]] || [ ! -x "$resolved" ]; then
+    echo "Raise gateway requires an absolute executable $name binary" >&2
+    return 1
+  fi
+  printf '%s\n' "$resolved"
+}
+
+OPENSSL_BIN="$(resolve_dependency openssl)" || exit 1
+SYSTEMCTL_BIN="$(resolve_dependency systemctl)" || exit 1
+
 CONFIG_DIR="${RAISE_CONFIG_DIR:-$HOME/.config/raiseai}"
 TLS_DIR="$CONFIG_DIR/tls"
 ENV_FILE="$CONFIG_DIR/gateway.env"
@@ -92,22 +105,22 @@ valid_gateway_token() {
 
 TOKEN="$(awk -F= '/^RAISE_GATEWAY_TOKEN=/{sub(/^[^=]*=/,"");print;exit}' "$ENV_FILE" 2>/dev/null || true)"
 if ! valid_gateway_token "$TOKEN"; then
-  TOKEN="$(openssl rand -hex 32)"
+  TOKEN="$("$OPENSSL_BIN" rand -hex 32)"
 fi
 
 CERT="$TLS_DIR/gateway-cert.pem"
 KEY="$TLS_DIR/gateway-key.pem"
 
 if [ ! -s "$CERT" ] || [ ! -s "$KEY" ]; then
-  openssl req -x509 -newkey ec     -pkeyopt ec_paramgen_curve:P-256     -sha256 -nodes -days 1825     -keyout "$KEY"     -out "$CERT"     -subj "/CN=$PUBLIC_HOST"     -addext "subjectAltName=$PUBLIC_HOST_SAN"
+  "$OPENSSL_BIN" req -x509 -newkey ec     -pkeyopt ec_paramgen_curve:P-256     -sha256 -nodes -days 1825     -keyout "$KEY"     -out "$CERT"     -subj "/CN=$PUBLIC_HOST"     -addext "subjectAltName=$PUBLIC_HOST_SAN"
   chmod 600 "$KEY"
   chmod 644 "$CERT"
 fi
 
 SPKI_SHA256="$(
-  openssl x509 -in "$CERT" -pubkey -noout |
-    openssl pkey -pubin -outform DER 2>/dev/null |
-    openssl dgst -sha256 |
+  "$OPENSSL_BIN" x509 -in "$CERT" -pubkey -noout |
+    "$OPENSSL_BIN" pkey -pubin -outform DER 2>/dev/null |
+    "$OPENSSL_BIN" dgst -sha256 |
     awk '{print $2}'
 )"
 
@@ -156,10 +169,10 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
   export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 fi
 
-systemctl --user daemon-reload
-systemctl --user enable raise-gateway.service
+"$SYSTEMCTL_BIN" --user daemon-reload
+"$SYSTEMCTL_BIN" --user enable raise-gateway.service
 # restart (not just start) so a redeploy never keeps serving the previously loaded code
-systemctl --user restart raise-gateway.service
+"$SYSTEMCTL_BIN" --user restart raise-gateway.service
 
 cat > "$WATCH_PROFILE" <<EOF
 url=https://$PUBLIC_HOST:$PORT
