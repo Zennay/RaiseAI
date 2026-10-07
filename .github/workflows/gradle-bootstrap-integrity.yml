@@ -7,6 +7,7 @@ on:
     paths:
       - "gradlew"
       - "tests/test_gradle_bootstrap_integrity.py"
+      - "tests/test_gradle_ci_runtime_contract.py"
       - ".github/workflows/gradle-bootstrap-integrity.yml"
   pull_request:
     paths:
@@ -23,8 +24,14 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
         with:
@@ -38,6 +45,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
 
       - name: Bootstrap syntax and integrity regressions
+        shell: bash
         run: |
+          set -euo pipefail
           bash -n gradlew
-          python3 -m unittest tests.test_gradle_bootstrap_integrity
+          python3 -m unittest tests.test_gradle_bootstrap_integrity tests.test_gradle_ci_runtime_contract
