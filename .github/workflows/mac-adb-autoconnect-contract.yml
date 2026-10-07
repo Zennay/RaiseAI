@@ -1,0 +1,48 @@
+name: macOS ADB auto-connect contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "install-mac-adb-autoconnect.command"
+      - "tests/test_mac_adb_autoconnect_contract.py"
+      - ".github/workflows/mac-adb-autoconnect-contract.yml"
+  pull_request:
+    paths:
+      - "install-mac-adb-autoconnect.command"
+      - "tests/test_mac_adb_autoconnect_contract.py"
+      - ".github/workflows/mac-adb-autoconnect-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-mac-adb-autoconnect-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Validate macOS ADB auto-connect contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install-mac-adb-autoconnect.command
+          python3 -m unittest tests.test_mac_adb_autoconnect_contract
