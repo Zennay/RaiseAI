@@ -46,11 +46,11 @@ jobs:
           set -euo pipefail
           python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
 
-      - name: Run every Python contract
+      - name: Run every Python contract without skips
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          python3 tools/run_python_contracts.py
 
       - name: Verify worktree remains clean
         shell: bash
