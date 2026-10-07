@@ -23,7 +23,7 @@ def success_payload(**overrides):
         "input_length_chars": 18,
         "latency_ms": 742,
         "route": "quick_ai",
-        "status": "ok",
+        "status": "answered",
         "execution_enabled": False,
         "execution_reason_present": False,
         "answer_present": True,
@@ -37,7 +37,7 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
         result = validator.validate_evidence(
             success_payload(),
             expect_route="quick_ai",
-            expect_status="ok",
+            expect_status="answered",
             max_latency_ms=2_000,
             max_age_seconds=300,
             require_answer=True,
@@ -71,6 +71,29 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
     def test_rejects_unknown_route(self):
         with self.assertRaisesRegex(validator.EvidenceError, "unknown route"):
             validator.validate_evidence(success_payload(route="unknown"))
+
+    def test_rejects_unknown_status(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "unknown status"):
+            validator.validate_evidence(success_payload(status="ok"))
+
+    def test_rejects_answered_status_without_answer(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "status and answer_present"):
+            validator.validate_evidence(
+                success_payload(status="answered", answer_present=False)
+            )
+
+    def test_rejects_routed_status_with_answer(self):
+        with self.assertRaisesRegex(validator.EvidenceError, "status and answer_present"):
+            validator.validate_evidence(
+                success_payload(status="routed", answer_present=True)
+            )
+
+    def test_accepts_routed_status_without_answer_when_answer_is_not_required(self):
+        result = validator.validate_evidence(
+            success_payload(status="routed", answer_present=False)
+        )
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["status"], "routed")
 
     def test_rejects_excessive_latency(self):
         with self.assertRaisesRegex(validator.EvidenceError, "exceeds maximum"):
@@ -140,7 +163,10 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
 
     def test_file_loader_rejects_duplicate_json_fields(self):
         raw = json.dumps(success_payload())
-        raw = raw.replace('"status": "ok"', '"status": "ok", "status": "forged"')
+        raw = raw.replace(
+            '"status": "answered"',
+            '"status": "answered", "status": "forged"',
+        )
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "evidence.json"
             path.write_text(raw, encoding="utf-8")
