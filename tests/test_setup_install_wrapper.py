@@ -80,5 +80,68 @@ class SetupInstallWrapperTest(unittest.TestCase):
         self.assertFalse(self.trace.exists())
 
 
+class SetupWrapperWorkflowContractTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = (
+            ROOT / ".github" / "workflows" / "setup-wrapper-quality.yml"
+        ).read_text(encoding="utf-8")
+
+    def test_workflow_is_self_hosted_read_only_and_immutably_pinned(self):
+        self.assertIn(
+            "    runs-on: [self-hosted, linux, x64, vps-bb300bba]",
+            self.workflow,
+        )
+        self.assertNotIn("ubuntu-latest", self.workflow)
+        self.assertIn("permissions:\n  contents: read", self.workflow)
+        self.assertEqual(self.workflow.count("        uses:"), 1)
+        self.assertIn(
+            "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+            self.workflow,
+        )
+        self.assertIn("          persist-credentials: false", self.workflow)
+        self.assertIn("    timeout-minutes: 5", self.workflow)
+        self.assertNotIn("continue-on-error: true", self.workflow)
+        self.assertNotIn("secrets.", self.workflow)
+
+    def test_workflow_trigger_surface_covers_every_contract_input(self):
+        for path in (
+            "setup-and-install-watch.command",
+            "tests/test_setup_install_wrapper.py",
+            ".github/workflows/setup-wrapper-quality.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self.workflow.count(f'      - "{path}"'),
+                    2,
+                    f"{path} must trigger both push and pull_request validation",
+                )
+        self.assertIn(
+            "  push:\n    branches:\n      - main\n    paths:",
+            self.workflow,
+        )
+        self.assertIn("  pull_request:\n    paths:", self.workflow)
+
+    def test_workflow_binds_execution_to_exact_head_and_expected_runner(self):
+        self.assertIn(
+            "EXPECTED_SHA: ${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}",
+            self.workflow,
+        )
+        self.assertIn(
+            '          test "$(hostname)" = "vps-bb300bba"',
+            self.workflow,
+        )
+        self.assertIn(
+            '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
+            self.workflow,
+        )
+        self.assertIn(
+            '          test -z "$(git status --porcelain --untracked-files=normal)"',
+            self.workflow,
+        )
+        self.assertEqual(self.workflow.count("          set -euo pipefail"), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
