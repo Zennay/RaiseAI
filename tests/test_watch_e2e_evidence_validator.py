@@ -165,6 +165,17 @@ class WatchE2eEvidenceValidatorTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 validator._load_evidence_file(link)
 
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking opens unavailable",
+    )
+    def test_file_loader_rejects_fifo_without_blocking(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "evidence.json"
+            os.mkfifo(path)
+            with self.assertRaisesRegex(validator.EvidenceError, "regular file"):
+                validator._load_evidence_file(path)
+
     def test_file_loader_rejects_invalid_utf8(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "evidence.json"
