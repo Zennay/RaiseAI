@@ -2,7 +2,9 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -123,6 +125,24 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
         payload = json.loads(output.getvalue())
         self.assertFalse(payload["valid"])
         self.assertEqual(payload["reason"], "trace CSV must be valid UTF-8")
+
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking file opens unavailable",
+    )
+    def test_cli_rejects_fifo_trace_without_blocking_for_writer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "traces.csv"
+            os.mkfifo(path)
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), str(path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertIn("trace CSV must be a regular file", result.stdout)
 
     def test_read_samples_rejects_infinite_sensor_value(self):
         content = "label,session_id,elapsed_ms,x,y,z\nmouth_raise,1,0,0.1,inf,9.7\n"
