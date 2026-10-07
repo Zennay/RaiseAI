@@ -12,6 +12,15 @@ SETTINGS = ROOT / "settings.gradle.kts"
 DYNAMIC_VERSION_MARKERS = ("+", "latest.", "snapshot")
 
 
+def literal_dependency_coordinates(build_text: str) -> list[str]:
+    return re.findall(
+        r'(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(\s*"'
+        r'([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[^"\n]+)"'
+        r'\s*\)\s*(?://.*)?$',
+        build_text,
+    )
+
+
 class GradleDependencyPinningTests(unittest.TestCase):
     def setUp(self):
         self.root_build = ROOT_BUILD.read_text(encoding="utf-8")
@@ -29,10 +38,7 @@ class GradleDependencyPinningTests(unittest.TestCase):
         self._assert_non_dynamic(version, "Android Gradle plugin")
 
     def test_all_declared_library_versions_are_literal_and_non_dynamic(self):
-        coordinates = re.findall(
-            r'(?m)^\s*(?:implementation|api|testImplementation|androidTestImplementation|debugImplementation|releaseImplementation)\("([^"]+)"\)',
-            self.app_build,
-        )
+        coordinates = literal_dependency_coordinates(self.app_build)
         self.assertTrue(coordinates, "app must retain at least one declared dependency")
 
         for coordinate in coordinates:
@@ -47,6 +53,30 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 version = parts[1].strip()
                 self.assertTrue(version, f"dependency version must not be empty: {coordinate}")
                 self._assert_non_dynamic(version, coordinate)
+
+    def test_dependency_coordinate_discovery_is_configuration_name_agnostic(self):
+        fixture = """
+dependencies {
+    compileOnly("example.compile:artifact:1.0.0")
+    runtimeOnly("example.runtime:artifact:2.0.0")
+    testRuntimeOnly("example.test:artifact:3.0.0")
+    androidTestRuntimeOnly("example.androidtest:artifact:+")
+}
+"""
+        self.assertEqual(
+            literal_dependency_coordinates(fixture),
+            [
+                "example.compile:artifact:1.0.0",
+                "example.runtime:artifact:2.0.0",
+                "example.test:artifact:3.0.0",
+                "example.androidtest:artifact:+",
+            ],
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_non_dynamic(
+                literal_dependency_coordinates(fixture)[-1],
+                "androidTestRuntimeOnly fixture",
+            )
 
     def test_dependency_repositories_are_reproducible(self):
         lowered = self.settings.lower()
@@ -143,13 +173,17 @@ class GradleDependencyPinningTests(unittest.TestCase):
 
     def _assert_non_dynamic(self, version: str, label: str):
         lowered = version.lower()
-        for marker in DYNAMIC_VERSION_MARKERS:
-            with self.subTest(label=label, marker=marker):
-                self.assertNotIn(
-                    marker,
-                    lowered,
-                    f"{label} must use an immutable dependency version, got {version}",
-                )
+        markers = [
+            marker
+            for marker in DYNAMIC_VERSION_MARKERS
+            if marker in lowered
+        ]
+        self.assertEqual(
+            markers,
+            [],
+            f"{label} must use an immutable dependency version, got {version}; "
+            f"dynamic markers={markers}",
+        )
 
 
 if __name__ == "__main__":
