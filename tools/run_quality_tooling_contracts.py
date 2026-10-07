@@ -1,5 +1,6 @@
 from contextlib import chdir
 from pathlib import Path
+import hashlib
 import stat
 import sys
 import unittest
@@ -94,6 +95,35 @@ def quality_module_input_violations(
     return violations
 
 
+def quality_module_path(module: str, module_root: Path) -> Path:
+    return module_root.joinpath(*module.split(".")).with_suffix(".py")
+
+
+def quality_module_digest(module: str, module_root: Path) -> tuple[str | None, str | None]:
+    path = quality_module_path(module, module_root)
+    try:
+        content = path.read_bytes()
+    except OSError as exc:
+        return None, f"{module}: read failed: {exc}"
+    return hashlib.sha256(content).hexdigest(), None
+
+
+def quality_module_digest_snapshot(
+    modules: tuple[str, ...],
+    module_root: Path,
+) -> tuple[dict[str, str], list[str]]:
+    digests: dict[str, str] = {}
+    errors: list[str] = []
+    for module in modules:
+        digest, error = quality_module_digest(module, module_root)
+        if error is not None:
+            errors.append(error)
+            continue
+        assert digest is not None
+        digests[module] = digest
+    return digests, errors
+
+
 def suite_test_origins(suite: unittest.TestSuite) -> set[tuple[str, str]]:
     origins: set[tuple[str, str]] = set()
     for item in suite:
@@ -112,13 +142,31 @@ def suite_test_origins(suite: unittest.TestSuite) -> set[tuple[str, str]]:
 
 def build_suite(
     modules: tuple[str, ...] = QUALITY_MODULES,
-) -> tuple[unittest.TestSuite, list[str], list[str]]:
+    *,
+    module_root: Path = ROOT,
+    expected_digests: dict[str, str] | None = None,
+) -> tuple[unittest.TestSuite, list[str], list[str], list[str]]:
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     empty_modules: list[str] = []
     load_errors: list[str] = []
+    changed_inputs: list[str] = []
 
     for module in modules:
+        module_violations = quality_module_input_violations((module,), module_root)
+        if module_violations:
+            changed_inputs.extend(module_violations)
+            continue
+
+        if expected_digests is not None:
+            digest, digest_error = quality_module_digest(module, module_root)
+            if digest_error is not None:
+                changed_inputs.append(digest_error)
+                continue
+            if digest != expected_digests.get(module):
+                changed_inputs.append(f"{module}: content changed after preflight")
+                continue
+
         errors_before = len(loader.errors)
         try:
             module_suite = loader.loadTestsFromName(module)
@@ -131,7 +179,7 @@ def build_suite(
             empty_modules.append(module)
         suite.addTests(module_suite)
 
-    return suite, empty_modules, load_errors
+    return suite, empty_modules, load_errors, changed_inputs
 
 
 def result_exit_code(result: unittest.TestResult) -> int:
@@ -169,7 +217,33 @@ def run_contracts(
             print(f"UNSAFE-QUALITY-MODULE: {violation}", file=sys.stderr)
         return 1
 
-    suite, empty_modules, load_errors = build_suite(modules)
+    expected_digests, digest_errors = quality_module_digest_snapshot(
+        modules,
+        module_root,
+    )
+    if digest_errors:
+        print(
+            "ERROR: quality tooling module inputs could not be read for provenance.",
+            file=sys.stderr,
+        )
+        for error in digest_errors:
+            print(f"UNREADABLE-QUALITY-MODULE: {error}", file=sys.stderr)
+        return 1
+
+    suite, empty_modules, load_errors, changed_inputs = build_suite(
+        modules,
+        module_root=module_root,
+        expected_digests=expected_digests,
+    )
+    if changed_inputs:
+        print(
+            "ERROR: quality tooling module inputs changed after preflight.",
+            file=sys.stderr,
+        )
+        for violation in changed_inputs:
+            print(f"CHANGED-QUALITY-MODULE: {violation}", file=sys.stderr)
+        return 1
+
     if load_errors:
         print(
             "ERROR: quality tooling module import raised outside unittest loader handling.",
