@@ -1,0 +1,114 @@
+name: Gradle properties contract CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "gradle.properties"
+      - "tests/test_gradle_properties_contract.py"
+      - ".github/workflows/gradle-properties-contract.yml"
+  pull_request:
+    paths:
+      - "gradle.properties"
+      - "tests/test_gradle_properties_contract.py"
+      - ".github/workflows/gradle-properties-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-gradle-properties-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact tested revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Validate Gradle properties contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+
+          path = pathlib.Path("gradle.properties")
+          if path.is_symlink():
+              raise SystemExit("gradle.properties must not be a symlink")
+          if not path.is_file():
+              raise SystemExit("gradle.properties must be a regular file")
+
+          try:
+              text = path.read_bytes().decode("utf-8")
+          except UnicodeDecodeError as exc:
+              raise SystemExit(f"gradle.properties must be strict UTF-8: {exc}") from None
+          if "\x00" in text:
+              raise SystemExit("gradle.properties must not contain NUL bytes")
+
+          expected = {
+              "org.gradle.jvmargs": "-Xmx2048m -Dfile.encoding=UTF-8",
+              "android.useAndroidX": "true",
+              "kotlin.code.style": "official",
+          }
+          values = {}
+          for number, raw_line in enumerate(text.splitlines(), start=1):
+              line = raw_line.strip()
+              if not line or line.startswith("#") or line.startswith("!"):
+                  continue
+              if "=" not in line:
+                  raise SystemExit(f"gradle.properties:{number}: expected key=value")
+              key, value = (part.strip() for part in line.split("=", 1))
+              if not key or key in values:
+                  raise SystemExit(f"gradle.properties:{number}: duplicate or empty key {key!r}")
+              values[key] = value
+
+          if values != expected:
+              missing = sorted(set(expected) - set(values))
+              extra = sorted(set(values) - set(expected))
+              changed = sorted(
+                  key for key in set(values) & set(expected)
+                  if values[key] != expected[key]
+              )
+              raise SystemExit(
+                  "gradle.properties contract mismatch: "
+                  f"missing={missing} extra={extra} changed={changed}"
+              )
+
+          print("validated gradle.properties contract")
+          PY
+
+      - name: Run Gradle properties regression contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_gradle_properties_contract
+
+      - name: Verify worktree remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"
