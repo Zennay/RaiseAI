@@ -145,6 +145,11 @@ test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () 
     "actions/checkout",
     "actions/upload-artifact",
   ]);
+  assert.deepEqual(
+    externalActionRefs(DEPLOY_WORKFLOW).map(({ action }) => action),
+    ["actions/checkout", "actions/upload-artifact"],
+    "deploy workflow external action surface must stay minimal",
+  );
   assertReadOnlyPermissions(DEPLOY_WORKFLOW);
   assert.match(DEPLOY_WORKFLOW, /persist-credentials:\s*false\b/);
   assert.ok(
