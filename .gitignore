@@ -32,6 +32,8 @@ secrets.properties
 keystore.properties
 signing.properties
 credentials.json
+gateway.env
+watch-gateway.properties
 *.jks
 *.ks
 *.keystore
