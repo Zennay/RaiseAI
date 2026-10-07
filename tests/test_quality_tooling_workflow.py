@@ -80,8 +80,36 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}"
         )
-        self.assertGreaterEqual(self.text.count(expression), 2)
-        self.assertIn('test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', self.text)
+        lines = self.text.splitlines()
+
+        def step_named(name):
+            start = lines.index(f"      - name: {name}")
+            following = [
+                index
+                for index, line in enumerate(lines)
+                if index > start and line.startswith("      - name:")
+            ]
+            end = min(following) if following else len(lines)
+            return lines[start:end]
+
+        checkout = step_named("Checkout exact tested revision")
+        self.assertIn(
+            f"          ref: {expression}",
+            checkout,
+            "checkout must be bound directly to the requested PR head or push SHA",
+        )
+        self.assertIn("          persist-credentials: false", checkout)
+
+        verifier = step_named("Verify exact tested revision")
+        self.assertIn(
+            f"          EXPECTED_SHA: {expression}",
+            verifier,
+            "revision verifier must compare against the same requested SHA",
+        )
+        self.assertIn(
+            '          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
+            verifier,
+        )
 
     def _trigger_paths(self, event):
         lines = self.text.splitlines()
