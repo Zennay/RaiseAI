@@ -2,6 +2,7 @@ package nl.zennay.raiseai
 
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.io.InputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -87,6 +88,27 @@ class GatewayResponseBodyReaderTest {
             GatewayResponseBodyReader.read(stream)
         }
 
+        assertTrue(closed)
+    }
+
+    @Test
+    fun zeroProgressReadFailsAndClosesStream() {
+        var closed = false
+        val stream = object : InputStream() {
+            override fun read(): Int = 0
+
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int = 0
+
+            override fun close() {
+                closed = true
+            }
+        }
+
+        val error = assertThrows(IOException::class.java) {
+            GatewayResponseBodyReader.read(stream)
+        }
+
+        assertEquals("gateway_response_read_stalled", error.message)
         assertTrue(closed)
     }
 
