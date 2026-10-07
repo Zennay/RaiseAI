@@ -9,9 +9,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
-EXTERNAL_ACTION_RE = re.compile(
-    r"(?m)^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)"
-)
 IMMUTABLE_ACTION_REF_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -87,6 +84,7 @@ end
 writes = []
 secret_expressions = []
 inherited_secrets = []
+external_actions = []
 walk = nil
 walk = lambda do |node|
   if node.is_a?(Psych::Nodes::Scalar)
@@ -102,6 +100,10 @@ walk = lambda do |node|
         if value_node.is_a?(Psych::Nodes::Scalar) && value_node.value == "inherit"
           inherited_secrets << "inherit"
         end
+      end
+      if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "uses"
+        abort("workflow uses values must be scalars") unless value_node.is_a?(Psych::Nodes::Scalar)
+        external_actions << value_node.value
       end
       if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "permissions"
         case value_node
@@ -134,6 +136,7 @@ STDOUT.write(
       "writes" => writes,
       "secret_expressions" => secret_expressions,
       "inherited_secrets" => inherited_secrets,
+      "external_actions" => external_actions,
       "environments" => environments,
     }
   )
@@ -155,8 +158,17 @@ STDOUT.write(
     return json.loads(result.stdout.decode("utf-8", errors="strict"))
 
 
-def external_action_refs(text: str) -> list[tuple[str, str]]:
-    return EXTERNAL_ACTION_RE.findall(text)
+def external_action_refs(path: Path) -> list[tuple[str, str]]:
+    refs = []
+    for uses in workflow_security_metadata(path)["external_actions"]:
+        if uses.startswith("./") or uses.startswith("docker://"):
+            continue
+        action, separator, ref = uses.rpartition("@")
+        if not separator:
+            refs.append((uses, ""))
+            continue
+        refs.append((action, ref))
+    return refs
 
 
 class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
@@ -214,12 +226,11 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
 
         for path in paths:
             relative = path.relative_to(ROOT).as_posix()
-            text = path.read_text(encoding="utf-8")
             metadata = workflow_security_metadata(path)
             if "pull_request" not in metadata["events"]:
                 continue
 
-            for action, ref in external_action_refs(text):
+            for action, ref in external_action_refs(path):
                 with self.subTest(workflow=relative, action=action):
                     self.assertRegex(
                         ref,
@@ -358,6 +369,7 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
             "missing-on.yml": "name: missing\njobs: {}\n",
             "invalid-on.yml": "on:\n  - {pull_request: {}}\n",
             "invalid-permissions.yml": "on: push\npermissions: [contents, read]\n",
+            "invalid-uses.yml": "on: pull_request\njobs: {test: {steps: [{uses: {repo: action}}]}}\n",
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -368,38 +380,59 @@ class WorkflowPrivilegeBoundaryTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "workflow security"):
                         workflow_security_metadata(path)
 
-    def test_read_only_pull_request_fixture_is_allowed(self):
-        fixture = """on:
-  pull_request:
+    def test_semantic_external_action_scan_covers_quotes_flow_and_comments(self):
+        sha = "3d3c42e5aac5ba805825da76410c181273ba90b1"
+        fixtures = {
+            "block.yml": (
+                "on: pull_request\njobs:\n  verify:\n    steps:\n"
+                f"      - uses: actions/checkout@{sha}\n"
+            ),
+            "quoted.yml": (
+                "on: pull_request\njobs:\n  verify:\n    steps:\n"
+                f"      - 'uses': \"actions/checkout@{sha}\" # pinned\n"
+            ),
+            "flow.yml": (
+                "on: pull_request\njobs: {verify: {steps: "
+                f"[{{uses: actions/checkout@{sha}}}]}}\n"
+            ),
+            "local.yml": (
+                "on: pull_request\njobs: {verify: {steps: "
+                "[{uses: ./.github/actions/local-check}]}\n"
+            ),
+            "comment.yml": (
+                "on: pull_request\njobs:\n  verify:\n    steps:\n"
+                "      # uses: owner/action@v1\n"
+                "      - run: echo safe\n"
+            ),
+        }
+        expected = {
+            "block.yml": [("actions/checkout", sha)],
+            "quoted.yml": [("actions/checkout", sha)],
+            "flow.yml": [("actions/checkout", sha)],
+            "local.yml": [],
+            "comment.yml": [],
+        }
 
-permissions:
-  contents: read
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, source in fixtures.items():
+                path = root / name
+                path.write_text(source, encoding="utf-8")
+                with self.subTest(name=name):
+                    self.assertEqual(external_action_refs(path), expected[name])
 
+    def test_floating_external_action_fixture_is_detected(self):
+        fixture = """on: pull_request
 jobs:
   verify:
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - "uses": "actions/checkout@v7"
 """
-        self.assertEqual(
-            external_action_refs(fixture),
-            [
-                (
-                    "actions/checkout",
-                    "3d3c42e5aac5ba805825da76410c181273ba90b1",
-                )
-            ],
-        )
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "floating.yml"
+            path.write_text(fixture, encoding="utf-8")
+            refs = external_action_refs(path)
 
-    def test_floating_action_fixture_is_detected(self):
-        fixture = """on:
-  pull_request:
-
-jobs:
-  verify:
-    steps:
-      - uses: actions/checkout@v7
-"""
-        refs = external_action_refs(fixture)
         self.assertEqual(refs, [("actions/checkout", "v7")])
         self.assertIsNone(IMMUTABLE_ACTION_REF_RE.fullmatch(refs[0][1]))
 
