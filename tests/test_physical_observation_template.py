@@ -3,6 +3,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 GENERATOR_PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "create-physical-observation-template.py"
 GENERATOR_SPEC = importlib.util.spec_from_file_location("physical_observation_template", GENERATOR_PATH)
@@ -77,6 +78,46 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
             self.assertTrue(output.exists())
             second = generator.main([str(session_path)])
             self.assertEqual(second, 1)
+
+    def test_cli_write_failure_leaves_no_partial_observation_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session_path = root / "session.json"
+            output = root / "operator-observations.json"
+            session_path.write_text(json.dumps(session_payload()), encoding="utf-8")
+
+            with mock.patch.object(
+                generator.os,
+                "fsync",
+                side_effect=OSError("simulated fsync failure"),
+            ):
+                code = generator.main([str(session_path)])
+
+            self.assertEqual(code, 1)
+            self.assertFalse(output.exists())
+            self.assertFalse(
+                any(path.name.startswith(".operator-observations.json.") for path in root.iterdir())
+            )
+
+    def test_cli_publish_failure_leaves_no_partial_observation_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session_path = root / "session.json"
+            output = root / "operator-observations.json"
+            session_path.write_text(json.dumps(session_payload()), encoding="utf-8")
+
+            with mock.patch.object(
+                generator.os,
+                "link",
+                side_effect=OSError("simulated publish failure"),
+            ):
+                code = generator.main([str(session_path)])
+
+            self.assertEqual(code, 1)
+            self.assertFalse(output.exists())
+            self.assertFalse(
+                any(path.name.startswith(".operator-observations.json.") for path in root.iterdir())
+            )
 
     def test_cli_refuses_broken_symlink_without_creating_target(self):
         with tempfile.TemporaryDirectory() as tmp:

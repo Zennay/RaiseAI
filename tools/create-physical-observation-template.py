@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +101,30 @@ def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[
     }
 
 
+def _write_new_json_atomic(output: Path, payload: dict[str, Any]) -> None:
+    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    fd, stage_name = tempfile.mkstemp(
+        prefix=f".{output.name}.",
+        suffix=".tmp",
+        dir=str(output.parent),
+    )
+    stage = Path(stage_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output_file:
+            output_file.write(serialized)
+            output_file.flush()
+            os.fsync(output_file.fileno())
+
+        try:
+            os.link(stage, output)
+        except FileExistsError as exc:
+            raise TemplateError(
+                f"refusing to overwrite existing observation file: {output}"
+            ) from exc
+    finally:
+        stage.unlink(missing_ok=True)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path, help="physical-validation session.json")
@@ -116,13 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         session = json.loads(args.session.read_text(encoding="utf-8"))
         payload = build_template(session)
-        try:
-            with output.open("x", encoding="utf-8") as output_file:
-                output_file.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-        except FileExistsError as exc:
-            raise TemplateError(
-                f"refusing to overwrite existing observation file: {output}"
-            ) from exc
+        _write_new_json_atomic(output, payload)
     except (OSError, json.JSONDecodeError, TemplateError) as exc:
         print(json.dumps({"created": False, "reason": str(exc)}, separators=(",", ":")))
         return 1
