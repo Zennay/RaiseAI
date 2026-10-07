@@ -162,13 +162,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         expected_paths = [
             "*.command",
             "*.py",
-            "tools/analyze-watch-sensor-traces.py",
-            "tools/analyze-watch-sensor-trials.py",
-            "tools/create-physical-observation-template.py",
-            "tools/fetch-frozen-physical-handoff.py",
-            "tools/validate-physical-observations.py",
-            "tools/validate-watch-e2e-evidence.py",
-            "tools/verify-watch-apk-identity.py",
+            "tools/*.py",
             "tests/test_adb_device_binding.py",
             "tests/test_frozen_acceptance_launcher.py",
             "tests/test_frozen_physical_handoff_fetcher.py",
@@ -232,19 +226,11 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
                 self.assertTrue(path.endswith(".py"))
 
     def test_compiles_all_python_quality_tools(self):
-        tools = [
-            "tools/analyze-watch-sensor-traces.py",
-            "tools/analyze-watch-sensor-trials.py",
-            "tools/create-physical-observation-template.py",
-            "tools/fetch-frozen-physical-handoff.py",
-            "tools/validate-physical-observations.py",
-            "tools/validate-watch-e2e-evidence.py",
-            "tools/verify-watch-apk-identity.py",
-        ]
-        self.assertIn("python3 -m py_compile", self.text)
-        for path in tools:
-            with self.subTest(path=path):
-                self.assertGreaterEqual(self.text.count(path), 3)
+        self.assertIn("tools/*.py", self._trigger_paths("push"))
+        self.assertIn("tools/*.py", self._trigger_paths("pull_request"))
+        self.assertIn("python3 -m py_compile *.py tools/*.py", self.text)
+        discovered = sorted(path.name for path in (ROOT / "tools").glob("*.py"))
+        self.assertTrue(discovered, "tools/ must retain Python quality tooling")
 
     def test_runs_complete_hosted_quality_regression_set(self):
         modules = [
@@ -761,7 +747,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Python syntax": [
                 "set -euo pipefail",
-                "python3 -m py_compile *.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/create-physical-observation-template.py tools/fetch-frozen-physical-handoff.py tools/validate-physical-observations.py tools/validate-watch-e2e-evidence.py tools/verify-watch-apk-identity.py",
+                "python3 -m py_compile *.py tools/*.py",
             ],
             "Quality tooling regressions": [
                 "set -euo pipefail",
