@@ -241,7 +241,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         for event in ("push", "pull_request"):
             with self.subTest(event=event):
                 self.assertEqual(self._trigger_paths(event)[:2], ["*.command", "*.py"])
-        self.assertIn("python3 -m py_compile *.py ", self.text)
+        self.assertIn("python3 -I -m py_compile *.py ", self.text)
         discovered = sorted(path.name for path in ROOT.glob("*.py"))
         self.assertTrue(discovered, "repository must retain at least one root Python entrypoint")
         for path in discovered:
@@ -281,7 +281,12 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
     def test_compiles_all_python_quality_tools(self):
         self.assertIn("tools/*.py", self._trigger_paths("push"))
         self.assertIn("tools/*.py", self._trigger_paths("pull_request"))
-        self.assertIn("python3 -m py_compile *.py tools/*.py", self.text)
+        self.assertIn("python3 -I -m py_compile *.py tools/*.py", self.text)
+        self.assertNotIn(
+            "python3 -m py_compile",
+            self.text,
+            "hosted Python syntax validation must not allow ambient import-path customization",
+        )
         discovered = sorted(path.name for path in (ROOT / "tools").glob("*.py"))
         self.assertTrue(discovered, "tools/ must retain Python quality tooling")
 
@@ -813,7 +818,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Python syntax": [
                 "set -euo pipefail",
-                "python3 -m py_compile *.py tools/*.py",
+                "python3 -I -m py_compile *.py tools/*.py",
             ],
             "PowerShell syntax": [
                 "set -euo pipefail",
