@@ -1,5 +1,21 @@
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
+export function canonicalDeployRevision(
+  value,
+  label = "expected deploy revision"
+) {
+  if (
+    typeof value !== "string" ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(value)
+  ) {
+    throw new TypeError(
+      `${label} must be a canonical 40/64-character lowercase Git revision`
+    );
+  }
+
+  return value;
+}
+
 export function positiveInteger(value, fallback) {
   if (
     !Number.isSafeInteger(fallback) ||

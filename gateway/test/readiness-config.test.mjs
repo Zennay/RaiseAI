@@ -1,6 +1,50 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { httpsOrigin, positiveInteger } from "../deploy/readiness-config.mjs";
+import {
+  canonicalDeployRevision,
+  httpsOrigin,
+  positiveInteger
+} from "../deploy/readiness-config.mjs";
+
+test("deploy revision accepts only canonical lowercase Git object IDs", () => {
+  const sha1 = "0123456789abcdef".repeat(2) + "01234567";
+  const sha256 = "0123456789abcdef".repeat(4);
+
+  assert.equal(canonicalDeployRevision(sha1), sha1);
+  assert.equal(canonicalDeployRevision(sha256), sha256);
+
+  for (const value of [
+    "",
+    "unknown",
+    "main",
+    "v1.5.2",
+    "a".repeat(39),
+    "a".repeat(41),
+    "a".repeat(63),
+    "a".repeat(65),
+    "A".repeat(40),
+    "g".repeat(40),
+    " " + "a".repeat(40),
+    "a".repeat(40) + " ",
+    "a".repeat(39) + "\n",
+    null,
+    undefined,
+    42
+  ]) {
+    assert.throws(
+      () => canonicalDeployRevision(value),
+      /canonical 40\/64-character lowercase Git revision/,
+      String(value)
+    );
+  }
+});
+
+test("deploy revision validation keeps caller labels in errors", () => {
+  assert.throws(
+    () => canonicalDeployRevision("unknown", "Raise smoke revision"),
+    /Raise smoke revision must be a canonical 40\/64-character lowercase Git revision/
+  );
+});
 
 test("readiness integer config accepts only complete positive integer values", () => {
   assert.equal(positiveInteger("1", 500), 1);

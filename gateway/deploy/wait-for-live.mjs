@@ -7,7 +7,11 @@ import fs from "node:fs";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
-import { httpsOrigin, positiveInteger } from "./readiness-config.mjs";
+import {
+  canonicalDeployRevision,
+  httpsOrigin,
+  positiveInteger
+} from "./readiness-config.mjs";
 import {
   evaluateReadinessHttpResponse,
   hasJsonMediaType,
@@ -41,16 +45,17 @@ const baseUrl = httpsOrigin(
   "Raise readiness URL"
 );
 const certFile = env.get("RAISE_TLS_CERT") ?? "";
-const expectedRevision =
+const expectedRevision = canonicalDeployRevision(
   process.env.RAISE_EXPECTED_REVISION ??
-  env.get("RAISE_DEPLOY_REVISION") ??
-  "";
+    env.get("RAISE_DEPLOY_REVISION") ??
+    "",
+  "Raise readiness expected revision"
+);
 const timeoutMs = positiveInteger(process.env.RAISE_READY_TIMEOUT_MS, 30_000);
 const intervalMs = positiveInteger(process.env.RAISE_READY_INTERVAL_MS, 500);
 const reportPath = process.env.RAISE_READY_REPORT ?? "";
 
 if (!certFile) throw new Error("RAISE_TLS_CERT not configured");
-if (!expectedRevision) throw new Error("expected deploy revision missing");
 
 const ca = fs.readFileSync(certFile);
 const startedAt = Date.now();
