@@ -8,6 +8,7 @@ from __future__ import annotations
 import pathlib
 import subprocess
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MAX_WORKFLOW_BYTES = 512 * 1024
@@ -64,9 +65,34 @@ class WorkflowByteIntegrityTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_workflow_bytes(sample)
 
+    def test_accepts_exact_size_boundary(self) -> None:
+        validate_workflow_bytes(b"a" * (MAX_WORKFLOW_BYTES - 1) + b"\n")
+
     def test_rejects_oversized_workflow(self) -> None:
         with self.assertRaisesRegex(ValueError, "oversized"):
             validate_workflow_bytes(b"a" * (MAX_WORKFLOW_BYTES + 1))
+
+    def test_workflow_discovery_only_includes_top_level_yaml(self) -> None:
+        tracked = (
+            b".github/workflows/build.yml\\x00"
+            b".github/workflows/check.yaml\\x00"
+            b".github/workflows/README.md\\x00"
+            b".github/workflows/nested/ignored.yml\\x00"
+            b"tests/not-a-workflow.yml\\x00"
+        )
+        with mock.patch("subprocess.check_output", return_value=tracked) as check:
+            paths = tracked_workflow_paths(ROOT)
+        self.assertEqual(
+            paths,
+            [
+                pathlib.Path(".github/workflows/build.yml"),
+                pathlib.Path(".github/workflows/check.yaml"),
+            ],
+        )
+        self.assertEqual(
+            check.call_args.args[0],
+            ["git", "-C", str(ROOT), "ls-files", "-z", "--", ".github/workflows"],
+        )
 
     def test_all_git_tracked_workflow_bytes_are_canonical(self) -> None:
         paths = tracked_workflow_paths(ROOT)
