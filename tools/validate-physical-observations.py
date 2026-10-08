@@ -128,6 +128,14 @@ def _require_sha(value: Any, field: str, length: int) -> str:
     return normalized
 
 
+def _require_readable_observation(value: str, field: str) -> None:
+    """Reject invisible terminal controls that make human evidence ambiguous."""
+    _require(
+        not any(ord(char) < 32 or ord(char) == 127 for char in value),
+        f"{field} must not contain control characters",
+    )
+
+
 def validate_observations(
     session: Any,
     observations: Any,
@@ -192,6 +200,7 @@ def validate_observations(
         value = observations[key]
         _require(isinstance(value, str) and value.strip(), f"{key} must be a non-empty observation")
         _require(len(value.strip()) <= 1000, f"{key} must be at most 1000 characters")
+        _require_readable_observation(value, key)
 
     failures = observations["visible_ux_failures"]
     _require(isinstance(failures, list), "visible_ux_failures must be a JSON array")
@@ -204,6 +213,7 @@ def validate_observations(
         )
         text = item.strip()
         _require(len(text) <= 500, f"visible_ux_failures[{index}] must be at most 500 characters")
+        _require_readable_observation(text, f"visible_ux_failures[{index}]")
         normalized_failures.append(text)
 
     return {
