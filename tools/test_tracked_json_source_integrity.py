@@ -15,18 +15,23 @@ MAX_BYTES = 2 * 1024 * 1024
 
 
 def validate_json_source(path: Path, *, max_bytes: int = MAX_BYTES) -> None:
-    info = path.lstat()
-    if not stat.S_ISREG(info.st_mode):
-        raise ValueError("JSON source must be a regular, non-symlink file")
-    if info.st_size > max_bytes:
-        raise ValueError("JSON source exceeds size bound")
-    with path.open("rb") as source:
-        raw = source.read(max_bytes + 1)
-    if len(raw) > max_bytes:
-        raise ValueError("JSON source exceeds size bound")
-    if raw.startswith(b"\xef\xbb\xbf") or b"\x00" in raw:
-        raise ValueError("JSON source contains forbidden bytes")
-    raw.decode("utf-8", errors="strict")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    fd = os.open(path, flags)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("JSON source must be a regular, non-symlink file")
+        if info.st_size > max_bytes:
+            raise ValueError("JSON source exceeds size bound")
+        with os.fdopen(fd, "rb", closefd=False) as source:
+            raw = source.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise ValueError("JSON source exceeds size bound")
+        if raw.startswith(b"\\xef\\xbb\\xbf") or b"\\x00" in raw:
+            raise ValueError("JSON source contains forbidden bytes")
+        raw.decode("utf-8", errors="strict")
+    finally:
+        os.close(fd)
 
 
 def tracked_json_paths(root: Path):
@@ -76,7 +81,7 @@ class TrackedJsonSourceIntegrityTests(unittest.TestCase):
             target.write_bytes(b"{}")
             link = Path(folder) / "link.json"
             link.symlink_to(target)
-            with self.assertRaises(ValueError):
+            with self.assertRaises((OSError, ValueError)):
                 validate_json_source(link)
             with self.assertRaises(ValueError):
                 validate_json_source(target, max_bytes=1)
