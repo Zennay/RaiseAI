@@ -21,7 +21,7 @@ class PhysicalShareBundleTests(unittest.TestCase):
         self.source.mkdir()
         self.dest = self.base / "share"
         self.payloads = {
-            "e2e-result.json": {"schema_version": 1, "valid": True},
+            "e2e-result.json": {"valid": True, "outcome": "success", "route": "quick_ai", "answer_present": True},
             "v1-result.json": {"schema_version": 1, "v1_gate_passed": True},
             "quality-result.json": {"schema_version": 1, "valid": True,
                                     "quality_evidence_complete": True},
@@ -49,7 +49,7 @@ class PhysicalShareBundleTests(unittest.TestCase):
         self.assertFalse(self.dest.exists())
 
     def test_duplicate_json_keys(self):
-        (self.source / "e2e-result.json").write_text('{"schema_version":1,"valid":true,"valid":true}')
+        (self.source / "e2e-result.json").write_text('{"outcome":"success","route":"quick_ai","answer_present":true,"valid":true,"valid":true}')
         with self.assertRaises(mod.ShareError):
             mod.bundle(self.source, self.dest)
         self.assertFalse(self.dest.exists())
