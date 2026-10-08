@@ -74,5 +74,24 @@ class TrackedPathControlContractTests(unittest.TestCase):
             self.assertEqual(tracked_paths(root), ["file with spaces.txt"])
 
 
+    def test_git_discovery_rejects_tracked_control_filename(self):
+        # Exercise the real git index, not only the standalone path parser.
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            unsafe = "review\nspoof.txt"
+            (root / unsafe).write_text("unsafe\n", encoding="utf-8")
+            subprocess.run(["git", "add", "--", unsafe], cwd=root, check=True)
+            with self.assertRaisesRegex(ValueError, "invisible/control"):
+                tracked_paths(root)
+
+    def test_git_discovery_rejects_empty_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            with self.assertRaises(ValueError):
+                tracked_paths(root)
+
+
 if __name__ == "__main__":
     unittest.main()
