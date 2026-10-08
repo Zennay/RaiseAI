@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def gitlinks(index_bytes):
     """Return gitlink paths from NUL-delimited git ls-files --stage output."""
+    if index_bytes and not index_bytes.endswith(b"\\0"):
+        raise ValueError("unterminated Git index entry")
     found = []
     for entry in index_bytes.split(b"\0"):
         if not entry:
@@ -50,6 +52,16 @@ class GitlinkIntegrityTests(unittest.TestCase):
 
     def test_rejects_unmerged_entry(self):
         entry = b"100644 " + b"a" * 40 + b" 2\tfile\0"
+        with self.assertRaises(ValueError):
+            gitlinks(entry)
+
+    def test_rejects_absolute_path(self):
+        entry = b"160000 " + b"a" * 40 + b" 0\\t/vendor\\0"
+        with self.assertRaises(ValueError):
+            gitlinks(entry)
+
+    def test_rejects_unterminated_index_entry(self):
+        entry = b"100644 " + b"a" * 40 + b" 0\\tREADME.md"
         with self.assertRaises(ValueError):
             gitlinks(entry)
 
