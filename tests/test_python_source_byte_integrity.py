@@ -37,7 +37,23 @@ def tracked_python_sources():
         yield Path(os.fsdecode(relative))
 
 
+def validate_source_bytes(data):
+    if data.startswith(b"\\xef\\xbb\\xbf"):
+        raise ValueError("Python source contains UTF-8 BOM")
+    if b"\\0" in data:
+        raise ValueError("Python source contains NUL bytes")
+    data.decode("utf-8", errors="strict")
+
+
 class PythonSourceByteIntegrityTests(unittest.TestCase):
+    def test_rejects_bom_nul_and_malformed_utf8(self):
+        for sample in (b"\\xef\\xbb\\xbfprint(1)", b"print(1)\\0", b"\\xff"):
+            with self.subTest(sample=sample), self.assertRaises((ValueError, UnicodeDecodeError)):
+                validate_source_bytes(sample)
+
+    def test_accepts_unicode_source(self):
+        validate_source_bytes("message = 'café'\\n".encode("utf-8"))
+
     def test_tracked_python_sources_are_regular_strict_utf8_without_bom_or_nul(self):
         paths = list(tracked_python_sources())
         self.assertTrue(paths, "No tracked Python sources found")
