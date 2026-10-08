@@ -40,7 +40,7 @@ def inspect(value):
     if isinstance(value, dict):
         for key, child in value.items():
             normalized = key.lower().replace("-", "_")
-            if any(term in normalized for term in SENSITIVE):
+            if normalized not in {"answer_present"} and any(term in normalized for term in SENSITIVE):
                 raise ShareError("sensitive field found")
             inspect(child)
     elif isinstance(value, list):
