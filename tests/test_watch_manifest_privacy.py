@@ -101,7 +101,7 @@ class WatchManifestPrivacyContract(unittest.TestCase):
         data = MANIFEST.read_bytes()
         original = b'<uses-permission android:name="android.permission.RECORD_AUDIO" />'
         self.assertIn(original, data)
-        self.assertIn("duplicate permission declaration", violations(data.replace(original, original + b"\\n    " + original)))
+        self.assertIn("duplicate permission declaration", violations(data.replace(original, original + b" " + original)))
 
     def test_malformed_xml_fails(self):
         self.assertTrue(violations(b"<manifest"))
