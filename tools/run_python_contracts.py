@@ -83,6 +83,15 @@ def discovered_test_origins(suite: unittest.TestSuite) -> set[tuple[str, str]]:
 
 
 def run_contracts() -> int:
+    try:
+        root_mode = TESTS_DIR.lstat().st_mode
+    except OSError as exc:
+        print(f"ERROR: contract test root inaccessible: {exc}", file=sys.stderr)
+        return 1
+    if not stat.S_ISDIR(root_mode):
+        print("ERROR: contract test root must be a real directory, not a symlink or file", file=sys.stderr)
+        return 1
+
     invalid_packages = invalid_contract_package_links()
     if invalid_packages:
         print(
