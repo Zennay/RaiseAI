@@ -21,10 +21,10 @@ class PhysicalShareBundleTests(unittest.TestCase):
         self.source.mkdir()
         self.dest = self.base / "share"
         self.payloads = {
-            "e2e-result.json": {"valid": True, "outcome": "success", "route": "quick_ai", "answer_present": True},
-            "v1-result.json": {"schema_version": 1, "v1_gate_passed": True},
+            "e2e-result.json": {"valid": True, "outcome": "success", "route": "quick_ai", "answer_present": True, "app_version": "1.5.2", "source_revision": "a" * 40},
+            "v1-result.json": {"schema_version": 1, "v1_gate_passed": True, "evidence_identity": {"app_version": "1.5.2", "source_revision": "a" * 40}},
             "quality-result.json": {"schema_version": 1, "valid": True,
-                                    "quality_evidence_complete": True},
+                                    "quality_evidence_complete": True, "app_version": "1.5.2", "source_revision": "a" * 40},
         }
         for name, payload in self.payloads.items():
             (self.source / name).write_text(json.dumps(payload), encoding="utf-8")
@@ -33,6 +33,13 @@ class PhysicalShareBundleTests(unittest.TestCase):
         (self.source / "session.json").write_text('{"watch_serial":"secret"}')
         mod.bundle(self.source, self.dest)
         self.assertEqual(set(x.name for x in self.dest.iterdir()), set(mod.FILES))
+
+    def test_mixed_source_revision_rejected(self):
+        self.payloads["quality-result.json"]["source_revision"] = "b" * 40
+        (self.source / "quality-result.json").write_text(json.dumps(self.payloads["quality-result.json"]))
+        with self.assertRaisesRegex(mod.ShareError, "mixed or missing physical evidence identity"):
+            mod.bundle(self.source, self.dest)
+        self.assertFalse(self.dest.exists())
 
     def test_missing_file(self):
         (self.source / "v1-result.json").unlink()
