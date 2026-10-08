@@ -24,6 +24,19 @@ class PhysicalEvidenceIgnoreTests(unittest.TestCase):
                 with self.subTest(path=path):
                     self.assertTrue(self.ignored(path))
 
+    def test_private_recordings_are_not_already_tracked(self):
+        result = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        private_names = {"operator-observations.json", "watch-e2e-evidence.json"}
+        offenders = [
+            raw.decode("utf-8", errors="replace")
+            for raw in result.stdout.split(b"\\0") if raw
+            and raw.decode("utf-8", errors="replace").split("/")[-1].lower() in private_names
+        ]
+        self.assertEqual(offenders, [], "private physical evidence must not be Git-tracked")
+
     def test_documented_templates_and_public_summary_remain_trackable(self):
         for path in (".env.example", ".env.sample", "quality-result.json"):
             with self.subTest(path=path):
