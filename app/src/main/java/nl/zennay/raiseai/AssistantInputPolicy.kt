@@ -11,7 +11,7 @@ internal object AssistantInputPolicy {
 
     fun validate(text: String): String {
         require(text.isNotBlank()) { "assistant_input_empty" }
-        require(text.none { it == '\u0000' || (it.isISOControl() && it != '\n' && it != '\r' && it != '\t') }) {
+        require(text.none { it == '\u0000' || (Character.isISOControl(it) && it != '\n' && it != '\r' && it != '\t') }) {
             "assistant_input_control_character"
         }
         require(text.toByteArray(Charsets.UTF_8).size <= MAX_UTF8_BYTES) {
