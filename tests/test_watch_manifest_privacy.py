@@ -86,6 +86,23 @@ class WatchManifestPrivacyContract(unittest.TestCase):
         )
         self.assertIn("application must not set usesCleartextTraffic=true", violations(manifest))
 
+    def test_missing_monitor_service_fails(self):
+        root = ET.fromstring(MANIFEST.read_bytes())
+        app = root.find("application")
+        for child in list(app):
+            if child.get(ANDROID + "name") == ".GestureMonitorService":
+                app.remove(child)
+        self.assertIn(
+            ".GestureMonitorService must exist exactly once and not be exported",
+            violations(ET.tostring(root)),
+        )
+
+    def test_duplicate_sensitive_permission_fails(self):
+        data = MANIFEST.read_bytes()
+        original = b'<uses-permission android:name="android.permission.RECORD_AUDIO" />'
+        self.assertIn(original, data)
+        self.assertIn("duplicate permission declaration", violations(data.replace(original, original + b"\\n    " + original)))
+
     def test_malformed_xml_fails(self):
         self.assertTrue(violations(b"<manifest"))
 
