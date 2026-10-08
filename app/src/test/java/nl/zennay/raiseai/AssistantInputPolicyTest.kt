@@ -36,4 +36,20 @@ class AssistantInputPolicyTest {
     @Test fun preservesUserIntentWithoutTrimming() {
         assertEquals("  run lights  ", AssistantInputPolicy.validate("  run lights  "))
     }
+    @Test fun rejectsIsolatedUtf16Surrogates() {
+        for (message in listOf("\\uD800", "\\uDC00", "a\\uD800b", "\\uDC00x")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                AssistantInputPolicy.validate(message)
+            }
+        }
+    }
+
+    @Test fun permitsPairedSurrogatesAtUtf8Boundary() {
+        val emoji = "\\uD83D\\uDE00"
+        assertEquals(emoji.repeat(1024), AssistantInputPolicy.validate(emoji.repeat(1024)))
+        assertThrows(IllegalArgumentException::class.java) {
+            AssistantInputPolicy.validate(emoji.repeat(1025))
+        }
+    }
+
 }
