@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 FILES = {
-    "e2e-result.json": ("valid",),
+    "e2e-result.json": ("valid", "answer_present"),
     "v1-result.json": ("v1_gate_passed",),
     "quality-result.json": ("valid", "quality_evidence_complete"),
 }
@@ -83,8 +83,10 @@ def bundle(source: Path, destination: Path):
     validated = {}
     for name, mandatory in FILES.items():
         payload = read_safe(source / name)
-        if type(payload.get("schema_version")) is not int or payload["schema_version"] != 1:
+        if name != "e2e-result.json" and (type(payload.get("schema_version")) is not int or payload["schema_version"] != 1):
             raise ShareError(f"{name}: unsupported schema")
+        if name == "e2e-result.json" and (payload.get("outcome") != "success" or payload.get("route") != "quick_ai"):
+            raise ShareError("e2e-result.json: requires successful quick_ai")
         if any(payload.get(field) is not True for field in mandatory):
             raise ShareError(f"{name}: required PASS fields missing")
         validated[name] = payload
