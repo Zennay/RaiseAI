@@ -90,6 +90,15 @@ def bundle(source: Path, destination: Path):
         if any(payload.get(field) is not True for field in mandatory):
             raise ShareError(f"{name}: required PASS fields missing")
         validated[name] = payload
+    e2e = validated["e2e-result.json"]
+    v1 = validated["v1-result.json"].get("evidence_identity")
+    quality = validated["quality-result.json"]
+    if not isinstance(v1, dict):
+        raise ShareError("v1-result.json: missing evidence identity")
+    for field in ("app_version", "source_revision"):
+        values = (e2e.get(field), v1.get(field), quality.get(field))
+        if any(not isinstance(v, str) or not v for v in values) or len(set(values)) != 1:
+            raise ShareError(f"mixed or missing physical evidence identity: {field}")
     destination.mkdir(mode=0o700, parents=False, exist_ok=False)
     try:
         for name, payload in validated.items():
