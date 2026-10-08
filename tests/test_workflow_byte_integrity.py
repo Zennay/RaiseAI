@@ -74,11 +74,11 @@ class WorkflowByteIntegrityTests(unittest.TestCase):
 
     def test_workflow_discovery_only_includes_top_level_yaml(self) -> None:
         tracked = (
-            b".github/workflows/build.yml\\x00"
-            b".github/workflows/check.yaml\\x00"
-            b".github/workflows/README.md\\x00"
-            b".github/workflows/nested/ignored.yml\\x00"
-            b"tests/not-a-workflow.yml\\x00"
+            b".github/workflows/build.yml\x00"
+            b".github/workflows/check.yaml\x00"
+            b".github/workflows/README.md\x00"
+            b".github/workflows/nested/ignored.yml\x00"
+            b"tests/not-a-workflow.yml\x00"
         )
         with mock.patch("subprocess.check_output", return_value=tracked) as check:
             paths = tracked_workflow_paths(ROOT)
