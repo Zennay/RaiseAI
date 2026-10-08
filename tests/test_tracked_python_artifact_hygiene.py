@@ -5,6 +5,7 @@ Git's index, not the working tree, defines the committed surface.
 import pathlib
 import subprocess
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -49,6 +50,19 @@ class TrackedPythonArtifactHygieneTests(unittest.TestCase):
             "tests/test_tracked_python_artifact_hygiene.py",
             "docs/python-cache-policy.md", "gateway/package.json",
         ])
+
+    def test_git_index_discovery_rejects_truncated_and_invalid_utf8(self):
+        for raw in (b"", b"file.py", b"\\xff\\0"):
+            with self.subTest(raw=raw):
+                with mock.patch("subprocess.check_output", return_value=raw):
+                    with self.assertRaises((ValueError, UnicodeDecodeError)):
+                        tracked_paths()
+
+    def test_git_index_discovery_decodes_nul_delimited_paths(self):
+        with mock.patch(
+            "subprocess.check_output", return_value=b"src/main.py\\0tests/check.py\\0"
+        ):
+            self.assertEqual(tracked_paths(), ["src/main.py", "tests/check.py"])
 
     def test_empty_index_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "must not be empty"):
