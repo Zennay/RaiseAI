@@ -32,7 +32,7 @@ class PhysicalEvidenceIgnoreTests(unittest.TestCase):
         private_names = {"operator-observations.json", "watch-e2e-evidence.json"}
         offenders = [
             raw.decode("utf-8", errors="replace")
-            for raw in result.stdout.split(b"\\0") if raw
+            for raw in result.stdout.split(bytes([0])) if raw
             and raw.decode("utf-8", errors="replace").split("/")[-1].lower() in private_names
         ]
         self.assertEqual(offenders, [], "private physical evidence must not be Git-tracked")
