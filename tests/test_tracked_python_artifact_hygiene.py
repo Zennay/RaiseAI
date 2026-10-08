@@ -18,7 +18,7 @@ def validate_tracked_python_artifact_paths(paths: list[str]) -> None:
         raise ValueError("tracked file discovery must not be empty")
     for path in paths:
         parts = pathlib.PurePosixPath(path).parts
-        if any(part in GENERATED_DIRS for part in parts):
+        if any(part.casefold() in GENERATED_DIRS for part in parts):
             raise ValueError(f"{path!r}: generated Python cache directory is tracked")
         if path.lower().endswith(GENERATED_SUFFIXES):
             raise ValueError(f"{path!r}: generated Python bytecode is tracked")
@@ -39,6 +39,7 @@ class TrackedPythonArtifactHygieneTests(unittest.TestCase):
         for path in (
             "pkg/module.pyc", "pkg/module.PYO", "__pycache__/module.pyc",
             "tests/.pytest_cache/v/cache/nodeids", "pkg/.mypy_cache/data.json",
+            "tests/.PYTEST_CACHE/v/cache/nodeids",
             ".ruff_cache/0", ".tox/py312/log", ".nox/lint/log",
         ):
             with self.subTest(path=path):
