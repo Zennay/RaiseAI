@@ -25,9 +25,9 @@ def validate_tracked_python_artifact_paths(paths: list[str]) -> None:
 
 def tracked_paths() -> list[str]:
     raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
-    if not raw or not raw.endswith(b"\\0"):
+    if not raw or not raw.endswith(b"\0"):
         raise ValueError("tracked file discovery must be nonempty and NUL terminated")
-    return [path.decode("utf-8", "strict") for path in raw[:-1].split(b"\\0")]
+    return [path.decode("utf-8", "strict") for path in raw[:-1].split(b"\0")]
 
 
 class TrackedPythonArtifactHygieneTests(unittest.TestCase):
