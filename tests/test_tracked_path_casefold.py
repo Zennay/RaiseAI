@@ -29,7 +29,7 @@ def validate_portable_paths(paths: list[str]) -> None:
         for index in range(1, len(parts)):
             directory = "/".join(parts[:index])
             directories.setdefault(directory.casefold(), directory)
-    for folded, path in files.intersection(directories):
+    for folded in files.intersection(directories):
         raise ValueError(f"file/directory path collision: {seen[folded]!r} and {directories[folded]!r}")
 
 
