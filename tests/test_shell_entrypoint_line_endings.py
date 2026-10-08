@@ -2,11 +2,14 @@
 
 Runs under unittest discovery; no shell interpreter or watch hardware required.
 """
+import os
 from pathlib import Path
+import stat
 import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+MAX_SHELL_BYTES = 2 * 1024 * 1024
 
 
 def invalid_shell_bytes(data: bytes) -> str | None:
@@ -17,6 +20,25 @@ def invalid_shell_bytes(data: bytes) -> str | None:
     if b"\r" in data:
         return "carriage return"
     return None
+
+
+def read_regular_shell(path: Path) -> bytes:
+    """Open once, reject symlinks/FIFOs, and bound the read."""
+    flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+    fd = os.open(path, flags)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("not a regular file")
+        if info.st_size > MAX_SHELL_BYTES:
+            raise ValueError("shell entrypoint exceeds size limit")
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            data = stream.read(MAX_SHELL_BYTES + 1)
+        if len(data) > MAX_SHELL_BYTES:
+            raise ValueError("shell entrypoint exceeds size limit")
+        return data
+    finally:
+        os.close(fd)
 
 
 class ShellEntrypointByteIntegrity(unittest.TestCase):
@@ -38,10 +60,8 @@ class ShellEntrypointByteIntegrity(unittest.TestCase):
             name = raw_name.decode("utf-8", "surrogateescape")
             with self.subTest(path=name):
                 path = ROOT / name
-                self.assertTrue(path.is_file() and not path.is_symlink(),
-                                f"{name}: expected a regular non-symlink file")
                 self.assertIsNone(
-                    invalid_shell_bytes(path.read_bytes()),
+                    invalid_shell_bytes(read_regular_shell(path)),
                     f"{name}: prohibited shell byte sequence",
                 )
 
