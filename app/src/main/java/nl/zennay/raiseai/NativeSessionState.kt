@@ -1,17 +1,10 @@
 package nl.zennay.raiseai
 
 object NativeSessionState {
-    private val busyStates = setOf(
-        "starting",
-        "listening",
-        "understanding",
-        "sending",
-        "executing",
-        "replying"
-    )
+    private const val IDLE_STATE = "idle"
 
     @Volatile
-    private var state: String = "idle"
+    private var state: String = IDLE_STATE
 
     fun set(next: String) {
         state = next
@@ -19,5 +12,8 @@ object NativeSessionState {
 
     fun get(): String = state
 
-    fun isBusy(): Boolean = state in busyStates
+    fun isBusy(): Boolean = blocksGesture(state)
+
+    internal fun blocksGesture(candidate: String): Boolean =
+        candidate != IDLE_STATE
 }
