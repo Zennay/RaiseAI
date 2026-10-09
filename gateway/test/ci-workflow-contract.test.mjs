@@ -160,6 +160,11 @@ test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () 
     "actions/checkout",
     "actions/upload-artifact",
   ]);
+  assert.deepEqual(
+    externalActionRefs(DEPLOY_WORKFLOW).map(({ action }) => action),
+    ["actions/checkout", "actions/upload-artifact"],
+    "deploy workflow external action surface must stay minimal",
+  );
   assertReadOnlyPermissions(DEPLOY_WORKFLOW);
   assert.match(DEPLOY_WORKFLOW, /persist-credentials:\s*false\b/);
   assert.ok(
@@ -180,6 +185,32 @@ test("gateway deploy CI is pinned, bounded and cannot run on pull requests", () 
   );
   assert.match(DEPLOY_WORKFLOW, /timeout-minutes:\s*30\b/);
   assert.match(DEPLOY_WORKFLOW, /cancel-in-progress:\s*false\b/);
+  for (const line of [
+    "      LANG: C.UTF-8",
+    "      LC_ALL: C.UTF-8",
+    "      TZ: UTC",
+  ]) {
+    assert.equal(
+      DEPLOY_WORKFLOW.split(line).length - 1,
+      1,
+      `expected deterministic deploy env line: ${line}`,
+    );
+  }
+  assert.match(
+    DEPLOY_WORKFLOW,
+    /jobs:\s*\n  deploy-and-verify:\s*\n    runs-on: \[self-hosted, vps-bb300bba\]\s*\n    timeout-minutes: 30\s*\n    env:\s*\n      LANG: C\.UTF-8\s*\n      LC_ALL: C\.UTF-8\s*\n      TZ: UTC\s*\n    defaults:\s*\n      run:\s*\n        working-directory: gateway\s*\n        shell: bash\s*\n    steps:/,
+    "deploy job execution environment must stay exact and minimal",
+  );
+  assert.equal(
+    DEPLOY_WORKFLOW.split("        shell: bash").length - 1,
+    1,
+    "deploy workflow must use one job-default Bash binding without per-step overrides",
+  );
+  assert.equal(
+    DEPLOY_WORKFLOW.split("        working-directory: gateway").length - 1,
+    1,
+    "deploy workflow must keep one canonical working directory",
+  );
 
   const deploySha = "\${{ github.sha }}";
   assert.ok(
@@ -218,7 +249,11 @@ test("gateway deploy exceptional execution controls stay narrow", () => {
   );
   assert.match(
     DEPLOY_WORKFLOW,
-    /- name: Baseline health \(pre-deploy, best-effort\)[\s\S]*?continue-on-error: true[\s\S]*?curl --fail/,
+    /- name: Baseline health \(pre-deploy, best-effort\)[\s\S]*?continue-on-error: true[\s\S]*?set -euo pipefail[\s\S]*?curl --fail/,
+  );
+  assert.match(
+    DEPLOY_WORKFLOW,
+    /- name: Record machine-readable deploy evidence[\s\S]*?if: always\(\)[\s\S]*?run: \|\n\s+set -euo pipefail/,
   );
 
   assert.equal(

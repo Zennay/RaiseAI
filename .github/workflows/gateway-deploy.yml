@@ -20,9 +20,14 @@ jobs:
   deploy-and-verify:
     runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 30
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TZ: UTC
     defaults:
       run:
         working-directory: gateway
+        shell: bash
     steps:
       - name: Checkout exact deploy revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
@@ -41,6 +46,7 @@ jobs:
         id: baseline
         continue-on-error: true
         run: |
+          set -euo pipefail
           source "$HOME/.config/raiseai/gateway.env" 2>/dev/null || true
           curl --fail --silent --show-error --max-time 5 \
             --cacert "${RAISE_TLS_CERT:-/dev/null}" \
@@ -134,6 +140,7 @@ jobs:
           RAISE_REPEAT_WATCH_PROFILE_OUTCOME: ${{ steps.watch_profile_repeat.outcome }}
           RAISE_REPEAT_SMOKE_OUTCOME: ${{ steps.smoke_repeat.outcome }}
         run: |
+          set -euo pipefail
           export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
           if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
             export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
