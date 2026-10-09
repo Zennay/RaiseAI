@@ -232,8 +232,17 @@ A passing session must contain provenance-bound summary evidence including:
 
 Keep the raw trace/trial evidence from that same session. Do **not** upload gateway profiles, tokens, provider credentials, transcript text, or assistant response text.
 
-Default GitHub issue #34 share set:
+Create a fresh, allowlisted share directory **after** the original validators pass:
 
+```bash
+python3 tools/create-physical-share-bundle.py ~/.raiseai/evidence/<session> ~/.raiseai/evidence/<session>-share
+```
+
+The destination must not already exist. A failed gate, mismatched app/source revision,
+unsafe input or sensitive field prevents publication. Review generated files before attaching.
+This helper does not prove physical acceptance.
+
+Default GitHub issue #34 share set:
 - `e2e-result.json`
 - `v1-result.json`
 - `quality-result.json`

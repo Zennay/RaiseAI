@@ -23,6 +23,7 @@ EXPECTED_MODULES = (
     "tests.test_frozen_acceptance_launcher",
     "tests.test_frozen_physical_handoff_fetcher",
     "tests.test_physical_observation_template",
+    "tests.test_physical_share_bundle",
     "tests.test_physical_observation_validator",
     "tests.test_physical_validation_cli",
     "tests.test_quality_tooling_runner",
