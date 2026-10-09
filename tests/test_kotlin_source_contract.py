@@ -95,6 +95,35 @@ class KotlinSourceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "bidirectional control characters"):
             validate_kotlin_source(payload, label="fixture.kt")
 
+    def test_wear_bridge_drops_stale_port_before_new_session_binding(self):
+        source = (
+            ROOT
+            / "app"
+            / "src"
+            / "main"
+            / "java"
+            / "nl"
+            / "zennay"
+            / "raiseai"
+            / "WearBridge.kt"
+        ).read_text(encoding="utf-8")
+        attach = source.split(
+            "    fun attach(session: GeckoSession, extension: WebExtension) {",
+            1,
+        )[1].split("    fun setAssistantReplyHandler", 1)[0]
+
+        self.assertIn("if (attachedSession !== session)", attach)
+        self.assertIn("val stalePort = port", attach)
+        self.assertIn("port = null", attach)
+        self.assertIn("stalePort.disconnect()", attach)
+        self.assertIn("pendingStartReason = null", attach)
+        self.assertIn('currentState = "loading"', attach)
+
+        rebind = attach.index("attachedSession = session")
+        self.assertLess(attach.index("port = null"), rebind)
+        self.assertLess(attach.index("pendingStartReason = null"), rebind)
+        self.assertLess(attach.index('currentState = "loading"'), rebind)
+
     def _trigger_paths(self, event: str) -> list[str]:
         lines = self.workflow.splitlines()
         start = lines.index(f"  {event}:") + 1

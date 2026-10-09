@@ -62,6 +62,17 @@ object WearBridge {
     }
 
     fun attach(session: GeckoSession, extension: WebExtension) {
+        if (attachedSession !== session) {
+            val stalePort = port
+            port = null
+            if (stalePort != null) {
+                runCatching { stalePort.disconnect() }
+                    .onFailure { Log.w(TAG, "Could not disconnect stale Wear bridge port", it) }
+            }
+            pendingStartReason = null
+            currentState = "loading"
+        }
+
         attachedSession = session
         session.webExtensionController.setMessageDelegate(extension, messageDelegate, NATIVE_APP)
     }
