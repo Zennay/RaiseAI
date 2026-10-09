@@ -18,10 +18,21 @@ internal object AssistantLaunchCooldownPolicy {
         nowElapsedMs: Long,
         previousLaunchElapsedMs: Long?,
         cooldownMs: Long = DEFAULT_COOLDOWN_MS
-    ): Boolean {
-        if (nowElapsedMs < 0L || cooldownMs <= 0L) return false
-        if (previousLaunchElapsedMs == null) return true
-        if (previousLaunchElapsedMs < 0L || nowElapsedMs < previousLaunchElapsedMs) return false
-        return nowElapsedMs - previousLaunchElapsedMs >= cooldownMs
+    ): Boolean = remainingMs(nowElapsedMs, previousLaunchElapsedMs, cooldownMs) == 0L
+
+    /**
+     * Returns the remaining monotonic cooldown, or null for invalid clock/policy data.
+     * Null is deliberately not treated as ready, so callers fail closed.
+     */
+    fun remainingMs(
+        nowElapsedMs: Long,
+        previousLaunchElapsedMs: Long?,
+        cooldownMs: Long = DEFAULT_COOLDOWN_MS
+    ): Long? {
+        if (nowElapsedMs < 0L || cooldownMs <= 0L) return null
+        if (previousLaunchElapsedMs == null) return 0L
+        if (previousLaunchElapsedMs < 0L || nowElapsedMs < previousLaunchElapsedMs) return null
+        val elapsed = nowElapsedMs - previousLaunchElapsedMs
+        return if (elapsed >= cooldownMs) 0L else cooldownMs - elapsed
     }
 }
