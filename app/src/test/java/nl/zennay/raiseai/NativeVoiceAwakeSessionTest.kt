@@ -83,4 +83,30 @@ class NativeVoiceAwakeSessionTest {
         assertFalse(session.shouldKeepScreenAwake("listening", 2L))
         assertEquals(0L, session.remainingMs("understanding", 2L))
     }
+    @Test fun destroyedActivityCannotIssueNewWakeLease() {
+        val session = NativeVoiceAwakeSession()
+        session.startIfAbsent(5L)
+        session.invalidate()
+        assertFalse(session.startIfAbsent(6L))
+        assertEquals(0L, session.remainingMs("listening", 6L))
+        assertFalse(session.shouldKeepScreenAwake("starting", 6L))
+    }
+
+    @Test fun explicitFinishAfterTeardownDoesNotResurrectSession() {
+        val session = NativeVoiceAwakeSession()
+        session.startIfAbsent(7L)
+        session.invalidate()
+        session.finish()
+        assertFalse(session.startIfAbsent(8L))
+        assertEquals(0L, session.remainingMs("listening", 8L))
+    }
+
+    @Test fun repeatedInvalidationIsTerminal() {
+        val session = NativeVoiceAwakeSession()
+        session.invalidate()
+        session.invalidate()
+        assertFalse(session.startIfAbsent(0L))
+        assertEquals(0L, session.remainingMs("understanding", 0L))
+    }
+
 }
