@@ -3,7 +3,6 @@ package nl.zennay.raiseai
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import android.util.Log
 
 object NativeVoiceLauncher {
@@ -20,7 +19,7 @@ object NativeVoiceLauncher {
     }
 
     fun launchFromService(context: Context): Boolean {
-        if (!Settings.canDrawOverlays(context)) {
+        if (!BackgroundLaunchGrant.isGranted(context)) {
             CalibrationStore.recordAssistantLaunch(
                 context,
                 "NATIVE_VOICE_BLOCKED_NO_BACKGROUND_GRANT"

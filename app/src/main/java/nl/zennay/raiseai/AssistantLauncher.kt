@@ -3,7 +3,6 @@ package nl.zennay.raiseai
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import android.util.Log
 
 object AssistantLauncher {
@@ -50,7 +49,7 @@ object AssistantLauncher {
      * ACTION_ASSIST route.
      */
     fun launchFromService(context: Context): LaunchResult {
-        if (!Settings.canDrawOverlays(context)) {
+        if (!BackgroundLaunchGrant.isGranted(context)) {
             val path = "BLOCKED_NO_BACKGROUND_LAUNCH_GRANT"
             CalibrationStore.recordAssistantLaunch(context, path)
             Log.w(TAG, "Background launch grant missing; run installer again")
