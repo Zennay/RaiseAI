@@ -55,6 +55,24 @@ class PythonDiscoveryCollisionContract(unittest.TestCase):
                 file.write_text("pass\n", encoding="utf-8")
             self.assertEqual(collisions(root), {})
 
+    def test_multiple_collision_groups_are_sorted_deterministically(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in (
+                "z/test_zeta.py", "b/test_alpha.py", "a/test_zeta.py",
+                "c/test_alpha.py", "d/test_unique.py",
+            ):
+                file = root / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("pass\n", encoding="utf-8")
+            self.assertEqual(
+                collisions(root),
+                {
+                    "test_alpha.py": ("b/test_alpha.py", "c/test_alpha.py"),
+                    "test_zeta.py": ("a/test_zeta.py", "z/test_zeta.py"),
+                },
+            )
+
     def test_non_test_modules_do_not_trigger_collision(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
