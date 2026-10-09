@@ -468,6 +468,10 @@
           if (startRetryTimer) clearTimeout(startRetryTimer);
           startRetryTimer = null;
           startRetryCount = 0;
+          // A cancelled exchange must not deliver a late assistant reply to the watch.
+          awaitingAssistantReply = false;
+          assistantCandidate = "";
+          assistantCandidateSince = 0;
           if (state === "listening" || state === "starting" || state === "finalizing") {
             const prompt = findPrompt();
             const mic = findButton(findComposer(prompt), "mic");
