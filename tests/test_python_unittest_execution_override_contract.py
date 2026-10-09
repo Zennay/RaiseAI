@@ -267,13 +267,13 @@ class PythonUnittestExecutionOverrideContract(unittest.TestCase):
 
     def test_post_definition_testcase_monkeypatching_is_rejected(self):
         source = (
-            "import unittest\\n"
-            "class Hidden(unittest.TestCase):\\n"
-            "    def test_real(self): pass\\n"
-            "Hidden.run = lambda self, result: result\\n"
-            "setattr(Hidden, '_callTestMethod', lambda self, method: None)\\n"
-            "if True:\\n"
-            "    Hidden.debug = lambda self: None\\n"
+            "import unittest\n"
+            "class Hidden(unittest.TestCase):\n"
+            "    def test_real(self): pass\n"
+            "Hidden.run = lambda self, result: result\n"
+            "setattr(Hidden, '_callTestMethod', lambda self, method: None)\n"
+            "if True:\n"
+            "    Hidden.debug = lambda self: None\n"
         )
         self.assertEqual(
             [(4, "Hidden.run"), (5, "Hidden._callTestMethod"),
@@ -283,15 +283,15 @@ class PythonUnittestExecutionOverrideContract(unittest.TestCase):
 
     def test_unrelated_module_hooks_and_function_locals_are_allowed(self):
         source = (
-            "import unittest\\n"
-            "class Helper:\\n"
-            "    def run(self): pass\\n"
-            "class Safe(unittest.TestCase):\\n"
-            "    def test_live(self): pass\\n"
-            "Helper.run = 3\\n"
-            "def factory():\\n"
-            "    Safe.run = 5\\n"
-            "    setattr(Safe, 'debug', lambda self: None)\\n"
+            "import unittest\n"
+            "class Helper:\n"
+            "    def run(self): pass\n"
+            "class Safe(unittest.TestCase):\n"
+            "    def test_live(self): pass\n"
+            "Helper.run = 3\n"
+            "def factory():\n"
+            "    Safe.run = 5\n"
+            "    setattr(Safe, 'debug', lambda self: None)\n"
         )
         self.assertEqual([], overridden_test_execution_hooks(source))
 
