@@ -7,10 +7,17 @@ within that module. Keep discovery controlled by the shared runner.
 
 import ast
 from pathlib import Path
+import tempfile
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def quality_contract_paths(root: Path = ROOT) -> list[Path]:
+    """Scan test modules AND package initializers; both can define load_tests."""
+    tests = root / "tests"
+    return sorted(set(tests.rglob("test_*.py")) | set(tests.rglob("__init__.py")))
 
 
 def _binds_name(target: ast.AST, name: str) -> bool:
@@ -86,7 +93,7 @@ def module_loader_overrides(source: str) -> list[tuple[int, str]]:
 
 class PythonUnittestLoaderOverrideContractTests(unittest.TestCase):
     def test_repo_does_not_override_unittest_discovery_hooks(self):
-        paths = sorted((ROOT / "tests").rglob("test_*.py"))
+        paths = quality_contract_paths()
         self.assertTrue(paths, "Python quality suite must not become empty")
         violations = [
             f"{path.relative_to(ROOT)}:{line}: {kind}"
@@ -94,6 +101,26 @@ class PythonUnittestLoaderOverrideContractTests(unittest.TestCase):
             for line, kind in module_loader_overrides(path.read_text(encoding="utf-8"))
         ]
         self.assertEqual(violations, [], "\n".join(violations))
+
+    def test_discovery_guard_includes_package_initializers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "tests"
+            nested = package / "nested"
+            nested.mkdir(parents=True)
+            (package / "__init__.py").write_text("def load_tests(*args): return []\\n")
+            (nested / "__init__.py").write_text("def load_tests(*args): return []\\n")
+            (nested / "test_sample.py").write_text("def test_real(): pass\\n")
+            paths = quality_contract_paths(root)
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in paths],
+                ["tests/__init__.py", "tests/nested/__init__.py", "tests/nested/test_sample.py"],
+            )
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in paths
+                 if module_loader_overrides(path.read_text(encoding="utf-8"))],
+                ["tests/__init__.py", "tests/nested/__init__.py"],
+            )
 
     def test_module_function_and_async_function_are_rejected(self):
         self.assertEqual(
