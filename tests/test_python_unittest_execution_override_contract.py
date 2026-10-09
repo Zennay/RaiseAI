@@ -16,7 +16,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 EXECUTION_HOOKS = frozenset({
-    "run", "debug", "_callTestMethod", "_callSetUp", "_callTearDown",
+    "run", "__call__", "debug", "_callTestMethod", "_callSetUp", "_callTearDown",
     "_callCleanup", "doCleanups",
 })
 
@@ -364,6 +364,40 @@ class PythonUnittestExecutionOverrideContract(unittest.TestCase):
             "    def run(self, result=None): return result\n"
             "class Safe(unittest.TestCase, Helper):\n"
             "    def test_real(self): self.assertTrue(True)\n"
+        )
+        self.assertEqual([], overridden_test_execution_hooks(source))
+
+    def test_overridden_callable_entrypoint_is_rejected(self):
+        source = (
+            "import unittest\n"
+            "class ForgedSuccess(unittest.TestCase):\n"
+            "    def __call__(self, result): result.addSuccess(self)\n"
+            "    def test_should_fail(self): self.fail('never called')\n"
+        )
+        self.assertEqual(
+            [(3, "ForgedSuccess.__call__")],
+            overridden_test_execution_hooks(source),
+        )
+
+    def test_callable_entrypoint_inherited_from_prior_mixin_is_rejected(self):
+        source = (
+            "from unittest import TestCase\n"
+            "class ResultForgery:\n"
+            "    def __call__(self, result): result.addSuccess(self)\n"
+            "class Hidden(ResultForgery, TestCase):\n"
+            "    def test_real(self): self.fail('not executed')\n"
+        )
+        self.assertEqual(
+            [(3, "Hidden inherits ResultForgery.__call__")],
+            overridden_test_execution_hooks(source),
+        )
+
+    def test_unrelated_dunder_methods_remain_allowed(self):
+        source = (
+            "import unittest\n"
+            "class Legitimate(unittest.TestCase):\n"
+            "    def __repr__(self): return 'safe'\n"
+            "    def test_live(self): self.assertTrue(True)\n"
         )
         self.assertEqual([], overridden_test_execution_hooks(source))
 
