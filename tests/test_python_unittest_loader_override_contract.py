@@ -108,9 +108,9 @@ class PythonUnittestLoaderOverrideContractTests(unittest.TestCase):
             package = root / "tests"
             nested = package / "nested"
             nested.mkdir(parents=True)
-            (package / "__init__.py").write_text("def load_tests(*args): return []\\n")
-            (nested / "__init__.py").write_text("def load_tests(*args): return []\\n")
-            (nested / "test_sample.py").write_text("def test_real(): pass\\n")
+            (package / "__init__.py").write_text("def load_tests(*args): return []\n")
+            (nested / "__init__.py").write_text("def load_tests(*args): return []\n")
+            (nested / "test_sample.py").write_text("def test_real(): pass\n")
             paths = quality_contract_paths(root)
             self.assertEqual(
                 [path.relative_to(root).as_posix() for path in paths],
