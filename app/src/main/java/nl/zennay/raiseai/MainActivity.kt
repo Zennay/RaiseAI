@@ -57,10 +57,9 @@ class MainActivity : Activity(), SensorEventListener {
 
         if (intent.getBooleanExtra(EXTRA_OPEN_CHATGPT_LOGIN, false)) {
             handler.post {
-                startActivity(
-                    Intent(this, ChatGptActivity::class.java)
-                        .putExtra(ChatGptActivity.EXTRA_TRY_WEBSITE_MIC, false)
-                )
+                if (!ChatGptLauncher.launchFromActivity(this, tryWebsiteMic = false)) {
+                    toast("ChatGPT login could not be opened")
+                }
             }
         }
     }
