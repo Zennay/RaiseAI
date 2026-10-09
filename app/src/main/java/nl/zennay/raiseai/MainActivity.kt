@@ -127,11 +127,14 @@ class MainActivity : Activity(), SensorEventListener {
         column.addView(button(if (CalibrationStore.isSleepDndPauseEnabled(this)) "Sleep/DND pause: ON" else "Sleep/DND pause: OFF") {
             val next = !CalibrationStore.isSleepDndPauseEnabled(this)
             CalibrationStore.setSleepDndPauseEnabled(this, next)
-            if (CalibrationStore.isMonitoringEnabled(this)) {
-                stopService(Intent(this, GestureMonitorService::class.java))
-                startForegroundService(Intent(this, GestureMonitorService::class.java))
-            }
-            toast(if (next) "Sleep/DND pause enabled" else "Sleep/DND pause disabled")
+            val monitoringRestarted = restartMonitoringIfEnabled(showFailureToast = false)
+            toast(
+                when {
+                    !monitoringRestarted -> "Sleep/DND updated · monitoring could not restart"
+                    next -> "Sleep/DND pause enabled"
+                    else -> "Sleep/DND pause disabled"
+                }
+            )
             recreate()
         }, matchWrap(bottom = 8))
 
@@ -147,11 +150,14 @@ class MainActivity : Activity(), SensorEventListener {
             if (selectedAssistant == AssistantMode.GEMINI) "✓ Gemini (default)" else "Use Gemini"
         ) {
             AssistantModeStore.set(this, AssistantMode.GEMINI)
-            if (CalibrationStore.isMonitoringEnabled(this)) {
-                stopService(Intent(this, GestureMonitorService::class.java))
-                startForegroundService(Intent(this, GestureMonitorService::class.java))
-            }
-            toast("Gemini is now the main AI")
+            val monitoringRestarted = restartMonitoringIfEnabled(showFailureToast = false)
+            toast(
+                if (monitoringRestarted) {
+                    "Gemini is now the main AI"
+                } else {
+                    "Gemini selected · monitoring could not restart"
+                }
+            )
             recreate()
         }, matchWrap(bottom = 6))
 
@@ -159,11 +165,14 @@ class MainActivity : Activity(), SensorEventListener {
             if (selectedAssistant == AssistantMode.NATIVE) "✓ Native Raise AI" else "Use Native Raise AI"
         ) {
             AssistantModeStore.set(this, AssistantMode.NATIVE)
-            if (CalibrationStore.isMonitoringEnabled(this)) {
-                stopService(Intent(this, GestureMonitorService::class.java))
-                startForegroundService(Intent(this, GestureMonitorService::class.java))
-            }
-            toast("Native Raise AI is now the main AI")
+            val monitoringRestarted = restartMonitoringIfEnabled(showFailureToast = false)
+            toast(
+                if (monitoringRestarted) {
+                    "Native Raise AI is now the main AI"
+                } else {
+                    "Native Raise AI selected · monitoring could not restart"
+                }
+            )
             recreate()
         }, matchWrap(bottom = 6))
 
@@ -265,10 +274,27 @@ class MainActivity : Activity(), SensorEventListener {
             toast("Calibrate your mouth pose first")
             return
         }
-        val intent = Intent(this, GestureMonitorService::class.java)
-        startForegroundService(intent)
-        CalibrationStore.setMonitoringEnabled(this, true)
+
+        val started = tryStartMonitoringService()
+        CalibrationStore.setMonitoringEnabled(this, started)
         refreshUi()
+    }
+
+    private fun tryStartMonitoringService(showFailureToast: Boolean = true): Boolean {
+        val started = MonitoringServiceStartPolicy.tryStart {
+            startForegroundService(Intent(this, GestureMonitorService::class.java)) != null
+        }
+        if (!started) {
+            CalibrationStore.setMonitoringEnabled(this, false)
+            if (showFailureToast) toast("Raise-to-talk monitoring could not start")
+        }
+        return started
+    }
+
+    private fun restartMonitoringIfEnabled(showFailureToast: Boolean = true): Boolean {
+        if (!CalibrationStore.isMonitoringEnabled(this)) return true
+        stopService(Intent(this, GestureMonitorService::class.java))
+        return tryStartMonitoringService(showFailureToast)
     }
 
     private fun stopMonitoring() {
@@ -398,14 +424,22 @@ class MainActivity : Activity(), SensorEventListener {
         traceMouthPose = null
         traceSampleCount = 0
 
-        if (traceMonitoringWasEnabled && CalibrationStore.isMonitoringEnabled(this)) {
-            startForegroundService(Intent(this, GestureMonitorService::class.java))
-        }
+        val monitoringRestarted =
+            if (traceMonitoringWasEnabled && CalibrationStore.isMonitoringEnabled(this)) {
+                tryStartMonitoringService(showFailureToast = false)
+            } else {
+                true
+            }
         traceMonitoringWasEnabled = false
 
         setCaptureControlsEnabled(true)
         if (showToast) {
-            toast(if (traceDetectorTriggered) "Trial recorded · detector TRIGGERED" else "Trial recorded · no trigger")
+            val message = when {
+                !monitoringRestarted -> "Trial recorded · monitoring could not restart"
+                traceDetectorTriggered -> "Trial recorded · detector TRIGGERED"
+                else -> "Trial recorded · no trigger"
+            }
+            toast(message)
         }
         traceDetectorTriggered = false
         traceMaxSimilarity = -1f
