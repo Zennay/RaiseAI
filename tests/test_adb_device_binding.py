@@ -131,7 +131,9 @@ if [ "${1:-}" = "start-server" ]; then
   exit 0
 fi
 if [ "${1:-}" = "devices" ]; then
-  if [ "${SWITCH_AFTER_FAILED_INSTALL:-}" = "1" ] && [ -f "${INSTALL_ATTEMPT_FILE:-}" ]; then
+  if [ "${MULTI_WATCH:-}" = "1" ]; then
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\nwatch-c\tdevice\n'
+  elif [ "${SWITCH_AFTER_FAILED_INSTALL:-}" = "1" ] && [ -f "${INSTALL_ATTEMPT_FILE:-}" ]; then
     printf 'List of devices attached\nphone-a\tdevice\nwatch-c\tdevice\n'
   else
     printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
@@ -164,7 +166,11 @@ if [ "${1:-}" = "-s" ]; then
          [ "$serial" = "watch-b" ]; then
         echo "phone"
       else
-        [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
+        if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+          echo "freshbl"
+        else
+          echo "phone"
+        fi
       fi
       ;;
     "shell getprop ro.build.characteristics")
@@ -173,7 +179,11 @@ if [ "${1:-}" = "-s" ]; then
          [ "$serial" = "watch-b" ]; then
         echo "nosdcard"
       else
-        [ "$serial" = "watch-b" ] && echo "watch" || echo "nosdcard"
+        if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+          echo "watch"
+        else
+          echo "nosdcard"
+        fi
       fi
       ;;
     "shell pm list features")
@@ -181,7 +191,7 @@ if [ "${1:-}" = "-s" ]; then
          [ -f "${INSTALL_ATTEMPT_FILE:-}" ] &&
          [ "$serial" = "watch-b" ]; then
         echo "feature:android.hardware.telephony"
-      elif [ "$serial" = "watch-b" ]; then
+      elif [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
         echo "feature:android.hardware.type.watch"
       else
         echo "feature:android.hardware.telephony"
@@ -319,6 +329,22 @@ exit 2
             hashlib.sha256(self.apk.read_bytes()).hexdigest(),
         )
 
+    def test_installer_rejects_ambiguous_multiple_watches_without_serial(self):
+        result = self.run_installer(None, {"MULTI_WATCH": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Multiple Wear OS watches are connected", result.stdout)
+        self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
+
+    def test_installer_rejects_disconnected_bound_serial_without_caching_it(self):
+        stale_target = "192.0.2.55:5555"
+        result = self.run_installer(stale_target)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"Selected ADB target is not connected: {stale_target}", result.stdout)
+        self.assertFalse((self.home / ".raiseai" / "watch-endpoint").exists())
+        self.assertFalse(self.serial_file.exists())
+        self.assertFalse(self.installed_apk_sha_file.exists())
+
     def test_installer_rejects_non_watch_android_serial(self):
         result = self.run_installer("phone-a")
         self.assertNotEqual(result.returncode, 0)
@@ -392,7 +418,11 @@ if [ "${1:-}" = "start-server" ]; then
   exit 0
 fi
 if [ "${1:-}" = "devices" ]; then
-  printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
+  if [ "${MULTI_WATCH:-}" = "1" ]; then
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\nwatch-c\tdevice\n'
+  else
+    printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\n'
+  fi
   exit 0
 fi
 if [ "${1:-}" = "-s" ]; then
@@ -402,16 +432,16 @@ if [ "${1:-}" = "-s" ]; then
   args="$*"
   case "$args" in
     "shell getprop ro.product.model")
-      [ "$serial" = "watch-b" ] && echo "SM_L315F" || echo "Pixel_Test"
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "SM_L315F"; else echo "Pixel_Test"; fi
       ;;
     "shell getprop ro.product.device")
-      [ "$serial" = "watch-b" ] && echo "freshbl" || echo "phone"
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "freshbl"; else echo "phone"; fi
       ;;
     "shell getprop ro.build.characteristics")
-      [ "$serial" = "watch-b" ] && echo "watch" || echo "nosdcard"
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "watch"; else echo "nosdcard"; fi
       ;;
     "shell pm list features")
-      if [ "$serial" = "watch-b" ]; then
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
         echo "feature:android.hardware.type.watch"
       else
         echo "feature:android.hardware.telephony"
@@ -450,10 +480,15 @@ exit 2
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_provisioner(self, serial):
+    def run_provisioner(self, serial=None, extra_env=None):
         env = os.environ.copy()
         env["ANDROID_SDK_ROOT"] = str(self.sdk)
-        env["ANDROID_SERIAL"] = serial
+        if serial is None:
+            env.pop("ANDROID_SERIAL", None)
+        else:
+            env["ANDROID_SERIAL"] = serial
+        if extra_env:
+            env.update(extra_env)
         env["ADB_LOG"] = str(self.log)
         return subprocess.run(
             ["bash", str(ROOT / "provision-watch-gateway.command"), str(self.profile)],
@@ -480,6 +515,12 @@ exit 2
         self.assertEqual(set(self.used_serials()), {"watch-b"})
         self.assertIn("Gateway profile installed on Watch: watch-b", result.stdout)
 
+    def test_gateway_provisioning_rejects_ambiguous_multiple_watches_without_serial(self):
+        result = self.run_provisioner(None, {"MULTI_WATCH": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Multiple Wear OS watches are connected", result.stdout)
+        self.assertNotIn("Gateway profile installed", result.stdout)
+
     def test_gateway_temp_credential_path_uses_process_id(self):
         source = (ROOT / "provision-watch-gateway.command").read_text(encoding="utf-8")
         self.assertIn('TMP="/data/local/tmp/raise-gateway-$$.properties"', source)
@@ -490,6 +531,121 @@ exit 2
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Refusing gateway provisioning to non-Wear ADB target: phone-a", result.stdout)
         self.assertEqual(set(self.used_serials()), {"phone-a"})
+
+class WatchPreflightBindingTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.sdk = self.root / "sdk"
+        (self.sdk / "platform-tools").mkdir(parents=True)
+        adb = self.sdk / "platform-tools" / "adb"
+        adb.write_text(
+            textwrap.dedent(
+                r"""#!/bin/bash
+set -eu
+if [ "${1:-}" = "devices" ]; then
+  printf 'List of devices attached\nphone-a\tdevice\nwatch-b\tdevice\nwatch-c\tdevice\n'
+  exit 0
+fi
+if [ "${1:-}" = "-s" ]; then
+  serial="$2"
+  shift 2
+  args="$*"
+  case "$args" in
+    "shell pm list features")
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then
+        echo "feature:android.hardware.type.watch"
+      else
+        echo "feature:android.hardware.telephony"
+      fi
+      ;;
+    "shell getprop ro.product.model")
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "SM_L315F"; else echo "Pixel_Test"; fi
+      ;;
+    "shell getprop ro.product.device")
+      if [ "$serial" = "watch-b" ] || [ "$serial" = "watch-c" ]; then echo "freshbl"; else echo "phone"; fi
+      ;;
+    "shell pm path com.google.android.wearable.assistant")
+      [ "$serial" = "watch-b" ] && echo "package:/system/app/Gemini/Gemini.apk"
+      ;;
+    "shell pm path nl.zennay.raiseai")
+      [ "$serial" = "watch-b" ] && echo "package:/data/app/raise/base.apk"
+      ;;
+    "shell appops get nl.zennay.raiseai SYSTEM_ALERT_WINDOW")
+      echo "SYSTEM_ALERT_WINDOW: allow"
+      ;;
+    "shell appops get nl.zennay.raiseai GET_USAGE_STATS")
+      echo "GET_USAGE_STATS: allow"
+      ;;
+    "shell am start -a android.intent.action.ASSIST -p com.google.android.wearable.assistant")
+      echo "Starting: Intent"
+      ;;
+    *)
+      echo "unexpected adb invocation: $serial $args" >&2
+      exit 2
+      ;;
+  esac
+  exit 0
+fi
+echo "unexpected adb invocation: $*" >&2
+exit 2
+"""
+            ),
+            encoding="utf-8",
+        )
+        adb.chmod(0o755)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_preflight_accepts_explicit_bound_watch(self):
+        env = os.environ.copy()
+        env["ANDROID_SDK_ROOT"] = str(self.sdk)
+        env["ANDROID_SERIAL"] = "watch-b"
+        result = subprocess.run(
+            ["bash", str(ROOT / "watch-preflight.command")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Watch: watch-b", result.stdout)
+        self.assertIn("Google/Gemini Wear assistant installed", result.stdout)
+        self.assertIn("Raise AI installed", result.stdout)
+        self.assertIn("Expected: Gemini opens and immediately listens.", result.stdout)
+
+    def test_preflight_rejects_bound_phone(self):
+        env = os.environ.copy()
+        env["ANDROID_SDK_ROOT"] = str(self.sdk)
+        env["ANDROID_SERIAL"] = "phone-a"
+        result = subprocess.run(
+            ["bash", str(ROOT / "watch-preflight.command")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing preflight on non-Wear ADB target: phone-a", result.stdout)
+
+    def test_preflight_rejects_ambiguous_multiple_watches_without_serial(self):
+        env = os.environ.copy()
+        env["ANDROID_SDK_ROOT"] = str(self.sdk)
+        env.pop("ANDROID_SERIAL", None)
+        result = subprocess.run(
+            ["bash", str(ROOT / "watch-preflight.command")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Multiple Wear OS watches are connected", result.stdout)
+
 
 class PhysicalPrepareBindingTest(unittest.TestCase):
     def setUp(self):

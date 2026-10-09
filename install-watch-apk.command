@@ -51,7 +51,7 @@ PY
 
 "$ADB" start-server >/dev/null
 
-find_watch() {
+find_watches() {
   local serial="" model="" device="" features=""
   "$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | while IFS= read -r serial; do
     [ -z "${serial:-}" ] && continue
@@ -61,9 +61,23 @@ find_watch() {
     if [ "$model" = "SM_L315F" ] || printf '%s' "$device" | grep -qi '^fresh' ||
        printf '%s\n' "$features" | grep -q 'android.hardware.type.watch'; then
       printf '%s\n' "$serial"
-      return 0
     fi
   done
+}
+
+select_watch() {
+  if [ -n "${ANDROID_SERIAL:-}" ]; then
+    printf '%s\n' "$ANDROID_SERIAL"
+    return 0
+  fi
+  local watches="" count=0
+  watches="$(find_watches)"
+  count="$(printf '%s\n' "$watches" | awk 'NF {count++} END {print count+0}')"
+  if [ "$count" -gt 1 ]; then
+    echo "ERROR: Multiple Wear OS watches are connected. Set ANDROID_SERIAL to the intended Watch." >&2
+    return 2
+  fi
+  printf '%s\n' "$watches" | awk 'NF {print; exit}'
 }
 
 connect_endpoint() {
@@ -80,13 +94,17 @@ mdns_endpoint() {
     awk '/_adb-tls-connect[.]_tcp/ {print $3; exit}' || true
 }
 
-TARGET="${ANDROID_SERIAL:-$(find_watch)}"
+if ! TARGET="$(select_watch)"; then
+  exit 1
+fi
 LAST_ENDPOINT=""
 
 if [ -z "$TARGET" ] && [ -n "${CONNECT_ENDPOINT:-}" ]; then
   connect_endpoint "$CONNECT_ENDPOINT" || true
   LAST_ENDPOINT="$CONNECT_ENDPOINT"
-  TARGET="${ANDROID_SERIAL:-$(find_watch)}"
+  if ! TARGET="$(select_watch)"; then
+    exit 1
+  fi
 fi
 
 if [ -z "$TARGET" ] && [ -f "$ENDPOINT_FILE" ]; then
@@ -94,7 +112,9 @@ if [ -z "$TARGET" ] && [ -f "$ENDPOINT_FILE" ]; then
   if [ -n "$CACHED_ENDPOINT" ]; then
     connect_endpoint "$CACHED_ENDPOINT" || true
     LAST_ENDPOINT="$CACHED_ENDPOINT"
-    TARGET="${ANDROID_SERIAL:-$(find_watch)}"
+    if ! TARGET="$(select_watch)"; then
+      exit 1
+    fi
   fi
 fi
 
@@ -103,7 +123,9 @@ if [ -z "$TARGET" ]; then
   if [ -n "${DISCOVERED_ENDPOINT:-}" ]; then
     connect_endpoint "$DISCOVERED_ENDPOINT" || true
     LAST_ENDPOINT="$DISCOVERED_ENDPOINT"
-    TARGET="${ANDROID_SERIAL:-$(find_watch)}"
+    if ! TARGET="$(select_watch)"; then
+      exit 1
+    fi
   fi
 fi
 
@@ -115,6 +137,11 @@ if [ -z "$TARGET" ]; then
   "$ADB" devices -l
   exit 1
 fi
+
+"$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' | grep -Fxq "$TARGET" || {
+  echo "Selected ADB target is not connected: $TARGET"
+  exit 1
+}
 
 if [ -n "$LAST_ENDPOINT" ]; then
   printf '%s\n' "$LAST_ENDPOINT" > "$ENDPOINT_FILE"
