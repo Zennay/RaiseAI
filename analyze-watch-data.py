@@ -160,10 +160,10 @@ def read_sessions(path: Path) -> dict[tuple[str, int], list[Sample]]:
                     )
                     if (
                         previous_elapsed is not None
-                        and elapsed_ms < previous_elapsed
+                        and elapsed_ms <= previous_elapsed
                     ):
                         raise TraceError(
-                            f"line {line}: elapsed_ms moved backwards "
+                            f"line {line}: elapsed_ms must increase strictly "
                             f"in session {session_id}"
                         )
                     last_elapsed_by_session[session_id] = elapsed_ms
