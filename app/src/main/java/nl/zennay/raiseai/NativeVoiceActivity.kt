@@ -174,7 +174,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     override fun onError(error: Int) {
-        if (submitted) return
+        if (submitted || isFinishing || isDestroyed) return
         val retryable = error == SpeechRecognizer.ERROR_NO_MATCH ||
             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
 
@@ -192,6 +192,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     override fun onResults(results: Bundle?) {
+        if (submitted || isFinishing || isDestroyed) return
         val text = bestResult(results)
         if (text.isNullOrBlank()) {
             showError("Geen transcript ontvangen")
@@ -201,6 +202,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
+        if (submitted || isFinishing || isDestroyed) return
         bestResult(partialResults)?.takeIf { it.isNotBlank() }?.let {
             transcriptText.text = it
         }
