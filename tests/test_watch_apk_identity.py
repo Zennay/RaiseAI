@@ -1,9 +1,11 @@
 import hashlib
 import importlib.util
 import io
+import os
 import pathlib
 import tempfile
 import unittest
+import warnings
 import zipfile
 from unittest import mock
 
@@ -70,11 +72,77 @@ class WatchApkIdentityTests(unittest.TestCase):
                     expected_source_revision="a" * 40,
                 )
 
+    def test_rejects_revision_spoofed_in_non_executable_dex_member(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("classes.dex", b"real-executable-dex-without-revision")
+                archive.writestr(
+                    "assets/fake.dex",
+                    b"spoof-" + REVISION.encode("ascii") + b"-payload",
+                )
+                archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "not embedded"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    def test_accepts_revision_in_secondary_executable_dex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("classes.dex", b"primary-without-revision")
+                archive.writestr(
+                    "classes2.dex",
+                    b"secondary-" + REVISION.encode("ascii") + b"-payload",
+                )
+                archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+
+            report = verifier.verify_apk(
+                path,
+                expected_source_revision=REVISION,
+            )
+
+            self.assertTrue(report["valid"])
+            self.assertEqual(report["revision_dex_files"], ["classes2.dex"])
+
     def test_rejects_wrong_abi(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "RaiseAI.apk"
             make_apk(path, abi="arm64-v8a")
             with self.assertRaisesRegex(verifier.ApkIdentityError, "ABI set mismatch"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    def test_rejects_duplicate_zip_member_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("classes.dex", b"first-" + REVISION.encode("ascii"))
+                    archive.writestr("classes.dex", b"second-" + REVISION.encode("ascii"))
+                    archive.writestr("lib/armeabi-v7a/libraise.so", b"native")
+
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "duplicate ZIP member"):
+                verifier.verify_apk(
+                    path,
+                    expected_source_revision=REVISION,
+                )
+
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking opens unavailable",
+    )
+    def test_rejects_fifo_apk_without_blocking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            os.mkfifo(path)
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "regular file"):
                 verifier.verify_apk(
                     path,
                     expected_source_revision=REVISION,
