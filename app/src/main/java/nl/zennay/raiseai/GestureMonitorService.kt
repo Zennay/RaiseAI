@@ -112,7 +112,9 @@ class GestureMonitorService : Service(), SensorEventListener {
 
         Log.i(TAG, "Raise detected similarity=${result.similarity}")
         CalibrationStore.recordTrigger(this, result.similarity)
-        vibrate()
+        if (!HapticFeedbackPolicy.run { vibrate() }) {
+            Log.w(TAG, "Haptic feedback unavailable; continuing assistant launch")
+        }
         val launched = PreferredAssistantLauncher.launchFromService(this)
         if (launched) {
             sessionGuard.markAssistantLaunched()
