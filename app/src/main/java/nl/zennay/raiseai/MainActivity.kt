@@ -294,11 +294,11 @@ class MainActivity : Activity(), SensorEventListener {
         }
 
         handler.postDelayed({ if (calibrationCapturing) statusText.text = "2…" }, 700)
-        handler.postDelayed({ if (calibrationCapturing) statusText.text = "1… hold it at your mouth" }, 1_400)
+        handler.postDelayed({ if (calibrationCapturing) statusText.text = "1… hold still at your mouth" }, 1_400)
         handler.postDelayed({
             if (calibrationCapturing) {
                 calibrationSamples.clear()
-                statusText.text = "Hold…"
+                statusText.text = "Hold still…"
             }
         }, 2_000)
         handler.postDelayed({ if (calibrationCapturing) finishCalibration() }, 2_900)
@@ -317,17 +317,31 @@ class MainActivity : Activity(), SensorEventListener {
         calibrationCapturing = false
         setCaptureControlsEnabled(true)
 
-        if (calibrationSamples.size < 3) {
-            toast("Not enough sensor samples — try again")
+        val assessment = MouthPoseCalibrationQuality.evaluate(calibrationSamples)
+        val pose = assessment.pose
+        if (pose == null) {
+            toast(
+                when (assessment.failure) {
+                    CalibrationFailure.TOO_FEW_SAMPLES ->
+                        "Calibration incomplete — hold still a little longer"
+                    CalibrationFailure.INVALID_SAMPLE ->
+                        "Calibration failed — invalid sensor sample"
+                    CalibrationFailure.GRAVITY_OUT_OF_RANGE ->
+                        "Calibration failed — hold the watch steady at your mouth"
+                    CalibrationFailure.TOO_MUCH_MOTION ->
+                        "Calibration too shaky — keep your wrist still"
+                    CalibrationFailure.UNSTABLE_ORIENTATION ->
+                        "Calibration unstable — keep one mouth pose"
+                    null ->
+                        "Calibration failed — try again"
+                }
+            )
             refreshUi()
             return
         }
 
-        val x = calibrationSamples.map { it[0] }.average().toFloat()
-        val y = calibrationSamples.map { it[1] }.average().toFloat()
-        val z = calibrationSamples.map { it[2] }.average().toFloat()
-        CalibrationStore.savePose(this, x, y, z)
-        toast("Mouth pose saved")
+        CalibrationStore.savePose(this, pose.x, pose.y, pose.z)
+        toast("Mouth pose saved · stable calibration")
 
         if (CalibrationStore.isMonitoringEnabled(this)) {
             stopService(Intent(this, GestureMonitorService::class.java))

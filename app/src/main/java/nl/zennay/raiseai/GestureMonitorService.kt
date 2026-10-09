@@ -40,8 +40,9 @@ class GestureMonitorService : Service(), SensorEventListener {
 
     private val powerStateRunnable = object : Runnable {
         override fun run() {
-            applyPowerState()
-            handler.postDelayed(this, POWER_STATE_CHECK_MS)
+            if (applyPowerState()) {
+                handler.postDelayed(this, POWER_STATE_CHECK_MS)
+            }
         }
     }
 
@@ -56,20 +57,28 @@ class GestureMonitorService : Service(), SensorEventListener {
         super.onCreate()
         startAsForeground()
 
-        mouthPose = CalibrationStore.loadPose(this)
         sessionGuard = AssistantSessionGuard(this)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         stateSinceElapsedMs = SystemClock.elapsedRealtime()
+        mouthPose = CalibrationStore.loadPose(this)
+
+        if (mouthPose == null) {
+            CalibrationStore.setMonitoringEnabled(this, false)
+            Log.e(TAG, "No valid mouth calibration found; stopping monitor")
+            stopSelf()
+            return
+        }
 
         if (accelerometer == null) {
+            CalibrationStore.setMonitoringEnabled(this, false)
             Log.e(TAG, "No accelerometer found; stopping service")
             stopSelf()
             return
         }
 
         CalibrationStore.setMonitoringEnabled(this, true)
-        applyPowerState(force = true)
+        if (!applyPowerState(force = true)) return
 
         handler.postDelayed(powerStateRunnable, POWER_STATE_CHECK_MS)
         handler.postDelayed(statsFlushRunnable, STATS_FLUSH_MS)
@@ -82,7 +91,14 @@ class GestureMonitorService : Service(), SensorEventListener {
             return START_NOT_STICKY
         }
         mouthPose = CalibrationStore.loadPose(this)
-        applyPowerState()
+        if (mouthPose == null) {
+            CalibrationStore.setMonitoringEnabled(this, false)
+            Log.e(TAG, "Mouth calibration is no longer valid; stopping monitor")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
+        if (!applyPowerState()) return START_NOT_STICKY
         return START_STICKY
     }
 
@@ -135,26 +151,35 @@ class GestureMonitorService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun applyPowerState(force: Boolean = false) {
+    private fun applyPowerState(force: Boolean = false): Boolean {
         val shouldPauseForSleep = CalibrationStore.isSleepDndPauseEnabled(this) &&
             SleepModePolicy.isSleepOrDndActive(this)
 
-        if (!force && shouldPauseForSleep == sleepPaused) return
+        if (!force && shouldPauseForSleep == sleepPaused) return true
         transitionRuntimeState(shouldPauseForSleep)
         sleepPaused = shouldPauseForSleep
 
         if (sleepPaused) {
             unregisterAccelerometer()
             updateNotification("Paused for Sleep / Do Not Disturb")
-        } else {
-            registerAccelerometer()
-            updateNotification("Raise your watch to your mouth for Raise AI")
+            return true
         }
+
+        if (!registerAccelerometer()) {
+            CalibrationStore.setMonitoringEnabled(this, false)
+            updateNotification("Accelerometer unavailable · monitoring stopped")
+            Log.e(TAG, "Accelerometer listener registration failed; stopping service")
+            stopSelf()
+            return false
+        }
+
+        updateNotification("Raise your watch to your mouth for Raise AI")
+        return true
     }
 
-    private fun registerAccelerometer() {
-        if (sensorRegistered) return
-        val sensor = accelerometer ?: return
+    private fun registerAccelerometer(): Boolean {
+        if (sensorRegistered) return true
+        val sensor = accelerometer ?: return false
 
         // ~10 Hz is enough for the current 180 ms hold detector. A small FIFO latency allows
         // hardware batching on devices that support it, reducing application-processor wakeups.
@@ -166,6 +191,7 @@ class GestureMonitorService : Service(), SensorEventListener {
             batchLatencyUs
         )
         Log.i(TAG, "Accelerometer registered; batching=${batchLatencyUs > 0}")
+        return sensorRegistered
     }
 
     private fun unregisterAccelerometer() {
