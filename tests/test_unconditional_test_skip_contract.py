@@ -47,13 +47,22 @@ def disabled_tests(source: str) -> list[tuple[int, str]]:
             name = function.attr
         if name in DISABLING_DECORATORS:
             return name
-        if call and decorator.args and isinstance(decorator.args[0], ast.Constant):
-            condition = decorator.args[0].value
-            if type(condition) is bool:
-                if name == "skipIf" and condition is True:
-                    return name
-                if name == "skipUnless" and condition is False:
-                    return name
+        if call:
+            condition_node = (
+                decorator.args[0] if decorator.args
+                else next(
+                    (keyword.value for keyword in decorator.keywords
+                     if keyword.arg == "condition"),
+                    None,
+                )
+            )
+            if isinstance(condition_node, ast.Constant):
+                condition = condition_node.value
+                if type(condition) is bool:
+                    if name == "skipIf" and condition is True:
+                        return name
+                    if name == "skipUnless" and condition is False:
+                        return name
         return None
 
     def test_class(node):
@@ -134,6 +143,18 @@ def test_b(): pass
         self.assertEqual(
             disabled_tests(source),
             [(3, "test_a: skipIf"), (5, "test_b: skipUnless")],
+        )
+
+    def test_keyword_constant_conditions_cannot_bypass_guard(self):
+        source = """from unittest import skipIf as if_skip, skipUnless as unless_skip
+@if_skip(condition=True, reason='always skipped')
+def test_one(): pass
+@unless_skip(condition=False, reason='always skipped')
+def test_two(): pass
+"""
+        self.assertEqual(
+            disabled_tests(source),
+            [(3, "test_one: skipIf"), (5, "test_two: skipUnless")],
         )
 
     def test_conditional_skips_remain_legal(self):
