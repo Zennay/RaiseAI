@@ -8,10 +8,44 @@ import android.util.Log
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val action = intent.action ?: return
-        if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        if (!CalibrationStore.isMonitoringEnabled(context)) return
-        if (CalibrationStore.loadPose(context) == null) return
+        val action = intent.action
+        if (!BootRecoveryPolicy.isRecoveryAction(action)) return
+
+        val monitoringResult = runCatching {
+            CalibrationStore.isMonitoringEnabled(context)
+        }
+        if (monitoringResult.isFailure) {
+            Log.w(
+                TAG,
+                "Could not read monitoring state after $action",
+                monitoringResult.exceptionOrNull()
+            )
+            return
+        }
+
+        val monitoringEnabled = monitoringResult.getOrDefault(false)
+        if (!monitoringEnabled) return
+
+        val calibrationResult = runCatching {
+            CalibrationStore.loadPose(context) != null
+        }
+        if (calibrationResult.isFailure) {
+            Log.w(
+                TAG,
+                "Could not read calibration state after $action",
+                calibrationResult.exceptionOrNull()
+            )
+            return
+        }
+
+        if (!BootRecoveryPolicy.shouldStart(
+                action = action,
+                monitoringEnabled = monitoringEnabled,
+                calibrated = calibrationResult.getOrDefault(false)
+            )
+        ) {
+            return
+        }
 
         val service = Intent(context, GestureMonitorService::class.java)
         runCatching {
