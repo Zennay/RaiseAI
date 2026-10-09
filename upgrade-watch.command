@@ -1,5 +1,11 @@
 #!/bin/bash
 set -euo pipefail
+
+if [ "$#" -ne 0 ]; then
+  echo "Usage: ./upgrade-watch.command"
+  exit 2
+fi
+
 cd "$(dirname "$0")"
 
 SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
