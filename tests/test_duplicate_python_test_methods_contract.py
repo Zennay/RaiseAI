@@ -53,6 +53,21 @@ class DuplicatePythonTestMethodsContract(unittest.TestCase):
                   "    def test_repeat(self): pass\n")
         self.assertEqual(duplicate_test_methods(source), ("Sample.test_repeat",))
 
+    def test_multiple_classes_and_repeated_duplicates_have_deterministic_output(self):
+        source = (
+            "class Zebra:\n"
+            "    def test_z(self): pass\n"
+            "    def test_z(self): pass\n"
+            "    def test_z(self): pass\n"
+            "class Alpha:\n"
+            "    def test_a(self): pass\n"
+            "    def test_a(self): pass\n"
+        )
+        self.assertEqual(
+            duplicate_test_methods(source),
+            ("Alpha.test_a", "Zebra.test_z", "Zebra.test_z"),
+        )
+
     def test_nested_classes_are_checked_independently(self):
         source = ("class Outer:\n    class Inner:\n"
                   "        def test_x(self): pass\n"
