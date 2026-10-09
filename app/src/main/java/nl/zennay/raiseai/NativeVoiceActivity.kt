@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -32,10 +33,15 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private lateinit var transcriptText: TextView
     private lateinit var detailText: TextView
     private lateinit var orb: View
+    private lateinit var speakerButton: Button
     private lateinit var fallbackButton: Button
 
     private var recognizer: SpeechRecognizer? = null
     private var orbAnimator: ObjectAnimator? = null
+    private var textToSpeech: TextToSpeech? = null
+    private var textToSpeechReady = false
+    private var pendingSpeech: String? = null
+    private var lastAnswer: String? = null
     private var submitted = false
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
     private val retryListeningRunnable = Runnable {
@@ -107,7 +113,17 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         column.addView(transcriptText, fullWidth(bottom = 10))
 
         detailText = textView(12f, Color.LTGRAY)
-        column.addView(detailText, fullWidth(bottom = 14))
+        column.addView(detailText, fullWidth(bottom = 10))
+
+        speakerButton = Button(this).apply {
+            text = "Read answer aloud"
+            isAllCaps = false
+            visibility = View.GONE
+            setOnClickListener {
+                lastAnswer?.let(::speakText)
+            }
+        }
+        column.addView(speakerButton, fullWidth(bottom = 8))
 
         fallbackButton = Button(this).apply {
             text = "Open Gemini fallback"
@@ -269,6 +285,16 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                                 append(response.executionReason ?: "nog niet gekoppeld")
                             }
                         }
+
+                        lastAnswer = response.answer
+                        speakerButton.visibility =
+                            if (response.answer.isNullOrBlank()) View.GONE else View.VISIBLE
+
+                        SpokenReplyPolicy.textFor(
+                            ResponseModeStore.load(this@NativeVoiceActivity),
+                            response.answer
+                        )?.let(::speakText)
+
                         fallbackButton.visibility = View.GONE
                     }
                 }
@@ -286,6 +312,46 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                     }
                 }
         }
+    }
+
+    private fun speakText(text: String) {
+        val normalized = text.trim()
+        if (normalized.isBlank()) return
+
+        pendingSpeech = normalized
+        if (textToSpeechReady) {
+            speakPending()
+            return
+        }
+        if (textToSpeech != null) return
+
+        textToSpeech = TextToSpeech(applicationContext) { status ->
+            mainHandler.post {
+                if (status != TextToSpeech.SUCCESS) {
+                    pendingSpeech = null
+                    return@post
+                }
+
+                val languageResult = textToSpeech?.setLanguage(Locale("nl", "NL"))
+                    ?: TextToSpeech.ERROR
+                if (
+                    languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED
+                ) {
+                    pendingSpeech = null
+                    return@post
+                }
+
+                textToSpeechReady = true
+                speakPending()
+            }
+        }
+    }
+
+    private fun speakPending() {
+        val text = pendingSpeech ?: return
+        pendingSpeech = null
+        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "raiseai-reply")
     }
 
     private fun setState(state: String, label: String) {
@@ -344,6 +410,11 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         orbAnimator?.cancel()
         recognizer?.cancel()
         recognizer?.destroy()
+        pendingSpeech = null
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
+        textToSpeechReady = false
         io.shutdownNow()
         NativeSessionState.set("idle")
         super.onDestroy()
