@@ -118,7 +118,7 @@ class TestExample(ut.TestCase):
 """
         self.assertEqual(
             disabled_tests(source),
-            [(4, "test_one: skip"), (6, "test_two: skip")],
+            [(5, "test_one: skip"), (7, "test_two: skip")],
         )
 
     def test_expected_failure_and_class_skip_are_detected(self):
