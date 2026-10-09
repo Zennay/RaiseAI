@@ -273,6 +273,7 @@ class ChatGptActivity : Activity() {
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 lastNavigationUrl = url
+                ChatSessionCache.markNavigationStarted(session)
                 WearBridge.markLoading()
                 showStatus(
                     if (isTrustedChatGptOrigin(url)) "ChatGPT laden…" else "Veilig inloggen…"
@@ -523,12 +524,12 @@ private object ChatSessionCache {
 
     private val handler = Handler(Looper.getMainLooper())
     private var cachedSession: GeckoSession? = null
-    private var pageAvailable = false
+    private val availability = ChatSessionAvailability()
 
     private val closeRunnable = Runnable {
         val closing = cachedSession
         cachedSession = null
-        pageAvailable = false
+        availability.reset()
 
         if (closing != null) {
             WearBridge.onSessionClosed(closing)
@@ -543,26 +544,26 @@ private object ChatSessionCache {
 
         val existing = cachedSession
         if (existing != null && existing.isOpen) {
-            return Lease(existing, needsInitialLoad = !pageAvailable)
+            return Lease(existing, needsInitialLoad = availability.needsInitialLoad)
         }
 
         val created = GeckoSession()
         created.open(runtime)
         cachedSession = created
-        pageAvailable = false
+        availability.reset()
         return Lease(created, needsInitialLoad = true)
     }
 
     fun markNavigationStarted(session: GeckoSession) {
-        if (cachedSession === session) pageAvailable = true
+        if (cachedSession === session) availability.markNavigationStarted()
     }
 
     fun markPageAvailable(session: GeckoSession) {
-        if (cachedSession === session) pageAvailable = true
+        if (cachedSession === session) availability.markPageAvailable()
     }
 
     fun markLoadFailed(session: GeckoSession) {
-        if (cachedSession === session) pageAvailable = false
+        if (cachedSession === session) availability.markLoadFailed()
     }
 
     fun releaseLater(session: GeckoSession) {
