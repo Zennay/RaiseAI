@@ -12,7 +12,7 @@ FROZEN_RUN = "37241768528"
 class FrozenVsTipDocumentationTests(unittest.TestCase):
     def test_tip_readme_heading_matches_version_file(self):
         version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
-        self.assertRegex(version, r"^\\d+\\.\\d+\\.\\d+$")
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
         heading = (ROOT / "README.md").read_text(encoding="utf-8").splitlines()[0]
         self.assertEqual(heading, f"# Raise AI v{version} — Galaxy Watch 7")
 
