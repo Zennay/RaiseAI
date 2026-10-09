@@ -2,32 +2,54 @@ import java.util.zip.ZipFile
 
 private val sourceRevisionPattern = Regex("^[0-9a-fA-F]{40}$")
 
+fun normalizeSourceRevisionOverride(raw: String?): String? {
+    if (raw == null) return null
+    val normalized = raw.trim()
+    return if (normalized.matches(sourceRevisionPattern)) {
+        normalized.lowercase()
+    } else {
+        "unknown"
+    }
+}
+
+fun selectSourceRevision(
+    override: String?,
+    checkedOutRevision: String?,
+    cleanWorkingTree: Boolean
+): String {
+    if (!cleanWorkingTree || override == "unknown") return "unknown"
+
+    val head = checkedOutRevision
+        ?.trim()
+        ?.lowercase()
+        ?.takeIf { it.matches(sourceRevisionPattern) }
+        ?: return "unknown"
+
+    return when {
+        override == null -> head
+        override == head -> override
+        else -> "unknown"
+    }
+}
+
 fun resolveSourceRevision(projectDir: java.io.File): String {
     return try {
-        val override = System.getenv("RAISE_BUILD_REVISION")
-            ?.trim()
-            ?.takeIf { it.matches(sourceRevisionPattern) }
-        if (override != null) return override.lowercase()
+        val override = normalizeSourceRevisionOverride(System.getenv("RAISE_BUILD_REVISION"))
 
-        val statusProcess = ProcessBuilder("git", "status", "--porcelain", "--untracked-files=normal")
-            .directory(projectDir)
-            .redirectErrorStream(true)
-            .start()
-        val status = statusProcess.inputStream.bufferedReader().use { it.readText() }
-        if (statusProcess.waitFor() != 0 || status.isNotBlank()) {
-            return "unknown"
+        val (statusCode, statusOutput) = runGit(
+            projectDir,
+            "status",
+            "--porcelain",
+            "--untracked-files=normal"
+        )
+        val cleanWorkingTree = statusCode == 0 && statusOutput.isBlank()
+        if (!cleanWorkingTree) {
+            return selectSourceRevision(override, null, false)
         }
 
-        val process = ProcessBuilder("git", "rev-parse", "HEAD")
-            .directory(projectDir)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        if (process.waitFor() == 0 && output.matches(sourceRevisionPattern)) {
-            output.lowercase()
-        } else {
-            "unknown"
-        }
+        val (headCode, headOutput) = runGit(projectDir, "rev-parse", "HEAD")
+        val checkedOutRevision = headOutput.takeIf { headCode == 0 }
+        selectSourceRevision(override, checkedOutRevision, true)
     } catch (_: Exception) {
         "unknown"
     }
@@ -93,15 +115,53 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
+val verifySourceRevisionOverridePolicy = tasks.register("verifySourceRevisionOverridePolicy") {
+    group = "verification"
+    description = "Locks fail-closed handling for explicit source-revision build overrides."
+
+    doLast {
+        check(normalizeSourceRevisionOverride(null) == null) {
+            "An absent source-revision override must continue to use repository provenance."
+        }
+        check(normalizeSourceRevisionOverride("A".repeat(40)) == "a".repeat(40)) {
+            "A valid explicit source revision must be normalized to lowercase."
+        }
+        check(normalizeSourceRevisionOverride("  " + "B".repeat(40) + "  ") == "b".repeat(40)) {
+            "Surrounding whitespace around a valid source revision must be ignored."
+        }
+        check(normalizeSourceRevisionOverride("") == "unknown") {
+            "An explicitly empty source-revision override must fail closed."
+        }
+        check(normalizeSourceRevisionOverride("not-a-revision") == "unknown") {
+            "A malformed source-revision override must fail closed."
+        }
+
+        val head = "c".repeat(40)
+        check(selectSourceRevision(null, head, true) == head) {
+            "A clean checkout without an override must use exact HEAD."
+        }
+        check(selectSourceRevision(head, head, true) == head) {
+            "A valid explicit override matching HEAD must be accepted."
+        }
+        check(selectSourceRevision("d".repeat(40), head, true) == "unknown") {
+            "A syntactically valid override that does not match HEAD must fail closed."
+        }
+        check(selectSourceRevision(head, head, false) == "unknown") {
+            "A dirty checkout must not emit an exact source revision."
+        }
+        check(selectSourceRevision(null, "not-a-revision", true) == "unknown") {
+            "An invalid checked-out revision must fail closed."
+        }
+    }
+}
+
 tasks.register("verifyEvidenceBuildIdentity") {
     group = "verification"
     description = "Fails unless the evidence-capable build is clean and pinned to the exact checked-out source revision."
 
     doLast {
-        val expected = System.getenv("RAISE_BUILD_REVISION")
-            ?.trim()
-            ?.lowercase()
-            ?.takeIf { it.matches(Regex("^[0-9a-f]{40}$")) }
+        val expected = normalizeSourceRevisionOverride(System.getenv("RAISE_BUILD_REVISION"))
+            ?.takeUnless { it == "unknown" }
 
         check(expected != null) {
             "RAISE_BUILD_REVISION must contain the exact 40-character Git revision for evidence-capable builds."
@@ -157,6 +217,9 @@ tasks.register("verifyWatchAbi") {
 }
 
 tasks.configureEach {
+    if (name == "preBuild") {
+        dependsOn(verifySourceRevisionOverridePolicy)
+    }
     if (name == "assembleDebug") {
         finalizedBy("verifyWatchAbi")
     }
