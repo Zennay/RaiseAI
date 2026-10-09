@@ -72,5 +72,28 @@ class QualityWorkflowActionPinningTests(unittest.TestCase):
                 )
 
 
+    def test_watch_workflow_token_is_explicitly_read_only(self):
+        text = WATCH.read_text(encoding="utf-8")
+        permissions = re.search(
+            r"(?ms)^permissions:\n((?:  [^\n]+\n)+)",
+            text,
+        )
+        self.assertIsNotNone(
+            permissions,
+            "Watch CI must declare explicit top-level token permissions",
+        )
+        self.assertEqual(
+            permissions.group(1).splitlines(),
+            ["  contents: read"],
+            "Watch CI must grant only repository read access",
+        )
+        self.assertNotRegex(
+            text,
+            r"(?m)^    permissions:",
+            "Watch CI jobs must not override the read-only workflow permission",
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()

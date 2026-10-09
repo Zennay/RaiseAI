@@ -54,6 +54,9 @@ on:
       - "tests/test_watch_apk_identity.py"
       - ".github/workflows/watch-app-test.yml"
 
+permissions:
+  contents: read
+
 concurrency:
   group: raise-watch-app-${{ github.ref }}
   cancel-in-progress: true
