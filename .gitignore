@@ -68,6 +68,10 @@ id_ed25519_sk
 /watch-sensor-traces-*.csv
 /sensor-traces.csv
 
+# Private physical Watch session evidence (never commit operator observations)
+operator-observations.json
+watch-e2e-evidence.json
+
 # Python-generated test/cache files
 __pycache__/
 *.py[cod]
