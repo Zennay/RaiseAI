@@ -80,6 +80,63 @@ def _bound_hooks(statement: ast.stmt) -> set[str]:
     return set()
 
 
+def _module_hook_rebindings(
+    body: list[ast.stmt], descendants: set[str],
+) -> list[tuple[int, str]]:
+    """Catch reassignment of TestCase hooks after the class statement.
+
+    Module-scope monkeypatching can bypass even an otherwise clean test class.
+    Inner function bodies are deliberately not interpreted as executed code.
+    """
+    violations: list[tuple[int, str]] = []
+
+    def hook_attribute(target: ast.AST) -> str | None:
+        if (
+            isinstance(target, ast.Attribute)
+            and target.attr in EXECUTION_HOOKS
+            and isinstance(target.value, ast.Name)
+            and target.value.id in descendants
+        ):
+            return f"{target.value.id}.{target.attr}"
+        return None
+
+    for stmt in _statements_in_scope(body):
+        targets: list[ast.expr] = []
+        if isinstance(stmt, (ast.Assign, ast.Delete)):
+            targets.extend(stmt.targets)
+        elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign)):
+            targets.append(stmt.target)
+        elif isinstance(stmt, (ast.For, ast.AsyncFor)):
+            targets.append(stmt.target)
+        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
+            targets.extend(
+                item.optional_vars for item in stmt.items
+                if item.optional_vars is not None
+            )
+        for target in targets:
+            for node in ast.walk(target):
+                name = hook_attribute(node)
+                if name is not None:
+                    violations.append((stmt.lineno, name))
+
+        if (
+            isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Call)
+            and isinstance(stmt.value.func, ast.Name)
+            and stmt.value.func.id == "setattr"
+            and len(stmt.value.args) >= 3
+            and isinstance(stmt.value.args[0], ast.Name)
+            and stmt.value.args[0].id in descendants
+            and isinstance(stmt.value.args[1], ast.Constant)
+            and stmt.value.args[1].value in EXECUTION_HOOKS
+        ):
+            violations.append((
+                stmt.lineno,
+                f"{stmt.value.args[0].id}.{stmt.value.args[1].value}",
+            ))
+    return violations
+
+
 def overridden_test_execution_hooks(source: str) -> list[tuple[int, str]]:
     """Find unsafe TestCase execution-hook bindings, including local subclasses."""
     tree = ast.parse(source)
@@ -125,6 +182,7 @@ def overridden_test_execution_hooks(source: str) -> list[tuple[int, str]]:
         for statement in _statements_in_scope(cls.body):
             for hook in _bound_hooks(statement):
                 violations.append((statement.lineno, f"{name}.{hook}"))
+    violations.extend(_module_hook_rebindings(tree.body, descendants))
     return sorted(set(violations))
 
 
@@ -204,6 +262,36 @@ class PythonUnittestExecutionOverrideContract(unittest.TestCase):
             "    def helper(self):\n"
             "        def _callTestMethod(): pass\n"
             "fixture = 'class Test(unittest.TestCase): def run(self): pass'\n"
+        )
+        self.assertEqual([], overridden_test_execution_hooks(source))
+
+    def test_post_definition_testcase_monkeypatching_is_rejected(self):
+        source = (
+            "import unittest\\n"
+            "class Hidden(unittest.TestCase):\\n"
+            "    def test_real(self): pass\\n"
+            "Hidden.run = lambda self, result: result\\n"
+            "setattr(Hidden, '_callTestMethod', lambda self, method: None)\\n"
+            "if True:\\n"
+            "    Hidden.debug = lambda self: None\\n"
+        )
+        self.assertEqual(
+            [(4, "Hidden.run"), (5, "Hidden._callTestMethod"),
+             (7, "Hidden.debug")],
+            overridden_test_execution_hooks(source),
+        )
+
+    def test_unrelated_module_hooks_and_function_locals_are_allowed(self):
+        source = (
+            "import unittest\\n"
+            "class Helper:\\n"
+            "    def run(self): pass\\n"
+            "class Safe(unittest.TestCase):\\n"
+            "    def test_live(self): pass\\n"
+            "Helper.run = 3\\n"
+            "def factory():\\n"
+            "    Safe.run = 5\\n"
+            "    setattr(Safe, 'debug', lambda self: None)\\n"
         )
         self.assertEqual([], overridden_test_execution_hooks(source))
 
