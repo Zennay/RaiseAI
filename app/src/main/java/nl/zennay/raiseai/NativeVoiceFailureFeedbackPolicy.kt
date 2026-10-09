@@ -36,7 +36,7 @@ internal object NativeVoiceFailureFeedbackPolicy {
     private val httpFailure = Regex("^gateway_http_([45][0-9]{2})$")
 
     fun describe(error: Throwable): Feedback {
-        val statusCode = if (error is IOException) {
+        val statusCode = if (error.javaClass == IOException::class.java) {
             error.message?.let { httpFailure.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
         } else {
             null
