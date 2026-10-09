@@ -247,6 +247,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                         response = response
                     )
                     mainHandler.post {
+                        if (isFinishing || isDestroyed) return@post
                         val backgroundAction =
                             response.executionEnabled &&
                                 response.answer == null &&
@@ -281,6 +282,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                         error = error
                     )
                     mainHandler.post {
+                        if (isFinishing || isDestroyed) return@post
                         showError("VPS niet bereikbaar")
                         detailText.text = error.message ?: "Onbekende netwerkfout"
                     }
