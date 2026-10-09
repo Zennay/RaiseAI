@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.media.AudioAttributes
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -466,16 +465,8 @@ class ChatGptActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun isTrustedChatGptOrigin(value: String): Boolean = runCatching {
-        val uri = Uri.parse(value)
-        val host = uri.host?.lowercase() ?: return@runCatching false
-        uri.scheme == "https" && (
-            host == "chatgpt.com" ||
-            host.endsWith(".chatgpt.com") ||
-            host == "chat.openai.com" ||
-            host.endsWith(".chat.openai.com")
-        )
-    }.getOrDefault(false)
+    private fun isTrustedChatGptOrigin(value: String): Boolean =
+        ChatGptOriginPolicy.isTrusted(value)
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()
