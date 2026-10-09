@@ -41,5 +41,19 @@ class ModuleTestFunctionShadowingContract(unittest.TestCase):
         source = "def test_z(): pass\ndef test_a(): pass\ndef test_z(): pass\nasync def test_a(): pass\n"
         self.assertEqual(duplicate_module_tests(source), ["test_a", "test_z"])
 
+    def test_decorated_duplicate_is_detected(self):
+        source = "@staticmethod\ndef test_a(): pass\n@staticmethod\nasync def test_a(): pass\n"
+        self.assertEqual(duplicate_module_tests(source), ["test_a"])
+
+    def test_non_test_functions_are_out_of_scope(self):
+        self.assertEqual(duplicate_module_tests("def helper(): pass\ndef helper(): pass\n"), [])
+
+    def test_triple_definition_reports_once(self):
+        source = "def test_a(): pass\ndef test_a(): pass\ndef test_a(): pass\n"
+        self.assertEqual(duplicate_module_tests(source), ["test_a"])
+
+    def test_nested_conditional_is_not_module_direct_definition(self):
+        source = "def test_x(): pass\nif True:\n    def test_x(): pass\n"
+        self.assertEqual(duplicate_module_tests(source), [])
 if __name__ == "__main__":
     unittest.main()
