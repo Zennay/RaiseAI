@@ -25,6 +25,22 @@ def _names(target: ast.AST) -> list[str]:
     return []
 
 
+def _named_expression_targets(expression: ast.AST) -> list[ast.AST]:
+    """Find class-scope walrus assignments without scanning nested local scopes."""
+    targets: list[ast.AST] = []
+
+    def visit(node: ast.AST) -> None:
+        if isinstance(node, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            return
+        if isinstance(node, ast.NamedExpr):
+            targets.append(node.target)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    visit(expression)
+    return targets
+
+
 def class_test_attribute_bindings(source: str) -> list[tuple[int, str, str]]:
     """Return (line, qualified attribute, operation) for suspicious bindings.
 
@@ -71,6 +87,21 @@ def class_test_attribute_bindings(source: str) -> list[tuple[int, str, str]]:
                         name = alias.asname or alias.name.split(".")[0]
                         if name.startswith("test_"):
                             violations.append((node.lineno, ".".join((*path, name)), "import"))
+                expressions: list[ast.AST] = []
+                if isinstance(node, ast.Expr):
+                    expressions = [node.value]
+                elif isinstance(node, (ast.If, ast.While)):
+                    expressions = [node.test]
+                elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                    if node.value is not None:
+                        expressions = [node.value]
+                elif isinstance(node, (ast.For, ast.AsyncFor)):
+                    expressions = [node.iter]
+                elif isinstance(node, (ast.With, ast.AsyncWith)):
+                    expressions = [item.context_expr for item in node.items]
+                for expression in expressions:
+                    record(node, path, _named_expression_targets(expression), "named expression")
+
                 elif isinstance(node, (ast.Try, getattr(ast, "TryStar", ast.Try))):
                     for handler in node.handlers:
                         if handler.name and handler.name.startswith("test_"):
@@ -150,6 +181,26 @@ class PythonTestAttributeBindingContract(unittest.TestCase):
                 (5, "TestExample.test_with", "with target"),
                 (7, "TestExample.test_error", "except target"),
                 (8, "TestExample.test_imported", "import"),
+            ],
+        )
+
+    def test_class_scope_walrus_cannot_hide_a_test_method(self):
+        source = (
+            "class TestExample:\\n"
+            "    if (test_in_condition := None): pass\\n"
+            "    (test_direct := 0)\\n"
+            "    ordinary = (test_in_rhs := 1)\\n"
+            "    def test_live(self):\\n"
+            "        (test_method_local := 2)\\n"
+            "    callable_local = lambda: (test_lambda_local := 3)\\n"
+            "    list_local = [(test_comprehension_local := x) for x in []]\\n"
+        )
+        self.assertEqual(
+            class_test_attribute_bindings(source),
+            [
+                (2, "TestExample.test_in_condition", "named expression"),
+                (3, "TestExample.test_direct", "named expression"),
+                (4, "TestExample.test_in_rhs", "named expression"),
             ],
         )
 
