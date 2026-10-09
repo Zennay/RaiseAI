@@ -33,6 +33,7 @@ TEXT_SUFFIXES = {
     ".yml",
 }
 EXACT_TEXT_PATHS = {".gitignore", "gradlew", "VERSION.txt"}
+APPROVED_BINARY_PATHS: set[str] = set()
 ALLOWED_CONTROL_CODEPOINTS = {0x0009, 0x000A}  # horizontal tab and LF
 ALLOWED_FORMAT_CODEPOINTS = {0x200C, 0x200D}  # ZWNJ and ZWJ
 
@@ -71,13 +72,13 @@ FORBIDDEN_INVISIBLE_CODEPOINTS = {
 }
 
 
-def tracked_reviewable_text_paths():
+def tracked_paths() -> list[str]:
     raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
-    return sorted(
-        item
-        for item in raw.decode("utf-8").split("\0")
-        if item and is_reviewable_text_path(item)
-    )
+    return sorted(item for item in raw.decode("utf-8").split("\0") if item)
+
+
+def tracked_reviewable_text_paths():
+    return [item for item in tracked_paths() if is_reviewable_text_path(item)]
 
 
 def validate_reviewable_text(raw: bytes, relative: str) -> None:
@@ -126,6 +127,40 @@ class SourceTextReviewIntegrityTests(unittest.TestCase):
         for relative in ("artifact.apk", "image.png", "archive.zip"):
             with self.subTest(relative=relative):
                 self.assertFalse(is_reviewable_text_path(relative))
+
+    def test_every_tracked_file_type_is_explicitly_classified(self):
+        paths = tracked_paths()
+        self.assertTrue(paths, "repository file discovery must not be empty")
+
+        unclassified = [
+            relative
+            for relative in paths
+            if not is_reviewable_text_path(relative)
+            and relative not in APPROVED_BINARY_PATHS
+        ]
+        self.assertEqual(
+            unclassified,
+            [],
+            "new opaque/binary tracked files require an explicit reviewed binary contract",
+        )
+
+        missing_approved = sorted(APPROVED_BINARY_PATHS.difference(paths))
+        self.assertEqual(
+            missing_approved,
+            [],
+            "approved binary paths must not retain stale allowlist entries",
+        )
+
+        misclassified_approved = sorted(
+            relative
+            for relative in APPROVED_BINARY_PATHS
+            if is_reviewable_text_path(relative)
+        )
+        self.assertEqual(
+            misclassified_approved,
+            [],
+            "approved binary paths must remain outside the reviewable-text surface",
+        )
 
     def test_reviewable_text_surface_is_nonempty_and_covers_critical_sources(self):
         paths = tracked_reviewable_text_paths()
