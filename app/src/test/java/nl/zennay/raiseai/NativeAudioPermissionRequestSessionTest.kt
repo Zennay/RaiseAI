@@ -66,6 +66,7 @@ class NativeAudioPermissionRequestSessionTest {
         session.beginRequest()
         session.invalidate()
         assertEquals(ignore, session.result())
+        assertFalse(session.beginRequest())
     }
 
     @Test fun explicitNewPromptAfterTerminalCallbackIsPermitted() {
@@ -77,14 +78,30 @@ class NativeAudioPermissionRequestSessionTest {
         assertEquals(ignore, session.result())
     }
 
-    @Test fun invalidationIsIdempotent() {
+    @Test fun invalidationIsTerminalAndIdempotent() {
         val session = NativeAudioPermissionRequestSession(expectedCode)
         session.beginRequest()
         session.invalidate()
         session.invalidate()
         assertEquals(ignore, session.result())
-        assertTrue(session.beginRequest())
+        assertFalse(session.beginRequest())
+        assertEquals(ignore, session.result())
+    }
+
+    @Test fun alreadyConsumedGrantCannotBeReplayedAfterTeardown() {
+        val session = NativeAudioPermissionRequestSession(expectedCode)
+        session.beginRequest()
         assertEquals(allow, session.result())
+        session.invalidate()
+        assertFalse(session.beginRequest())
+        assertEquals(ignore, session.result())
+    }
+
+    @Test fun invalidationBeforeAnyPromptPermanentlyRejectsPrompts() {
+        val session = NativeAudioPermissionRequestSession(expectedCode)
+        session.invalidate()
+        assertFalse(session.beginRequest())
+        assertEquals(ignore, session.result())
     }
 
     @Test fun unfamiliarGrantResultFailsClosedAndIsConsumed() {
