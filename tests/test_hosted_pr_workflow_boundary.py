@@ -12,6 +12,9 @@ WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 GITHUB_HOSTED_RUNNER_RE = re.compile(
     r"^(?:ubuntu|windows|macos)-[A-Za-z0-9][A-Za-z0-9._-]*$"
 )
+PINNED_GITHUB_HOSTED_RUNNER_RE = re.compile(
+    r"^(?:ubuntu-[0-9]{2}\.[0-9]{2}|windows-[0-9]{4}|macos-[0-9]+(?:-[A-Za-z0-9._-]+)?)$"
+)
 
 
 def workflow_paths(root=ROOT) -> list[Path]:
@@ -221,6 +224,57 @@ class HostedPullRequestWorkflowBoundaryTests(unittest.TestCase):
             0,
             "hosted PR boundary must inspect at least one GitHub-hosted PR job",
         )
+
+    def test_pull_request_non_self_hosted_runners_are_literal_version_pins(self):
+        inspected_jobs = 0
+
+        for path in workflow_paths():
+            relative = path.relative_to(ROOT).as_posix()
+            metadata = hosted_pr_metadata(path)
+            if "pull_request" not in metadata["events"]:
+                continue
+
+            for job in metadata["jobs"]:
+                labels = job["runner_labels"]
+                if not labels or "self-hosted" in labels:
+                    continue
+
+                inspected_jobs += 1
+                with self.subTest(workflow=relative, job=job["name"]):
+                    self.assertEqual(
+                        len(labels),
+                        1,
+                        f"{relative}:{job['name']}: non-self-hosted PR jobs must use "
+                        "one literal GitHub-hosted runner label",
+                    )
+                    self.assertRegex(
+                        labels[0],
+                        PINNED_GITHUB_HOSTED_RUNNER_RE,
+                        f"{relative}:{job['name']}: hosted PR runner must be a "
+                        "version-pinned ubuntu/windows/macos image, never *-latest "
+                        "or a dynamic expression",
+                    )
+
+        self.assertGreater(
+            inspected_jobs,
+            0,
+            "runner pin boundary must inspect at least one non-self-hosted PR job",
+        )
+
+    def test_runner_pin_regex_rejects_latest_and_dynamic_values(self):
+        for label in ("ubuntu-24.04", "windows-2025", "macos-15", "macos-15-large"):
+            with self.subTest(label=label):
+                self.assertRegex(label, PINNED_GITHUB_HOSTED_RUNNER_RE)
+
+        for label in (
+            "ubuntu-latest",
+            "windows-latest",
+            "macos-latest",
+            "${{ matrix.runner }}",
+            "custom-hosted-pool",
+        ):
+            with self.subTest(label=label):
+                self.assertIsNone(PINNED_GITHUB_HOSTED_RUNNER_RE.fullmatch(label))
 
     def test_semantic_scanner_distinguishes_hosted_and_self_hosted_jobs(self):
         fixture = """on: [push, pull_request]
