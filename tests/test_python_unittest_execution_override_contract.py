@@ -182,6 +182,41 @@ def overridden_test_execution_hooks(source: str) -> list[tuple[int, str]]:
         for statement in _statements_in_scope(cls.body):
             for hook in _bound_hooks(statement):
                 violations.append((statement.lineno, f"{name}.{hook}"))
+    def inherited_mixin_hooks(
+        mixin_name: str, visited: set[str],
+    ) -> list[tuple[int, str]]:
+        """Find hooks inherited from local mixins before the TestCase base."""
+        if mixin_name in visited or mixin_name not in classes:
+            return []
+        visited = visited | {mixin_name}
+        mixin = classes[mixin_name]
+        inherited = [
+            (statement.lineno, f"{mixin_name}.{hook}")
+            for statement in _statements_in_scope(mixin.body)
+            for hook in _bound_hooks(statement)
+        ]
+        for base in mixin.bases:
+            ancestor = base_name(base)
+            if ancestor in descendants:
+                break
+            if ancestor is not None:
+                inherited.extend(inherited_mixin_hooks(ancestor, visited))
+        return inherited
+
+    # In Python's method resolution order, class C(FakeRunner, TestCase)
+    # inherits FakeRunner.run before it can reach unittest.TestCase.run.
+    # C(TestCase, FakeRunner) does not; keep that safe ordering permitted.
+    for name, cls in classes.items():
+        if name not in descendants:
+            continue
+        for base in cls.bases:
+            ancestor = base_name(base)
+            if ancestor in descendants:
+                break
+            if ancestor is not None:
+                for line, hook in inherited_mixin_hooks(ancestor, set()):
+                    violations.append((line, f"{name} inherits {hook}"))
+
     violations.extend(_module_hook_rebindings(tree.body, descendants))
     return sorted(set(violations))
 
@@ -292,6 +327,43 @@ class PythonUnittestExecutionOverrideContract(unittest.TestCase):
             "def factory():\n"
             "    Safe.run = 5\n"
             "    setattr(Safe, 'debug', lambda self: None)\n"
+        )
+        self.assertEqual([], overridden_test_execution_hooks(source))
+
+    def test_mixin_ahead_of_testcase_can_silence_execution(self):
+        source = (
+            "import unittest as ut\n"
+            "class FakeRunner:\n"
+            "    def run(self, result=None): return result\n"
+            "class Hidden(FakeRunner, ut.TestCase):\n"
+            "    def test_real(self): self.fail('should execute')\n"
+        )
+        self.assertEqual(
+            [(3, "Hidden inherits FakeRunner.run")],
+            overridden_test_execution_hooks(source),
+        )
+
+    def test_transitively_inherited_mixin_hook_is_detected(self):
+        source = (
+            "from unittest import TestCase\n"
+            "class RootMixin:\n"
+            "    def _callTestMethod(self, method): return None\n"
+            "class Intermediate(RootMixin): pass\n"
+            "class Hidden(Intermediate, TestCase):\n"
+            "    def test_real(self): self.fail('not run')\n"
+        )
+        self.assertEqual(
+            [(3, "Hidden inherits RootMixin._callTestMethod")],
+            overridden_test_execution_hooks(source),
+        )
+
+    def test_mixin_after_testcase_does_not_replace_testcase_run(self):
+        source = (
+            "import unittest\n"
+            "class Helper:\n"
+            "    def run(self, result=None): return result\n"
+            "class Safe(unittest.TestCase, Helper):\n"
+            "    def test_real(self): self.assertTrue(True)\n"
         )
         self.assertEqual([], overridden_test_execution_hooks(source))
 
