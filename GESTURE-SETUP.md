@@ -1,5 +1,39 @@
 # Hands-free gesture setup (development builds)
 
+## Install this gesture version from a Mac Terminal
+
+The app improvements in PR #762 are packaged as development version **1.5.4** (versionCode 21). Do **not** use the normal `main`-branch update command for this version before that PR is merged.
+
+On your Mac (same Mac previously paired with the Galaxy Watch 7):
+
+```bash
+git clone --depth 1 --branch feature/gesture-permissions-setup-20261010 \
+  https://github.com/Zennay/RaiseAI.git "$HOME/RaiseAI-gesture-v1.5.4"
+cd "$HOME/RaiseAI-gesture-v1.5.4"
+bash ./install-gesture-watch.command
+```
+
+The script verifies that the checkout is exactly the latest feature-branch revision. It uses a successful GitHub Actions APK **for that exact revision** if GitHub CLI (`gh`) is installed and logged in; otherwise it builds **the same source** on your Mac with Android Studio's Java, Android SDK 35 and Gradle. It then installs via the repository's ABI-safe Watch installer, applies the two existing ADB app-op grants, launches Raise AI and checks versionCode 21 / versionName 1.5.4. It never deliberately falls back to an older `main` build.
+
+For a specific watch endpoint, run `bash ./install-gesture-watch.command 192.168.x.x:PORT`, or set `ANDROID_SERIAL` to the previously paired Watch ADB serial. If the Watch is not connected, enable **Wireless debugging** in developer options, pair it with this Mac using `adb pair IP:PAIRING_PORT`, then connect with `adb connect IP:DEBUG_PORT`. The installer can reuse an already-cached endpoint without re-pairing.
+
+Optional mode selection:
+
+```bash
+RAISE_INSTALL_FROM=ci bash ./install-gesture-watch.command    # exact green PR artifact only; gh auth login required
+RAISE_INSTALL_FROM=local bash ./install-gesture-watch.command # build this feature checkout on the Mac
+```
+
+If you have already cloned the feature before and the install script reports an outdated branch, update it **without overwriting local work**:
+
+```bash
+cd "$HOME/RaiseAI-gesture-v1.5.4"
+git pull --ff-only origin feature/gesture-permissions-setup-20261010
+bash ./install-gesture-watch.command
+```
+
+This installs an ordinary development build only. It is **not** the frozen v1.5.2 physical acceptance artifact tracked by issue #34.
+
 Raise AI defaults to **Gemini** on a fresh install. On the Watch, choose **Native Raise AI** only if you want its own VPS-backed voice flow. The gesture detector uses the accelerometer: it does not need a motion-sensor runtime permission.
 
 ## On the Watch
