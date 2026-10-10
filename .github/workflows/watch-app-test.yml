@@ -11,6 +11,7 @@ on:
       - "settings.gradle.kts"
       - "VERSION.txt"
       - "install-watch-apk.command"
+      - "install-gesture-watch.command"
       - "install-watch-windows.ps1"
       - "upgrade-watch.command"
       - "physical-validation.command"
@@ -36,6 +37,7 @@ on:
       - "settings.gradle.kts"
       - "VERSION.txt"
       - "install-watch-apk.command"
+      - "install-gesture-watch.command"
       - "install-watch-windows.ps1"
       - "upgrade-watch.command"
       - "physical-validation.command"
@@ -107,6 +109,7 @@ jobs:
           bash start-frozen-acceptance.command --help >/dev/null
           bash -n provision-watch-gateway.command
           bash -n install-watch-apk.command
+          bash -n install-gesture-watch.command
           bash -n upgrade-watch.command
           python3 -m py_compile tools/validate-watch-e2e-evidence.py tools/analyze-watch-sensor-traces.py tools/analyze-watch-sensor-trials.py tools/verify-watch-apk-identity.py tools/fetch-frozen-physical-handoff.py
 

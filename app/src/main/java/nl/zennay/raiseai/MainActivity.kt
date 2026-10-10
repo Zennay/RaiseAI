@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -123,6 +124,27 @@ class MainActivity : Activity(), SensorEventListener {
 
         calibrateButton = button("Calibrate mouth pose") { startCalibration() }
         column.addView(calibrateButton, matchWrap(bottom = 8))
+
+        column.addView(TextView(this).apply {
+            text = "Hands-free setup"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            gravity = android.view.Gravity.CENTER
+        }, matchWrap(top = 4, bottom = 6))
+
+        column.addView(button("Allow background AI launch") {
+            openBackgroundLaunchSettings()
+        }, matchWrap(bottom = 6))
+
+        column.addView(button("Enable usage access (optional)") {
+            openUsageAccessSettings()
+        }, matchWrap(bottom = 6))
+
+        column.addView(button("Allow microphone (Native AI)") {
+            requestMicrophonePermission()
+        }, matchWrap(bottom = 6))
+
+        addCaptureButton(column, "Test raise gesture · 4 sec (no AI)", "mouth_raise")
 
         column.addView(button(if (CalibrationStore.isSleepDndPauseEnabled(this)) "Sleep/DND pause: ON" else "Sleep/DND pause: OFF") {
             val next = !CalibrationStore.isSleepDndPauseEnabled(this)
@@ -261,13 +283,91 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     private fun startMonitoring() {
-        if (CalibrationStore.loadPose(this) == null) {
-            toast("Calibrate your mouth pose first")
+        when (RaiseMonitoringSetup.check(
+            calibrated = CalibrationStore.loadPose(this) != null,
+            backgroundLaunchAllowed = Settings.canDrawOverlays(this)
+        )) {
+            RaiseMonitoringSetup.Result.NEEDS_CALIBRATION -> {
+                toast("Calibrate your mouth pose first")
+                return
+            }
+            RaiseMonitoringSetup.Result.NEEDS_BACKGROUND_GRANT -> {
+                toast("Background launch permission required before enabling gestures")
+                openBackgroundLaunchSettings()
+                return
+            }
+            RaiseMonitoringSetup.Result.READY -> Unit
+        }
+
+        // Never claim monitoring is enabled if Android rejects the foreground service.
+        val started = runCatching {
+            startForegroundService(Intent(this, GestureMonitorService::class.java))
+            true
+        }.getOrElse {
+            toast("Could not start gesture monitoring")
+            false
+        }
+        if (started) CalibrationStore.setMonitoringEnabled(this, true)
+        refreshUi()
+    }
+
+    private fun openBackgroundLaunchSettings() {
+        if (Settings.canDrawOverlays(this)) {
+            toast("Background launch permission already granted")
+            refreshUi()
             return
         }
-        val intent = Intent(this, GestureMonitorService::class.java)
-        startForegroundService(intent)
-        CalibrationStore.setMonitoringEnabled(this, true)
+        // Some Wear OS versions have no UI for this permission. Never claim that
+        // opening settings granted it; the user must check status on returning.
+        val overlaySettings = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        val opened = runCatching { startActivity(overlaySettings) }.isSuccess
+        if (!opened) {
+            val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            if (runCatching { startActivity(appSettings) }.isFailure) {
+                toast("Wear OS cannot open permission settings; use the documented ADB setup")
+            } else {
+                toast("If this setting is absent on Wear OS, use the documented ADB setup")
+            }
+        }
+    }
+
+    private fun openUsageAccessSettings() {
+        if (AssistantSessionGuard(this).hasUsageAccess()) {
+            toast("Usage access already enabled")
+            return
+        }
+        if (runCatching {
+            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }.isFailure) {
+            toast("Usage access settings unavailable on this Watch")
+        }
+    }
+
+    private fun requestMicrophonePermission() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            toast("Raise AI microphone permission already granted")
+        } else {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO_SETUP)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_AUDIO_SETUP) return
+        val audioIndex = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
+        val granted = audioIndex >= 0 &&
+            grantResults.getOrNull(audioIndex) == PackageManager.PERMISSION_GRANTED
+        toast(if (granted) "Microphone allowed" else "Microphone still needs permission")
         refreshUi()
     }
 
@@ -461,7 +561,10 @@ class MainActivity : Activity(), SensorEventListener {
             append("\n")
             append(if (enabled) "● Monitoring on" else "○ Monitoring off")
             append("\n")
-            append(if (Settings.canDrawOverlays(this@MainActivity)) "✓ Hands-free Raise AI grant" else "○ Hands-free Raise AI grant missing")
+            append(if (Settings.canDrawOverlays(this@MainActivity)) "✓ Background AI launch allowed" else "○ Background launch blocked: grant permission")
+            append("\n")
+            append(if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED) "✓ Native AI microphone allowed" else "○ Native AI microphone permission missing")
             append("\n")
             append(if (AssistantSessionGuard(this@MainActivity).hasUsageAccess()) "✓ Assistant session guard" else "○ Session guard fallback: 30 sec")
             append("\n")
@@ -531,6 +634,7 @@ class MainActivity : Activity(), SensorEventListener {
 
     companion object {
         const val EXTRA_OPEN_CHATGPT_LOGIN = "open_chatgpt_login"
+        private const val REQUEST_AUDIO_SETUP = 101
         private const val TRACE_DURATION_MS = 4_000L
         private const val TRACE_SENSOR_SAMPLING_US = 100_000
     }
