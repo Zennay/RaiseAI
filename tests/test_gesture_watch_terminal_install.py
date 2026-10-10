@@ -61,7 +61,7 @@ class MacGestureInstallerTests(unittest.TestCase):
             printf '%s\\n' "$*" >> "$TEST_GH_LOG"
             case "$1 $2" in
               "auth status") exit 0 ;;
-              "run list") printf '%s\\n' "${FAKE_RUN_ID:-123}" ;;
+              "run list") printf '%s\\n' "${FAKE_RUN_ID-123}" ;;
               "run download")
                 while [ "$#" -gt 0 ]; do
                   if [ "$1" = "--dir" ]; then
