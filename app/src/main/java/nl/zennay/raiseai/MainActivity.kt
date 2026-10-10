@@ -144,10 +144,7 @@ class MainActivity : Activity(), SensorEventListener {
             requestMicrophonePermission()
         }, matchWrap(bottom = 6))
 
-        column.addView(button("Test raise gesture · 4 sec") {
-            toast("Raise your wrist to your mouth now; this test will not launch AI")
-            startTraceCapture("mouth_raise")
-        }, matchWrap(bottom = 8))
+        addCaptureButton(column, "Test raise gesture · 4 sec (no AI)", "mouth_raise")
 
         column.addView(button(if (CalibrationStore.isSleepDndPauseEnabled(this)) "Sleep/DND pause: ON" else "Sleep/DND pause: OFF") {
             val next = !CalibrationStore.isSleepDndPauseEnabled(this)
