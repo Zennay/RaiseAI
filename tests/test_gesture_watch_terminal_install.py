@@ -133,6 +133,22 @@ class MacGestureInstallerTests(unittest.TestCase):
             check=False,
         )
 
+    def test_local_upgrade_banner_braces_version_before_unicode_suffix(self) -> None:
+        # Under macOS Bash with nounset, unbraced `$VERSION…` can be
+        # interpreted as a different variable, aborting before Gradle starts.
+        upgrade = (ROOT / "upgrade-watch.command").read_text(encoding="utf-8")
+        safe_banner = 'echo "Building Raise AI v${VERSION}…"'
+        self.assertIn(safe_banner, upgrade)
+        self.assertNotIn('v$VERSION…', upgrade)
+        checked = subprocess.run(
+            ["bash", "-eu", "-c", 'VERSION=1.5.4; ' + safe_banner],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertEqual(checked.stdout.strip(), "Building Raise AI v1.5.4…")
+
     def test_script_parses_in_bash(self) -> None:
         completed = subprocess.run(
             ["bash", "-n", str(INSTALLER)], text=True, capture_output=True, check=False
