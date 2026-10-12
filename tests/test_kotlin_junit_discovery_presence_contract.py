@@ -8,7 +8,12 @@ from pathlib import Path
 import re
 import unittest
 
-from tests.test_kotlin_junit_disable_contract import kotlin_code_only
+# unittest.discover imports tests as top-level modules, whereas explicit
+# python -m unittest tests.<module> resolves the package-relative path.
+if __package__:
+    from .test_kotlin_junit_disable_contract import kotlin_code_only
+else:
+    from test_kotlin_junit_disable_contract import kotlin_code_only
 
 
 ROOT = Path(__file__).resolve().parents[1]
