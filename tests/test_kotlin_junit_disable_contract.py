@@ -23,6 +23,11 @@ JUNIT_IMPORT = re.compile(
     r"(org\.junit\.Ignore|org\.junit\.jupiter\.api\.Disabled)"
     r"(?:[ \t]+as[ \t]+([A-Za-z_][A-Za-z_0-9]*))?[ \t]*$"
 )
+JUNIT_TYPEALIAS = re.compile(
+    r"(?m)^[ \t]*(?:public[ \t]+|internal[ \t]+|private[ \t]+)?"
+    r"typealias[ \t]+([A-Za-z_][A-Za-z_0-9]*)[ \t]*="
+    r"[ \t]*([A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*)[ \t]*$"
+)
 
 
 def kotlin_code_only(source: str) -> str:
@@ -100,6 +105,20 @@ def disabled_junit_annotations(source: str) -> list[tuple[int, str]]:
         for match in JUNIT_IMPORT.finditer(code)
         if match.group(2) is not None
     }
+    # Annotation class typealiases are legal Kotlin and can suppress JUnit
+    # tests without an @Ignore literal at the call site. Resolve transitive
+    # aliases only when rooted in the two recognized JUnit disable markers.
+    for _ in range(64):
+        changed = False
+        for alias in JUNIT_TYPEALIAS.finditer(code):
+            name, target = alias.groups()
+            if target in DISABLED_JUNIT or target in {"Ignore", "Disabled"} or target in aliases:
+                if name not in aliases:
+                    aliases.add(name)
+                    changed = True
+        if not changed:
+            break
+
     violations: list[tuple[int, str]] = []
     for match in ANNOTATION.finditer(code):
         name = match.group(1)
@@ -169,6 +188,30 @@ class KotlinJunitDisableContract(unittest.TestCase):
             [(3, "Silent"), (5, "NoCoverage")],
             disabled_junit_annotations(source),
         )
+
+    def test_annotation_typealiases_cannot_bypass_junit_guard(self):
+        source = (
+            "import org.junit.Ignore as Hidden\n"
+            "typealias First = Hidden\n"
+            "internal typealias Second = First\n"
+            "@Second\n"
+            "class Suppressed\n"
+            "typealias Third = org.junit.jupiter.api.Disabled\n"
+            "@Third\n"
+            "class Muted\n"
+        )
+        self.assertEqual(
+            [(4, "Second"), (7, "Third")],
+            disabled_junit_annotations(source),
+        )
+
+    def test_unrelated_typealias_is_not_mistaken_for_junit_disable(self):
+        source = (
+            "typealias IgnoreLike = other.library.Ignore\n"
+            "@IgnoreLike\n"
+            "class Fixture\n"
+        )
+        self.assertEqual([], disabled_junit_annotations(source))
 
     def test_kotlin_annotation_use_site_target_is_detected(self):
         self.assertEqual(
