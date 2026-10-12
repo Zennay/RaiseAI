@@ -108,10 +108,13 @@ def disabled_junit_annotations(source: str) -> list[tuple[int, str]]:
     # Annotation class typealiases are legal Kotlin and can suppress JUnit
     # tests without an @Ignore literal at the call site. Resolve transitive
     # aliases only when rooted in the two recognized JUnit disable markers.
-    for _ in range(64):
+    typealiases = [match.groups() for match in JUNIT_TYPEALIAS.finditer(code)]
+    # In reverse-declared chains, only one ancestor resolves per pass. Bound
+    # convergence by the number of aliases rather than an arbitrary 64 so
+    # long chains never bypass an otherwise actionable @Ignore annotation.
+    for _ in range(len(typealiases) + 1):
         changed = False
-        for alias in JUNIT_TYPEALIAS.finditer(code):
-            name, target = alias.groups()
+        for name, target in typealiases:
             if target in DISABLED_JUNIT or target in {"Ignore", "Disabled"} or target in aliases:
                 if name not in aliases:
                     aliases.add(name)
@@ -202,6 +205,18 @@ class KotlinJunitDisableContract(unittest.TestCase):
         )
         self.assertEqual(
             [(4, "Second"), (7, "Third")],
+            disabled_junit_annotations(source),
+        )
+
+    def test_reverse_declared_long_alias_chain_cannot_hide_junit_disable(self):
+        declarations = [
+            f"typealias Alias{index} = "
+            + ("org.junit.Ignore" if index == 0 else f"Alias{index - 1}")
+            for index in range(72)
+        ]
+        source = "\n".join(reversed(declarations)) + "\n@Alias71\nclass Muted\n"
+        self.assertEqual(
+            [(73, "Alias71")],
             disabled_junit_annotations(source),
         )
 
