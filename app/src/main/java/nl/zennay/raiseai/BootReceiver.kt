@@ -22,7 +22,9 @@ class BootReceiver : BroadcastReceiver() {
             }
         if (!enabled) return
 
-        val calibrated = runCatching { CalibrationStore.loadPose(context) != null }
+        val calibrated = runCatching {
+            BootMonitoringRestorePolicy.hasUsableCalibration(CalibrationStore.loadPose(context))
+        }
             .getOrElse {
                 Log.w(TAG, "Could not load calibration after $action", it)
                 false
