@@ -13,6 +13,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
+LIFECYCLE_METHODS = frozenset({
+    "setUp", "tearDown", "setUpClass", "tearDownClass",
+    "asyncSetUp", "asyncTearDown",
+})
 
 
 def unawaited_test_coroutines(source: str) -> list[tuple[int, str]]:
@@ -44,9 +48,10 @@ def unawaited_test_coroutines(source: str) -> list[tuple[int, str]]:
             classes[statement.name] = statement
         elif (
             isinstance(statement, ast.AsyncFunctionDef)
-            and statement.name.startswith("test_")
+            and (statement.name.startswith("test_")
+                 or statement.name in {"setUpModule", "tearDownModule"})
         ):
-            # unittest never collects module-level async test functions.
+            # unittest does not await module-level async hooks or collect tests.
             violations.append((statement.lineno, f"<module>.{statement.name}"))
 
     def recognized_base(base: ast.expr, visiting: frozenset[str]) -> str | None:
@@ -81,7 +86,7 @@ def unawaited_test_coroutines(source: str) -> list[tuple[int, str]]:
             entry.name: entry
             for entry in cls.body
             if isinstance(entry, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and entry.name.startswith("test_")
+            and (entry.name.startswith("test_") or entry.name in LIFECYCLE_METHODS)
         }
 
     def effective_methods(cls: ast.ClassDef, seen: frozenset[str]):
@@ -97,11 +102,19 @@ def unawaited_test_coroutines(source: str) -> list[tuple[int, str]]:
         return methods
 
     for name, cls in classes.items():
-        if class_runner(cls, frozenset({name})) != "sync":
+        runner = class_runner(cls, frozenset({name}))
+        if runner is None:
             continue
         for method_name, method in effective_methods(cls, frozenset({name})).items():
-            if isinstance(method, ast.AsyncFunctionDef):
-                violations.append((method.lineno, f"{name}.{method_name}"))
+            if not isinstance(method, ast.AsyncFunctionDef):
+                continue
+            if method_name.startswith("test_") and runner == "async":
+                continue  # asyncio runner awaits coroutine test methods
+            if method_name in {"asyncSetUp", "asyncTearDown"} and runner == "async":
+                continue  # asyncio-specific hooks are the supported names
+            # Plain setUp/tearDown and class lifecycle hooks are always sync,
+            # even on IsolatedAsyncioTestCase.
+            violations.append((method.lineno, f"{name}.{method_name}"))
     return sorted(set(violations))
 
 
@@ -205,6 +218,72 @@ class UnawaitedUnittestCoroutinesContract(unittest.TestCase):
         )
         self.assertEqual(
             [(3, "Bad.test_wrong")],
+            unawaited_test_coroutines(source),
+        )
+
+    def test_plain_testcase_async_fixture_methods_are_not_awaited(self):
+        source = (
+            "import unittest\n"
+            "class Case(unittest.TestCase):\n"
+            "    async def setUp(self): pass\n"
+            "    async def tearDown(self): pass\n"
+            "    async def asyncSetUp(self): pass\n"
+            "    async def asyncTearDown(self): pass\n"
+        )
+        self.assertEqual(
+            [
+                (3, "Case.setUp"), (4, "Case.tearDown"),
+                (5, "Case.asyncSetUp"), (6, "Case.asyncTearDown"),
+            ],
+            unawaited_test_coroutines(source),
+        )
+
+    def test_isolated_asyncio_specific_hooks_are_awaited(self):
+        source = (
+            "from unittest import IsolatedAsyncioTestCase\n"
+            "class Case(IsolatedAsyncioTestCase):\n"
+            "    async def asyncSetUp(self): pass\n"
+            "    async def asyncTearDown(self): pass\n"
+            "    async def test_genuine(self): pass\n"
+        )
+        self.assertEqual([], unawaited_test_coroutines(source))
+
+    def test_isolated_asyncio_regular_fixture_hooks_remain_synchronous(self):
+        source = (
+            "import unittest\n"
+            "class Case(unittest.IsolatedAsyncioTestCase):\n"
+            "    async def setUp(self): pass\n"
+            "    async def tearDown(self): pass\n"
+            "    async def setUpClass(cls): pass\n"
+            "    async def tearDownClass(cls): pass\n"
+        )
+        self.assertEqual(
+            [
+                (3, "Case.setUp"), (4, "Case.tearDown"),
+                (5, "Case.setUpClass"), (6, "Case.tearDownClass"),
+            ],
+            unawaited_test_coroutines(source),
+        )
+
+    def test_module_async_fixture_hooks_are_never_awaited(self):
+        source = (
+            "async def setUpModule(): pass\n"
+            "async def tearDownModule(): pass\n"
+        )
+        self.assertEqual(
+            [(1, "<module>.setUpModule"), (2, "<module>.tearDownModule")],
+            unawaited_test_coroutines(source),
+        )
+
+    def test_inherited_async_fixture_method_is_rejected(self):
+        source = (
+            "import unittest\n"
+            "class Mixin:\n"
+            "    async def setUp(self): pass\n"
+            "class Case(Mixin, unittest.TestCase): pass\n"
+        )
+        self.assertEqual(
+            [(3, "Case.setUp")],
             unawaited_test_coroutines(source),
         )
 
