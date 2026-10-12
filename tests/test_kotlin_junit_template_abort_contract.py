@@ -1,6 +1,6 @@
 """Detect JUnit runtime skips hidden inside *executable* Kotlin string templates.
 
-A Kotlin string literal's text is inert, but expressions inside \${...}
+A Kotlin string literal's text is inert, but expressions inside ${...}
 actually execute. The JUnit abort scanner correctly ignores quoted fixtures
 and therefore cannot see an Assume call inside an interpolation expression.
 This additional contract inspects only executable template expressions.
@@ -75,7 +75,7 @@ def kotlin_template_expression_spans(source: str) -> list[tuple[int, int]]:
             if not raw and source[index] == "\\":
                 index += 2
                 continue
-            if source.startswith("\${", index):
+            if source.startswith("${", index):
                 expression_start = index + 2
                 expression_end = scan_code(expression_start, closing=True)
                 spans.append((expression_start, expression_end))
@@ -144,7 +144,7 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
         self.assertEqual([], violations, "\n".join(violations))
 
     def test_executed_junit4_assume_inside_regular_interpolation_is_rejected(self):
-        source = 'val s = "\${org.junit.Assume.assumeTrue(false)}"\n'
+        source = 'val s = "${org.junit.Assume.assumeTrue(false)}"\n'
         self.assertEqual(
             [(1, "org.junit.Assume.assumeTrue")],
             junit_template_runtime_aborts(source),
@@ -153,7 +153,7 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
     def test_imported_class_alias_inside_template_is_rejected(self):
         source = (
             "import org.junit.jupiter.api.Assumptions as Gate\n"
-            'val s = "\${Gate.assumeFalse(true)}"\n'
+            'val s = "${Gate.assumeFalse(true)}"\n'
         )
         self.assertEqual(
             [(2, "Gate.assumeFalse")],
@@ -162,7 +162,7 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
 
     def test_direct_abort_inside_raw_template_is_rejected(self):
         source = (
-            'val s = """\${org.opentest4j.TestAbortedException("skip")}"""\n'
+            'val s = """${org.opentest4j.TestAbortedException("skip")}"""\n'
         )
         self.assertEqual(
             [(1, "org.opentest4j.TestAbortedException")],
@@ -172,13 +172,13 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
     def test_transitive_alias_remains_resolved_inside_interpolation(self):
         source = (
             "typealias Gate = org.junit.Assume\n"
-            'val s = "\${Gate.assumeNotNull(null)}"\n'
+            'val s = "${Gate.assumeNotNull(null)}"\n'
         )
         self.assertEqual([(2, "Gate.assumeNotNull")], junit_template_runtime_aborts(source))
 
     def test_nested_expression_braces_do_not_hide_an_assume_call(self):
         source = (
-            'val s = "\${if (false) { org.junit.Assume.assumeTrue(false) } else { Unit }}"\n'
+            'val s = "${if (false) { org.junit.Assume.assumeTrue(false) } else { Unit }}"\n'
         )
         self.assertEqual(
             [(1, "org.junit.Assume.assumeTrue")],
@@ -187,7 +187,7 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
 
     def test_nested_string_interpolation_inside_expression_is_scanned(self):
         source = (
-            'val s = "\${"inner \${org.junit.Assume.assumeTrue(false)}"}"\n'
+            'val s = "${"inner ${org.junit.Assume.assumeTrue(false)}"}"\n'
         )
         self.assertEqual(
             [(1, "org.junit.Assume.assumeTrue")],
@@ -195,11 +195,11 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
         )
 
     def test_escaped_dollar_in_regular_string_is_safe_literal(self):
-        source = 'val s = "\\\${org.junit.Assume.assumeTrue(false)}"\n'
+        source = 'val s = "\\${org.junit.Assume.assumeTrue(false)}"\n'
         self.assertEqual([], junit_template_runtime_aborts(source))
 
     def test_backslash_does_not_escape_dollar_in_raw_kotlin_string(self):
-        source = 'val s = """\\\${org.junit.Assume.assumeTrue(false)}"""\n'
+        source = 'val s = """\\${org.junit.Assume.assumeTrue(false)}"""\n'
         self.assertEqual(
             [(1, "org.junit.Assume.assumeTrue")],
             junit_template_runtime_aborts(source),
@@ -211,8 +211,8 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
 
     def test_inert_quoted_and_commented_phrases_are_not_code(self):
         source = (
-            '// val fake = "\${org.junit.Assume.assumeTrue(false)}"\n'
-            '/* val fake = """\${org.junit.Assume.assumeFalse(true)}""" */\n'
+            '// val fake = "${org.junit.Assume.assumeTrue(false)}"\n'
+            '/* val fake = """${org.junit.Assume.assumeFalse(true)}""" */\n'
             'val fake = "org.junit.Assume.assumeTrue(false)"\n'
         )
         self.assertEqual([], junit_template_runtime_aborts(source))
@@ -220,25 +220,25 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
     def test_unrelated_library_assumption_names_are_not_junit(self):
         source = (
             "import other.library.Assume\n"
-            'val s = "\${Assume.assumeTrue(false)}"\n'
+            'val s = "${Assume.assumeTrue(false)}"\n'
         )
         self.assertEqual([], junit_template_runtime_aborts(source))
 
     def test_unclosed_expression_is_rejected(self):
         with self.assertRaises(ValueError):
-            kotlin_template_expression_spans('val broken = "\${something"')
+            kotlin_template_expression_spans('val broken = "${something"')
 
     def test_unclosed_nested_comment_is_rejected(self):
         with self.assertRaises(ValueError):
             kotlin_template_expression_spans(
-                'val s = "\${ /* not closed }"\n'
+                'val s = "${ /* not closed }"\n'
             )
 
     def test_multiline_raw_template_reports_real_source_line(self):
         source = (
             'val raw = """first\n'
             "second\n"
-            '\${org.junit.Assume.assumeTrue(false)}\n'
+            '${org.junit.Assume.assumeTrue(false)}\n'
             'last"""\n'
         )
         self.assertEqual(
@@ -247,7 +247,7 @@ class KotlinJunitTemplateAbortContract(unittest.TestCase):
         )
 
     def test_extracted_template_span_excludes_delimiters(self):
-        source = 'val x = "\${doWork(2)}"\n'
+        source = 'val x = "${doWork(2)}"\n'
         spans = kotlin_template_expression_spans(source)
         self.assertEqual(["doWork(2)"], [source[a:b] for a, b in spans])
 
