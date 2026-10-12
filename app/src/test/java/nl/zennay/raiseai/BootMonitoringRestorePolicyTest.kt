@@ -78,4 +78,33 @@ class BootMonitoringRestorePolicyTest {
             decision(enabled = true, calibrated = true, backgroundGranted = false)
         )
     }
+
+    @Test
+    fun validUnitAndSlightlyRoundedCalibrationRemainUsable() {
+        assertEquals(true, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, 0f, 1f)))
+        assertEquals(true, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0.6f, 0.8f, 0f)))
+        assertEquals(true, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0.61f, 0.79f, 0.02f)))
+    }
+
+    @Test
+    fun absentAndZeroCalibrationCannotRestoreMonitoring() {
+        assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(null))
+        assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, 0f, 0f)))
+    }
+
+    @Test
+    fun nonFiniteCalibrationNeverQualifiesForBootRestore() {
+        for (bad in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+            assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(bad, 0f, 1f)))
+            assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, bad, 1f)))
+            assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, 1f, bad)))
+        }
+    }
+
+    @Test
+    fun implausiblyLargeOrSmallCalibrationIsRejected() {
+        assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, 0f, 0.1f)))
+        assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, 0f, 10f)))
+        assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(Float.MAX_VALUE, 0f, 0f)))
+    }
 }
