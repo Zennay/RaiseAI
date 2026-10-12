@@ -12,9 +12,16 @@ the Python quality test tree. It fails for:
   local subclasses (including imported module/class aliases).
 - Async `test_*` methods inherited from local mixins by synchronous cases.
 - Top-level async `test_*` functions, which unittest does not discover.
+- Async `setUp` / `tearDown` / `setUpClass` / `tearDownClass` hooks, which are
+  not awaited even by `IsolatedAsyncioTestCase`.
+- Misplaced `asyncSetUp` / `asyncTearDown` on synchronous `TestCase`, or
+  inherited coroutine lifecycle hooks from local mixins.
+- Async module-level `setUpModule` / `tearDownModule`, which unittest does
+  not await.
 - Cases that select a synchronous `TestCase` base ahead of the asyncio base.
 
-It permits `unittest.IsolatedAsyncioTestCase` and local derived suites,
+It permits coroutine tests and `asyncSetUp` / `asyncTearDown` on
+`unittest.IsolatedAsyncioTestCase` and local derived suites,
 ordinary synchronous `test_*` methods, helper coroutines without a test
 prefix and source that contains examples only in strings. AST parse errors
 fail closed.
