@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   analyzer-quality:
-    runs-on: [self-hosted, linux, x64, vps-bb300bba]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       PYTHONDONTWRITEBYTECODE: "1"
@@ -34,13 +34,13 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Verify exact revision
+      - name: Verify exact revision on hosted runner
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"
           test -z "$(git status --porcelain --untracked-files=normal)"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
