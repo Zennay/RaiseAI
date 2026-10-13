@@ -30,10 +30,12 @@ internal object BootMonitoringRestorePolicy {
     fun decide(
         monitoringEnabled: Boolean,
         calibrated: Boolean,
-        backgroundLaunchGranted: Boolean
+        backgroundLaunchGranted: Boolean,
+        accelerometerAvailable: Boolean
     ): Decision = when {
         !monitoringEnabled -> Decision.SKIP
-        !calibrated || !backgroundLaunchGranted -> Decision.DISABLE_UNUSABLE_MONITORING
+        !calibrated || !backgroundLaunchGranted || !accelerometerAvailable ->
+            Decision.DISABLE_UNUSABLE_MONITORING
         else -> Decision.START
     }
 
