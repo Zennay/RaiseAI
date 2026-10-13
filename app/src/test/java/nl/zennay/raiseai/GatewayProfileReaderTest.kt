@@ -74,7 +74,7 @@ class GatewayProfileReaderTest {
         val validPin = "ab".repeat(32)
         val file = write(
             "pin-control.properties",
-            "url=https://watch.example\ntoken=$token\nspki_sha256=\${validPin}\\n\n"
+            "url=https://watch.example\ntoken=$token\nspki_sha256=${validPin}\\n\n"
         )
         assertNull(GatewayProfileReader.read(file))
     }
