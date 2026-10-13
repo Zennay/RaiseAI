@@ -52,12 +52,15 @@ internal object GatewayProfileReader {
                     }
                 }
                 ByteArrayInputStream(bytes).use(properties::load)
-                if (properties.duplicateKey) return null
-                GatewaySettingsPolicy.parse(
-                    properties.getProperty("url"),
-                    properties.getProperty("token"),
-                    properties.getProperty("spki_sha256")
-                )
+                if (properties.duplicateKey) {
+                    null
+                } else {
+                    GatewaySettingsPolicy.parse(
+                        properties.getProperty("url"),
+                        properties.getProperty("token"),
+                        properties.getProperty("spki_sha256")
+                    )
+                }
             }
         }
     } catch (_: Exception) {
