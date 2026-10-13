@@ -13,11 +13,13 @@ import java.net.URISyntaxException
  */
 internal object GatewaySettingsPolicy {
     fun parse(rawUrl: String?, rawToken: String?, rawPin: String?): GatewaySettings? {
-        val url = rawUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val token = rawToken?.trim()?.takeIf { it.length >= 32 } ?: return null
+        if (rawUrl == null || rawUrl.any { Character.isISOControl(it) }) return null
+        val url = rawUrl.trim().takeIf { it.isNotEmpty() } ?: return null
+        if (rawToken == null || rawToken.any { Character.isISOControl(it) }) return null
+        val token = rawToken.trim().takeIf { it.length >= 32 } ?: return null
 
         // Header values must never contain embedded whitespace/control bytes.
-        if (token.any { it.isWhitespace() || it.isISOControl() }) return null
+        if (token.any { it.isWhitespace() }) return null
 
         val origin = try {
             URI(url)
@@ -27,6 +29,8 @@ internal object GatewaySettingsPolicy {
 
         if (origin.scheme != "https" ||
             origin.host.isNullOrBlank() ||
+            origin.rawAuthority.isNullOrBlank() ||
+            origin.rawAuthority.endsWith(":") ||
             origin.rawUserInfo != null ||
             origin.rawQuery != null ||
             origin.rawFragment != null ||
