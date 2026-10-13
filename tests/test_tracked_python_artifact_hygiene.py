@@ -53,7 +53,7 @@ class TrackedPythonArtifactHygieneTests(unittest.TestCase):
         ])
 
     def test_git_index_discovery_rejects_truncated_and_invalid_utf8(self):
-        for raw in (b"", b"file.py", b"\\xff\\0"):
+        for raw in (b"", b"file.py", b"\xff\0"):
             with self.subTest(raw=raw):
                 with mock.patch("subprocess.check_output", return_value=raw):
                     with self.assertRaises((ValueError, UnicodeDecodeError)):
@@ -61,7 +61,7 @@ class TrackedPythonArtifactHygieneTests(unittest.TestCase):
 
     def test_git_index_discovery_decodes_nul_delimited_paths(self):
         with mock.patch(
-            "subprocess.check_output", return_value=b"src/main.py\\0tests/check.py\\0"
+            "subprocess.check_output", return_value=b"src/main.py\0tests/check.py\0"
         ):
             self.assertEqual(tracked_paths(), ["src/main.py", "tests/check.py"])
 
