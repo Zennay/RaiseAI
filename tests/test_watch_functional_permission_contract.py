@@ -145,7 +145,7 @@ class WatchFunctionalPermissionContract(unittest.TestCase):
     def test_additional_unrelated_optional_permission_remains_allowed(self):
         def change(root):
             ET.SubElement(root, "uses-permission", {
-                ANDROID + "name": "android.permission.VIBRATE",
+                ANDROID + "name": "android.permission.NFC",
             })
         self.assertEqual([], self.changed(change))
 
