@@ -13,8 +13,8 @@ import java.net.URISyntaxException
  */
 internal object GatewaySettingsPolicy {
     private const val MAX_ORIGIN_CHARS = 2_048
-    private const val MAX_TOKEN_CHARS = 512
-    private val BEARER_TOKEN = Regex("^[A-Za-z0-9._~+/-]+={0,2}$")
+    private const val MAX_TOKEN_CHARS = 4_096
+    private val SAFE_HEADER_TOKEN = Regex("^[!-~]+$")
 
     fun parse(rawUrl: String?, rawToken: String?, rawPin: String?): GatewaySettings? {
         if (rawUrl == null || rawUrl.any { Character.isISOControl(it) }) return null
@@ -23,7 +23,7 @@ internal object GatewaySettingsPolicy {
         val token = rawToken.trim().takeIf { it.length in 32..MAX_TOKEN_CHARS } ?: return null
 
         // Header values must never contain embedded whitespace/control bytes.
-        if (!BEARER_TOKEN.matches(token)) return null
+        if (!SAFE_HEADER_TOKEN.matches(token)) return null
 
         val origin = try {
             URI(url)
