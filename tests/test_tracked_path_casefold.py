@@ -28,7 +28,13 @@ def validate_portable_paths(paths: list[str]) -> None:
         files.add(folded)
         for index in range(1, len(parts)):
             directory = "/".join(parts[:index])
-            directories.setdefault(directory.casefold(), directory)
+            folded_directory = directory.casefold()
+            existing_directory = directories.get(folded_directory)
+            if existing_directory is not None and existing_directory != directory:
+                raise ValueError(
+                    f"case-insensitive directory collision: {existing_directory!r} and {directory!r}"
+                )
+            directories[folded_directory] = directory
     for folded in files.intersection(directories):
         raise ValueError(f"file/directory path collision: {seen[folded]!r} and {directories[folded]!r}")
 
@@ -54,6 +60,10 @@ class TrackedPathCasefoldTests(unittest.TestCase):
     def test_rejects_directory_case_collision(self):
         with self.assertRaisesRegex(ValueError, "case-insensitive path collision"):
             validate_portable_paths(["Src/main.kt", "src/main.kt"])
+
+    def test_rejects_directory_case_alias_with_distinct_children(self):
+        with self.assertRaisesRegex(ValueError, "case-insensitive directory collision"):
+            validate_portable_paths(["Src/first.kt", "src/second.kt"])
 
     def test_rejects_unicode_casefold_collision(self):
         with self.assertRaisesRegex(ValueError, "case-insensitive path collision"):
