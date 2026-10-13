@@ -24,6 +24,14 @@ internal class TtsStartupGate {
         return true
     }
 
+    /** Allows retry when an initialized engine subsequently refuses to speak. */
+    fun invalidateReady(): Boolean {
+        if (state != State.READY) return false
+        state = State.IDLE
+        generation += 1
+        return true
+    }
+
     fun isReady(): Boolean = state == State.READY
 
     fun close() {
