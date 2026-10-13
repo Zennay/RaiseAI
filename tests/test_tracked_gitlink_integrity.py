@@ -63,6 +63,13 @@ class GitlinkIntegrityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gitlinks(entry)
 
+    def test_rejects_relative_traversal_and_empty_path_components(self):
+        for name in (b"../private", b"safe/../private", b"safe//file", b"./file"):
+            with self.subTest(name=name):
+                entry = b"100644 " + b"a" * 40 + b" 0\t" + name + b"\0"
+                with self.assertRaisesRegex(ValueError, "invalid tracked path"):
+                    gitlinks(entry)
+
     def test_rejects_unterminated_index_entry(self):
         entry = b"100644 " + b"a" * 40 + b" 0\tREADME.md"
         with self.assertRaises(ValueError):
