@@ -23,9 +23,16 @@ class AccelerometerEventStreamIntegrationTest {
         val baseNs = 20_000_000_000L
         var accepted = 0
 
-        fun deliver(x: Float, y: Float, z: Float, timeMs: Long): Boolean {
+        fun deliver(
+            x: Float,
+            y: Float,
+            z: Float,
+            timeMs: Long,
+            arrivalMs: Long = timeMs + 250L
+        ): Boolean {
             val timestampNs = baseNs + timeMs * 1_000_000L
-            val nowNs = timestampNs + 250_000_000L // Current 250 ms FIFO allowance.
+            // Arrival time must never move backwards for an out-of-order sensor batch.
+            val nowNs = baseNs + arrivalMs * 1_000_000L
             if (!policy.accept(floatArrayOf(x, y, z), timestampNs, nowNs)) return false
             accepted++
             return detector.onAccelerometer(x, y, z, timeMs, pose).triggered
@@ -39,8 +46,8 @@ class AccelerometerEventStreamIntegrationTest {
 
         // These can occur in a broken/replayed batch, but must never perturb detector state.
         assertFalse(deliver(7f, 0f, 7f, 450L))
-        assertFalse(deliver(0f, 0f, 9.81f, 425L))
-        assertFalse(deliver(Float.NaN, 0f, 9.81f, 475L))
+        assertFalse(deliver(0f, 0f, 9.81f, 425L, arrivalMs = 700L))
+        assertFalse(deliver(Float.NaN, 0f, 9.81f, 475L, arrivalMs = 725L))
         assertEquals(beforeBadBatch, accepted)
 
         deliver(4f, 0f, 10f, 500L)
