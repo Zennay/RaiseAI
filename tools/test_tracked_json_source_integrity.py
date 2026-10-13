@@ -15,7 +15,9 @@ MAX_BYTES = 2 * 1024 * 1024
 
 
 def validate_json_source(path: Path, *, max_bytes: int = MAX_BYTES) -> None:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+        raise ValueError("safe no-follow/nonblocking JSON source reads unavailable")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
     fd = os.open(path, flags)
     try:
         info = os.fstat(fd)
@@ -27,7 +29,7 @@ def validate_json_source(path: Path, *, max_bytes: int = MAX_BYTES) -> None:
             raw = source.read(max_bytes + 1)
         if len(raw) > max_bytes:
             raise ValueError("JSON source exceeds size bound")
-        if raw.startswith(b"\\xef\\xbb\\xbf") or b"\\x00" in raw:
+        if raw.startswith(b"\xef\xbb\xbf") or b"\x00" in raw:
             raise ValueError("JSON source contains forbidden bytes")
         raw.decode("utf-8", errors="strict")
     finally:
