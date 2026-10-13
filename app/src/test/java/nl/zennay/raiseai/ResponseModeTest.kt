@@ -2,6 +2,7 @@ package nl.zennay.raiseai
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ResponseModeTest {
@@ -45,8 +46,19 @@ class ResponseModeTest {
         val spoken = SpokenReplyPolicy.textFor(ResponseMode.SHORT_SPOKEN, longAnswer)
 
         requireNotNull(spoken)
-        assert(spoken.length <= 221)
-        assert(spoken.endsWith("…"))
+        assertTrue(spoken.length <= 221)
+        assertTrue(spoken.endsWith("…"))
+    }
+
+    @Test
+    fun shortModeDoesNotStopAtDecimalPoint() {
+        assertEquals(
+            "Het duurt ongeveer 2.5 uur.",
+            SpokenReplyPolicy.textFor(
+                ResponseMode.SHORT_SPOKEN,
+                "Het duurt ongeveer 2.5 uur. Daarna volgt extra uitleg."
+            )
+        )
     }
 
     @Test
