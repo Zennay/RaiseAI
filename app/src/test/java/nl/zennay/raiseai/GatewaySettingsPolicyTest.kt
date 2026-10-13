@@ -32,6 +32,18 @@ class GatewaySettingsPolicyTest {
         assertNull(GatewaySettingsPolicy.parse("https://gateway.example", validToken, "invalid"))
     }
 
+    @Test fun rejectsHiddenControlCharactersInTlsPin() {
+        val validPin = "ab".repeat(32)
+        for (candidate in listOf(
+            "\\t$validPin",
+            "$validPin\\r",
+            "${validPin.take(16)}\\n${validPin.drop(16)}",
+            "$validPin\\u007f"
+        )) {
+            assertNull(GatewaySettingsPolicy.parse("https://gateway.example", validToken, candidate))
+        }
+    }
+
     @Test fun rejectsNonHttpsOrMissingHost() {
         for (url in listOf("http://gateway.example", "https:", "https://", "https:///x", "ftp://gateway.example")) {
             assertNull("accepted ${url}", GatewaySettingsPolicy.parse(url, validToken, null))
