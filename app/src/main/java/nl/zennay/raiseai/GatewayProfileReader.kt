@@ -3,6 +3,7 @@ package nl.zennay.raiseai
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.util.Properties
 
 /**
@@ -19,28 +20,37 @@ internal object GatewayProfileReader {
     const val MAX_PROFILE_BYTES = 16_384
 
     fun read(file: File): GatewaySettings? = try {
-        if (!file.isFile || Files.isSymbolicLink(file.toPath()) ||
-            file.length() !in 1L..MAX_PROFILE_BYTES.toLong()
-        ) {
+        val path = file.toPath()
+        // Both the check and the open must refuse links. A link could replace
+        // the file after isRegularFile() unless the open also uses NOFOLLOW.
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
             null
         } else {
-            // InputStream.readNBytes is not available on every supported Wear SDK.
-            // Read at most (limit + 1) bytes using the Android-compatible API.
-            val buffer = ByteArray(MAX_PROFILE_BYTES + 1)
-            val count = file.inputStream().use { stream ->
-                var filled = 0
-                while (filled < buffer.size) {
-                    val read = stream.read(buffer, filled, buffer.size - filled)
-                    if (read < 0) break
-                    if (read == 0) throw java.io.IOException("No forward progress reading profile")
-                    filled += read
-                }
-                filled
-            }
-            val bytes = buffer.copyOf(count)
-            if (bytes.size !in 1..MAX_PROFILE_BYTES) {
+            val expectedLength = Files.size(path)
+            if (expectedLength !in 1L..MAX_PROFILE_BYTES.toLong()) {
                 null
             } else {
+                // Read at most (limit + 1) bytes on the minimum Wear SDK.
+                val buffer = ByteArray(MAX_PROFILE_BYTES + 1)
+                val count = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { stream ->
+                    var filled = 0
+                    while (filled < buffer.size) {
+                        val read = stream.read(buffer, filled, buffer.size - filled)
+                        if (read < 0) break
+                        if (read == 0) throw java.io.IOException("No forward progress reading profile")
+                        filled += read
+                    }
+                    filled
+                }
+                val bytes = buffer.copyOf(count)
+                // A concurrently truncated or extended file is ambiguous; do
+                // not accept partial settings or quietly ignore appended bytes.
+                if (count.toLong() != expectedLength ||
+                    count !in 1..MAX_PROFILE_BYTES ||
+                    Files.size(path) != expectedLength
+                ) {
+                    null
+                } else {
                 // Properties.load normally silently lets the *last* duplicate
                 // key win. Refuse ambiguous profiles, including escaped aliases.
                 val properties = object : Properties() {
@@ -60,6 +70,7 @@ internal object GatewayProfileReader {
                         properties.getProperty("token"),
                         properties.getProperty("spki_sha256")
                     )
+                }
                 }
             }
         }
