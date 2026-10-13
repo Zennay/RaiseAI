@@ -28,6 +28,13 @@ class GatewayProfileReaderTest {
         assertEquals("cd".repeat(32), settings?.spkiSha256)
     }
 
+    @Test fun symlinkedProfileIsNeverFollowed() {
+        val genuine = write("real.properties", "url=https://watch.example\\ntoken=$token\\n")
+        val link = File(folder.root, "shortcut.properties")
+        java.nio.file.Files.createSymbolicLink(link.toPath(), genuine.toPath())
+        assertNull(GatewayProfileReader.read(link))
+    }
+
     @Test fun missingEmptyOrDirectoryProfilesCannotConfigureWatch() {
         assertNull(GatewayProfileReader.read(File(folder.root, "absent.properties")))
         assertNull(GatewayProfileReader.read(folder.newFile("empty.properties")))
