@@ -70,6 +70,15 @@ class GatewayProfileReaderTest {
         assertNull(GatewayProfileReader.read(badToken))
     }
 
+    @Test fun rejectsEscapedControlByteInProvisionedTlsPin() {
+        val validPin = "ab".repeat(32)
+        val file = write(
+            "pin-control.properties",
+            "url=https://watch.example\ntoken=$token\nspki_sha256=\${validPin}\\n\n"
+        )
+        assertNull(GatewayProfileReader.read(file))
+    }
+
     @Test fun rejectsRepeatedGatewayUrlEvenWhenBothAppearValid() {
         val file = write("duplicate-url.properties",
             "url=https://first.example\ntoken=$token\nurl=https://second.example\n"
