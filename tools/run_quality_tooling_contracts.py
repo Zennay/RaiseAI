@@ -12,6 +12,7 @@ QUALITY_MODULES = (
     "tests.test_adb_device_binding",
     "tests.test_all_workflow_action_pins",
     "tests.test_frozen_acceptance_launcher",
+    "tests.test_frozen_vs_tip_documentation",
     "tests.test_frozen_physical_handoff_fetcher",
     "tests.test_physical_observation_template",
     "tests.test_physical_observation_validator",
