@@ -67,11 +67,14 @@ class BootReceiver : BroadcastReceiver() {
 
         val service = Intent(context, GestureMonitorService::class.java)
         runCatching {
-            if (Build.VERSION.SDK_INT >= 26) {
+            val started = if (Build.VERSION.SDK_INT >= 26) {
                 context.startForegroundService(service)
             } else {
                 context.startService(service)
             }
+            // Both methods may return null without throwing if the service
+            // cannot be resolved. Do not preserve a misleading enabled state.
+            check(started != null) { "Gesture monitor service did not start" }
         }.onFailure {
             Log.w(TAG, "Could not auto-start Raise AI after $action", it)
             // The boot restoration did not succeed. Avoid advertising monitoring
