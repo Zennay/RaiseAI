@@ -82,7 +82,16 @@ class WatchDataAnalyzerTests(unittest.TestCase):
             "mouth_raise,1,100,0,0,9.8\n"
             "mouth_raise,1,50,0,0,9.8\n"
         )
-        with self.assertRaisesRegex(analyzer.TraceError, "moved backwards"):
+        with self.assertRaisesRegex(analyzer.TraceError, "increase strictly"):
+            analyzer.read_sessions(path)
+
+    def test_rejects_duplicate_elapsed_time(self):
+        path = self.write_trace(
+            "label,session_id,elapsed_ms,x,y,z\n"
+            "mouth_raise,1,100,0,0,9.8\n"
+            "mouth_raise,1,100,0,0,9.8\n"
+        )
+        with self.assertRaisesRegex(analyzer.TraceError, "increase strictly"):
             analyzer.read_sessions(path)
 
     def test_rejects_invalid_utf8(self):
@@ -179,10 +188,10 @@ class WatchDataAnalyzerWorkflowContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    def test_workflow_is_read_only_exact_head_and_runner_bound(self):
+    def test_workflow_is_read_only_exact_head_and_hosted_runner_bound(self):
         self.assertIn("permissions:\n  contents: read", self.workflow)
         self.assertIn(
-            "    runs-on: [self-hosted, linux, x64, vps-bb300bba]",
+            "    runs-on: ubuntu-24.04",
             self.workflow,
         )
         self.assertIn('      PYTHONDONTWRITEBYTECODE: "1"', self.workflow)
@@ -195,7 +204,7 @@ class WatchDataAnalyzerWorkflowContractTests(unittest.TestCase):
         self.assertEqual(self.workflow.count(f"          EXPECTED_SHA: {exact_head}"), 1)
         self.assertIn("          persist-credentials: false", self.workflow)
         self.assertIn(
-            '          test "$(hostname)" = "vps-bb300bba"',
+            '          test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"',
             self.workflow,
         )
         self.assertIn(
