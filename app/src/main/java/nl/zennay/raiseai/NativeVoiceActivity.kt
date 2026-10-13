@@ -39,7 +39,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var recognizer: SpeechRecognizer? = null
     private var orbAnimator: ObjectAnimator? = null
     private var textToSpeech: TextToSpeech? = null
-    private var textToSpeechReady = false
+    private val ttsStartup = TtsStartupGate()
     private var pendingSpeech: String? = null
     private var lastAnswer: String? = null
     private var submitted = false
@@ -238,6 +238,9 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         }
 
         setState("sending", "Naar je VPS…")
+        val replyMode = ResponseModeStore.load(this)
+        // TTS engine startup overlaps the network call instead of delaying the spoken reply.
+        if (replyMode != ResponseMode.SILENT) ensureTtsEngine()
         val requestStartedMs = SystemClock.elapsedRealtime()
 
         io.execute {
@@ -279,7 +282,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                             if (response.answer.isNullOrBlank()) View.GONE else View.VISIBLE
 
                         SpokenReplyPolicy.textFor(
-                            ResponseModeStore.load(this@NativeVoiceActivity),
+                            replyMode,
                             response.answer
                         )?.let(::speakText)
 
@@ -304,42 +307,75 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
     private fun speakText(text: String) {
         val normalized = text.trim()
-        if (normalized.isBlank()) return
+        if (normalized.isBlank() || isFinishing || isDestroyed) return
 
         pendingSpeech = normalized
-        if (textToSpeechReady) {
+        if (ttsStartup.isReady()) {
             speakPending()
-            return
+        } else {
+            ensureTtsEngine()
         }
-        if (textToSpeech != null) return
+    }
 
-        textToSpeech = TextToSpeech(applicationContext) { status ->
-            mainHandler.post {
-                if (status != TextToSpeech.SUCCESS) {
-                    pendingSpeech = null
-                    return@post
+    /**
+     * Prewarm only for spoken mode, or when the user manually requests playback.
+     * A failed engine releases its resources and the next explicit request can retry.
+     */
+    private fun ensureTtsEngine() {
+        if (isFinishing || isDestroyed) return
+        val ticket = ttsStartup.begin() ?: return
+
+        try {
+            textToSpeech = TextToSpeech(applicationContext) { status ->
+                mainHandler.post {
+                    // Callbacks may arrive after a retry or Activity destruction.
+                    if (status != TextToSpeech.SUCCESS) {
+                        if (ttsStartup.complete(ticket, false)) onTtsUnavailable()
+                        return@post
+                    }
+
+                    val languageResult = runCatching {
+                        textToSpeech?.setLanguage(Locale.forLanguageTag("nl-NL"))
+                            ?: TextToSpeech.ERROR
+                    }.getOrDefault(TextToSpeech.ERROR)
+
+                    if (languageResult < 0) {
+                        if (ttsStartup.complete(ticket, false)) onTtsUnavailable()
+                        return@post
+                    }
+
+                    if (ttsStartup.complete(ticket, true)) speakPending()
                 }
-
-                val languageResult = textToSpeech?.setLanguage(Locale("nl", "NL"))
-                    ?: TextToSpeech.ERROR
-                if (
-                    languageResult == TextToSpeech.LANG_MISSING_DATA ||
-                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED
-                ) {
-                    pendingSpeech = null
-                    return@post
-                }
-
-                textToSpeechReady = true
-                speakPending()
             }
+        } catch (_: RuntimeException) {
+            if (ttsStartup.complete(ticket, false)) onTtsUnavailable()
         }
+    }
+
+    private fun onTtsUnavailable() {
+        pendingSpeech = null
+        releaseTtsEngine()
+        // Keep the readable answer on screen; manual playback may retry initialization.
+    }
+
+    private fun releaseTtsEngine() {
+        val engine = textToSpeech
+        textToSpeech = null
+        runCatching { engine?.stop() }
+        runCatching { engine?.shutdown() }
     }
 
     private fun speakPending() {
         val text = pendingSpeech ?: return
         pendingSpeech = null
-        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "raiseai-reply")
+        val result = runCatching {
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "raiseai-reply")
+                ?: TextToSpeech.ERROR
+        }.getOrDefault(TextToSpeech.ERROR)
+
+        if (result == TextToSpeech.ERROR && ttsStartup.invalidateReady()) {
+            releaseTtsEngine()
+        }
     }
 
     private fun setState(state: String, label: String) {
@@ -394,11 +430,10 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         orbAnimator?.cancel()
         recognizer?.cancel()
         recognizer?.destroy()
+        mainHandler.removeCallbacksAndMessages(null)
         pendingSpeech = null
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        textToSpeech = null
-        textToSpeechReady = false
+        ttsStartup.close()
+        releaseTtsEngine()
         io.shutdownNow()
         NativeSessionState.set("idle")
         super.onDestroy()
