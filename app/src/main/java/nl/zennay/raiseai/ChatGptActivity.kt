@@ -399,20 +399,9 @@ class ChatGptActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_MICROPHONE) return
 
-        val decision = ChatGptAudioPermissionResultPolicy.decide(
-            requestCode = requestCode,
-            expectedRequestCode = REQUEST_MICROPHONE,
-            permissions = permissions.toList(),
-            grantResults = grantResults.toList(),
-            recordAudioPermission = Manifest.permission.RECORD_AUDIO,
-            permissionGranted = PackageManager.PERMISSION_GRANTED
-        )
-
-        // Preserve Gecko's pending request for unrelated Android callbacks.
-        // A matching-but-malformed callback rejects rather than granting audio.
-        if (decision == ChatGptAudioPermissionResultPolicy.Decision.IGNORE_UNRELATED_REQUEST) return
-        val granted = decision == ChatGptAudioPermissionResultPolicy.Decision.GRANT
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         pendingAndroidPermission?.let {
             if (granted) it.grant() else it.reject()
         }
