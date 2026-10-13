@@ -11,6 +11,15 @@ class MacAdbAutoconnectQualityWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.text = WORKFLOW.read_text(encoding="utf-8")
 
+    def test_fork_pr_is_skipped_before_persistent_runner_allocation(self):
+        guard = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}"
+        self.assertEqual(self.text.count(guard), 1)
+        self.assertEqual(
+            len(re.findall(r"^\\s*if\\s*:", self.text, flags=re.MULTILINE)),
+            1,
+            "no other job or step condition may silently weaken the self-hosted guard",
+        )
+
     def test_runner_and_timeout_are_exact(self):
         self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertIn("timeout-minutes: 5", self.text)
