@@ -399,7 +399,6 @@ class ChatGptActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != REQUEST_MICROPHONE) return
 
         val decision = ChatGptAudioPermissionResultPolicy.decide(
             requestCode = requestCode,
