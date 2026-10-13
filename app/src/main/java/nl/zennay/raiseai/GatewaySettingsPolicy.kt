@@ -43,6 +43,9 @@ internal object GatewaySettingsPolicy {
             origin.isOpaque
         ) return null
 
+        // Never trim control characters away from a provisioned trust pin:
+        // an embedded or trailing CR/LF is not a valid hex separator.
+        if (rawPin?.any { Character.isISOControl(it) } == true) return null
         val rawPinValue = rawPin?.trim().orEmpty()
         val pin = if (rawPinValue.isEmpty()) null
                   else PinnedTls.normalizePin(rawPinValue) ?: return null
