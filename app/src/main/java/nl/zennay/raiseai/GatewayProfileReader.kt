@@ -41,8 +41,18 @@ internal object GatewayProfileReader {
             if (bytes.size !in 1..MAX_PROFILE_BYTES) {
                 null
             } else {
-                val properties = Properties()
+                // Properties.load normally silently lets the *last* duplicate
+                // key win. Refuse ambiguous profiles, including escaped aliases.
+                val properties = object : Properties() {
+                    var duplicateKey = false
+
+                    override fun put(key: Any, value: Any): Any? {
+                        if (containsKey(key)) duplicateKey = true
+                        return super.put(key, value)
+                    }
+                }
                 ByteArrayInputStream(bytes).use(properties::load)
+                if (properties.duplicateKey) return null
                 GatewaySettingsPolicy.parse(
                     properties.getProperty("url"),
                     properties.getProperty("token"),
