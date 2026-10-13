@@ -39,11 +39,18 @@ object SpokenReplyPolicy {
     }
 
     private fun shortReply(answer: String): String {
-        val sentenceEnd = answer
-            .mapIndexedNotNull { index, char ->
-                if (char == '.' || char == '!' || char == '?') index else null
+        // A decimal point is not a sentence boundary ("2.5 uur", "3.14").
+        val sentenceEnd = answer.indices.firstOrNull { index ->
+            when (answer[index]) {
+                '!', '?' -> true
+                '.' -> {
+                    val decimal = index > 0 && index < answer.lastIndex &&
+                        answer[index - 1].isDigit() && answer[index + 1].isDigit()
+                    !decimal
+                }
+                else -> false
             }
-            .firstOrNull()
+        }
 
         val firstSentence = sentenceEnd?.let { answer.substring(0, it + 1) } ?: answer
         if (firstSentence.length <= SHORT_MAX_CHARS) return firstSentence
