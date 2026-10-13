@@ -44,6 +44,19 @@ class TtsStartupGateTest {
         assertNull(gate.begin())
     }
 
+    @Test fun failedSpeakInvalidatesReadyEngineAndAllowsRetry() {
+        val gate = TtsStartupGate()
+        val old = requireNotNull(gate.begin())
+        assertTrue(gate.complete(old, true))
+        assertTrue(gate.invalidateReady())
+        assertFalse(gate.isReady())
+        val fresh = requireNotNull(gate.begin())
+        assertFalse(gate.complete(old, true))
+        assertTrue(gate.complete(fresh, true))
+        assertTrue(gate.invalidateReady())
+        assertNotNull(gate.begin())
+    }
+
     @Test fun neverAcceptsUnsolicitedCallbacks() {
         val gate = TtsStartupGate()
         assertFalse(gate.complete(1, true))
