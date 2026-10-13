@@ -113,11 +113,20 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(
             self.text.count(
-                'python3 -c \'import platform, sys; assert platform.python_implementation() == "CPython"; '
+                'python3 -I -c \'import platform, sys; assert platform.python_implementation() == "CPython"; '
                 'assert sys.version_info[:2] == (3, 12), sys.version\''
             ),
             1,
             "production preservation must fail before parsing if the VPS Python runtime drifts",
+        )
+
+    def test_every_production_python_process_uses_isolated_mode(self):
+        invocations = self.text.count("python3 ")
+        self.assertEqual(invocations, 9)
+        self.assertEqual(
+            self.text.count("python3 -I "),
+            invocations,
+            "every production Python process must ignore runner user/site/path injection",
         )
 
     def test_frozen_identity_constants_are_exact_and_unique(self):

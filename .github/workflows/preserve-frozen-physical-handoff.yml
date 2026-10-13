@@ -45,7 +45,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+          python3 -I -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
           archive="$RUNNER_TEMP/$ASSET_NAME"
           api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
 
@@ -72,7 +72,7 @@ jobs:
             exit 1
           }
 
-          ARCHIVE="$archive" SOURCE_REVISION="$SOURCE_REVISION" python3 - <<'PY'
+          ARCHIVE="$archive" SOURCE_REVISION="$SOURCE_REVISION" python3 -I - <<'PY'
           import hashlib
           import os
           import zipfile
@@ -142,7 +142,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$api/releases/tags/$RELEASE_TAG" || true)"
 
-          if ! RELEASE_JSON="$release_json" python3 - <<'PY'
+          if ! RELEASE_JSON="$release_json" python3 -I - <<'PY'
           import json, os, sys
           try:
               payload = json.loads(os.environ.get("RELEASE_JSON", ""))
@@ -151,7 +151,7 @@ jobs:
           sys.exit(0 if isinstance(payload, dict) and payload.get("id") else 1)
           PY
           then
-            payload="$(python3 - <<'PY'
+            payload="$(python3 -I - <<'PY'
           import json
           import os
 
@@ -182,12 +182,12 @@ jobs:
               -d "$payload")"
           fi
 
-          release_id="$(RELEASE_JSON="$release_json" python3 - <<'PY'
+          release_id="$(RELEASE_JSON="$release_json" python3 -I - <<'PY'
           import json, os
           print(json.loads(os.environ["RELEASE_JSON"])["id"])
           PY
           )"
-          release_url="$(RELEASE_JSON="$release_json" python3 - <<'PY'
+          release_url="$(RELEASE_JSON="$release_json" python3 -I - <<'PY'
           import json, os
           print(json.loads(os.environ["RELEASE_JSON"])["html_url"])
           PY
@@ -209,7 +209,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$api/releases/$RELEASE_ID/assets?per_page=100")"
 
-          asset_id="$(ASSETS_JSON="$assets_json" python3 - <<'PY'
+          asset_id="$(ASSETS_JSON="$assets_json" python3 -I - <<'PY'
           import json, os
           name = os.environ["ASSET_NAME"]
           for asset in json.loads(os.environ["ASSETS_JSON"]):
@@ -220,7 +220,7 @@ jobs:
           )"
 
           if [ -z "$asset_id" ]; then
-            encoded_name="$(python3 - <<'PY'
+            encoded_name="$(python3 -I - <<'PY'
           import os
           from urllib.parse import quote
           print(quote(os.environ["ASSET_NAME"], safe=""))
@@ -235,7 +235,7 @@ jobs:
               -H "Content-Type: application/zip" \
               --data-binary "@$ARCHIVE" \
               "$upload_url")"
-            asset_id="$(UPLOADED="$uploaded" python3 - <<'PY'
+            asset_id="$(UPLOADED="$uploaded" python3 -I - <<'PY'
           import json, os
           print(json.loads(os.environ["UPLOADED"])["id"])
           PY
