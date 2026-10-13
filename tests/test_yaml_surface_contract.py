@@ -33,6 +33,9 @@ def validate_yaml_tree(node)
   if node.respond_to?(:anchor) && node.anchor && !node.anchor.empty?
     abort("YAML anchors are forbidden")
   end
+  if node.respond_to?(:tag) && node.tag && !node.tag.empty?
+    abort("explicit YAML tags are forbidden")
+  end
 
   if node.is_a?(Psych::Nodes::Mapping)
     seen = {}
@@ -146,6 +149,20 @@ class YamlSurfaceContractTests(unittest.TestCase):
             parsed = parse_yaml_with_psych(path)
             self.assertNotEqual(parsed.returncode, 0)
             self.assertIn("YAML anchors are forbidden", parsed.stderr)
+
+    def test_parser_rejects_explicit_yaml_tags(self):
+        fixtures = (
+            "value: !!str 123\n",
+            "value: !raiseai/custom tagged\n",
+        )
+        for content in fixtures:
+            with self.subTest(content=content.strip()):
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = pathlib.Path(tmp) / "tagged.yml"
+                    path.write_text(content, encoding="utf-8")
+                    parsed = parse_yaml_with_psych(path)
+                    self.assertNotEqual(parsed.returncode, 0)
+                    self.assertIn("explicit YAML tags are forbidden", parsed.stderr)
 
     def test_parser_rejects_yaml_aliases(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -400,6 +417,7 @@ class YamlSurfaceContractTests(unittest.TestCase):
             "duplicate YAML mapping key",
             "YAML mapping keys must be scalar",
             "YAML anchors are forbidden",
+            "explicit YAML tags are forbidden",
             "YAML aliases are forbidden",
             "YAML merge keys are forbidden",
             "YAML stream must contain exactly one document",
