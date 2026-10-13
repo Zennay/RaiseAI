@@ -56,5 +56,43 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn('throw "Kon de geinstalleerde Raise AI pakketstatus niet uitlezen."', self.script)
 
 
+WORKFLOW = ROOT / ".github" / "workflows" / "windows-installer-quality.yml"
+
+
+class WindowsInstallerWorkflowContractTests(unittest.TestCase):
+    def setUp(self):
+        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    def test_hosted_workflow_is_read_only_exact_head_and_runner_bound(self):
+        self.assertIn("permissions:\n  contents: read", self.workflow)
+        self.assertIn("    runs-on: ubuntu-24.04", self.workflow)
+        self.assertNotIn("runs-on: [self-hosted", self.workflow)
+        self.assertIn('      PYTHONDONTWRITEBYTECODE: "1"', self.workflow)
+        self.assertIn(
+            "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            self.workflow,
+        )
+        exact_head = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        self.assertEqual(self.workflow.count(f"          ref: {exact_head}"), 1)
+        self.assertEqual(self.workflow.count(f"          EXPECTED_SHA: {exact_head}"), 1)
+        self.assertIn("          persist-credentials: false", self.workflow)
+        self.assertIn('          test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"', self.workflow)
+        self.assertIn('          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', self.workflow)
+        self.assertNotIn("pull_request_target:", self.workflow)
+        self.assertNotIn("secrets.", self.workflow)
+        self.assertNotIn("continue-on-error: true", self.workflow)
+        self.assertIn("    timeout-minutes: 10", self.workflow)
+        self.assertEqual(self.workflow.count("uses: actions/checkout@"), 1)
+
+    def test_workflow_is_strict_and_preserves_clean_worktree(self):
+        self.assertEqual(self.workflow.count("        shell: bash"), 2)
+        self.assertEqual(self.workflow.count("          set -euo pipefail"), 2)
+        self.assertEqual(self.workflow.count("        run: |"), 2)
+        self.assertIn("python3 -m unittest tests/test_windows_installer_contract.py -v", self.workflow)
+        self.assertIn("git diff --exit-code -- .", self.workflow)
+        self.assertIn("git diff --cached --exit-code -- .", self.workflow)
+        self.assertIn('test -z "$(git ls-files --others --exclude-standard)"', self.workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
