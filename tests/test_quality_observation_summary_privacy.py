@@ -34,6 +34,7 @@ class PublicObservationSummaryTest(unittest.TestCase):
             "schema_version": 1, "watch_serial": serial,
             "app_version": "1.5.2", "source_revision": "a" * 40,
             "apk_sha256": "b" * 64, "started_at_utc": started.isoformat(),
+            "e2e_passed": True, "v1_gate_passed": True,
         }
         observations = {
             "schema_version": 1, "recorded_at_utc": (started + dt.timedelta(minutes=1)).isoformat(),
