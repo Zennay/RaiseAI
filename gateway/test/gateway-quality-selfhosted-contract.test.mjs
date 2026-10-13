@@ -41,6 +41,7 @@ test("self-hosted gateway quality gate is exact-head and VPS-bound", () => {
   assert.equal(/^\s+[A-Za-z0-9_-]+:\s*write\s*$/m.test(SELF_HOSTED), false);
   assert.equal(/^\s*pull_request_target\s*:/m.test(SELF_HOSTED), false);
   assert.equal(SELF_HOSTED.includes("${{ secrets."), false);
+  assert.ok(SELF_HOSTED.includes("github.event.pull_request.head.repo.full_name == github.repository"));
 
   const actions = externalActionRefs(SELF_HOSTED);
   assert.deepEqual(actions, [
@@ -76,7 +77,9 @@ test("self-hosted gateway gate runs full tests with strict Bash", () => {
   assert.equal(SELF_HOSTED.includes("          npm test"), false);
   assert.equal(SELF_HOSTED.includes("          npm run test"), false);
   assert.equal(SELF_HOSTED.includes("continue-on-error: true"), false);
-  assert.equal(/^\s*if\s*:/m.test(SELF_HOSTED), false);
+  const forkGuard = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}";
+  assert.equal(SELF_HOSTED.split(forkGuard).length - 1, 1);
+  assert.equal((SELF_HOSTED.match(/^\s*if\s*:/gm) ?? []).length, 1);
   for (const line of [
     "      LANG: C.UTF-8",
     "      LC_ALL: C.UTF-8",
