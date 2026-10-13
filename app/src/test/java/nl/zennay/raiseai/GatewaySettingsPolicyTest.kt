@@ -108,25 +108,24 @@ class GatewaySettingsPolicyTest {
 
     @Test fun rejectsOversizedOriginsAndTokens() {
         assertNull(GatewaySettingsPolicy.parse("https://" + "a".repeat(2_100) + ".example", validToken, null))
-        assertNull(GatewaySettingsPolicy.parse("https://gateway.example", "a".repeat(513), null))
-        assertEquals(512, GatewaySettingsPolicy.parse(
-            "https://gateway.example", "a".repeat(512), null
+        assertNull(GatewaySettingsPolicy.parse("https://gateway.example", "a".repeat(4_097), null))
+        assertEquals(4_096, GatewaySettingsPolicy.parse(
+            "https://gateway.example", "a".repeat(4_096), null
         )?.token?.length)
     }
 
-    @Test fun acceptsValidBearerUrlSafeSymbolsAndOptionalPadding() {
-        val token = "Ab_-.+~/".repeat(5) + "=="
+    @Test fun acceptsPrintableLegacyGatewayTokenSymbols() {
+        val token = "Ab_-.+~/@;:?!=".repeat(3)
         assertEquals(token, GatewaySettingsPolicy.parse(
             "https://gateway.example", token, null
         )?.token)
     }
 
-    @Test fun rejectsNonBearerTokenCharactersBeforeHeaderConstruction() {
+    @Test fun rejectsNonPrintableOrNonAsciiTokenCharacters() {
         for (token in listOf(
-            "a".repeat(32) + "@b",
-            "a".repeat(32) + ";b",
+            "a".repeat(32) + "\u007f",
             "a".repeat(32) + "ö",
-            "a".repeat(32) + "==="
+            "a".repeat(32) + "\u200B"
         )) {
             assertNull(GatewaySettingsPolicy.parse("https://gateway.example", token, null))
         }
