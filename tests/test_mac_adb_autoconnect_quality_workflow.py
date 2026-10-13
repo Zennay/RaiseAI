@@ -17,13 +17,15 @@ class MacAdbAutoconnectQualityWorkflowTests(unittest.TestCase):
         self.assertEqual(
             len(re.findall(r"^\s*if\s*:", self.text, flags=re.MULTILINE)),
             1,
-            "no other job or step condition may silently weaken the self-hosted guard",
+            "no other job or step condition may weaken the fork guard",
         )
 
-    def test_runner_and_timeout_are_exact(self):
-        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
+    def test_pinned_hosted_runner_and_timeout_are_exact(self):
+        self.assertIn("runs-on: ubuntu-24.04", self.text)
+        self.assertNotIn("runs-on: [self-hosted", self.text)
         self.assertIn("timeout-minutes: 5", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
+        self.assertNotIn("self-hosted", self.text)
 
     def test_required_gate_is_not_prestart_cancelled(self):
         self.assertIn("concurrency:", self.text)
@@ -75,8 +77,8 @@ class MacAdbAutoconnectQualityWorkflowTests(unittest.TestCase):
                 f"{required} must be present for push and pull_request",
             )
 
-    def test_runner_identity_and_clean_worktree_are_enforced(self):
-        self.assertIn('test "$RUNNER_NAME" = "vps-bb300bba"', self.text)
+    def test_hosted_runner_identity_and_clean_worktree_are_enforced(self):
+        self.assertIn('test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"', self.text)
         self.assertIn('test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', self.text)
         self.assertIn("git diff --exit-code -- .", self.text)
         self.assertIn("git diff --cached --exit-code -- .", self.text)
