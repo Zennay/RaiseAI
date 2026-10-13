@@ -30,6 +30,8 @@ def session_payload(**overrides):
         "app_version": "1.5.2",
         "source_revision": REVISION,
         "apk_sha256": APK,
+        "e2e_passed": True,
+        "v1_gate_passed": True,
     }
     payload.update(overrides)
     return payload
