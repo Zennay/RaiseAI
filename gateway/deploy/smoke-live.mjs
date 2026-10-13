@@ -16,7 +16,6 @@
 //     deployment unless RAISE_REQUIRE_ZCLOUD=1 is explicitly requested.
 //
 // The gateway token is read from the local env file and is never printed.
-import fs from "node:fs";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +29,7 @@ import {
   readSmokeResponseBody
 } from "./smoke-http.mjs";
 import { readKeyValueFile } from "./read-key-value-file.mjs";
+import { readBoundedRegularFile } from "./read-regular-file.mjs";
 
 const configDir =
   process.env.RAISE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "raiseai");
@@ -53,7 +53,7 @@ const openRouterConfigured = Boolean(env.get("OPENROUTER_API_KEY"));
 if (token.length < 32) throw new Error("gateway token missing or too short");
 if (!certFile) throw new Error("RAISE_TLS_CERT not configured");
 
-const ca = fs.readFileSync(certFile);
+const ca = readBoundedRegularFile(certFile);
 
 function request(method, route, { auth = false, body = null } = {}) {
   return new Promise((resolve, reject) => {

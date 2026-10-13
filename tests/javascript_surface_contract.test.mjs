@@ -17,6 +17,7 @@ const WORKFLOW = readFileSync(WORKFLOW_PATH, "utf8");
 const EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
 const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+const BIDI_CONTROL_RE = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 const EXPECTED_CRITICAL = new Set([
   "app/src/main/assets/raiseai_wear/wear.js",
   "gateway/src/server.mjs",
@@ -44,6 +45,11 @@ function decodeCanonicalJavaScriptSource(raw, label) {
   const source = STRICT_UTF8.decode(raw);
   assert.equal(source.includes("\0"), false, `${label} must not contain NUL bytes`);
   assert.equal(source.includes("\r"), false, `${label} must use LF-only line endings`);
+  assert.equal(
+    BIDI_CONTROL_RE.test(source),
+    false,
+    `${label} must not contain bidirectional control characters`,
+  );
   return source;
 }
 
@@ -140,6 +146,16 @@ test("canonical JavaScript decoder rejects BOM, CR and NUL bytes", () => {
   );
 });
 
+test("canonical JavaScript decoder rejects bidirectional control characters", () => {
+  assert.throws(
+    () => decodeCanonicalJavaScriptSource(
+      Buffer.from("const label = \"safe\u202eunsafe\";\n"),
+      "fixture.mjs",
+    ),
+    /bidirectional control characters/,
+  );
+});
+
 test("workflow triggers cover current and future JavaScript surfaces", () => {
   const expected = [
     "*.js",
@@ -228,6 +244,30 @@ test("every run step is explicit strict Bash", () => {
     assert.ok(step.includes("        shell: bash"));
     assert.equal(lines[runIndex + 1], "          set -euo pipefail");
   }
+});
+
+test("workflow rejects quoted YAML mapping keys", () => {
+  const quotedMappingKey = /^ {0,10}(?:"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+')\s*:/m;
+  const fixtures = [
+    '        "continue-on-error": true',
+    "        'working-directory': /tmp",
+    '    "timeout-minutes": 30',
+    "  'pull_request_target':",
+  ];
+
+  for (const fixture of fixtures) {
+    assert.match(
+      fixture,
+      quotedMappingKey,
+      "regression fixture must exercise the quoted-key detector",
+    );
+  }
+
+  assert.doesNotMatch(
+    WORKFLOW,
+    quotedMappingKey,
+    "quoted YAML mapping keys can bypass JavaScript workflow exact-surface parsers",
+  );
 });
 
 test("workflow keeps exact top-level and job execution surfaces", () => {

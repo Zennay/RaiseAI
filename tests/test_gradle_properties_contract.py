@@ -1,5 +1,7 @@
 import pathlib
 import re
+import stat
+import tempfile
 import unittest
 
 
@@ -11,17 +13,49 @@ EXPECTED = {
     "android.useAndroidX": "true",
     "kotlin.code.style": "official",
 }
+UTF8_BOM = b"\xef\xbb\xbf"
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def read_workflow_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
+
+
+def decode_canonical_properties(data: bytes) -> str:
+    if data.startswith(UTF8_BOM):
+        raise ValueError("gradle.properties must not start with a UTF-8 BOM")
+    if b"\x00" in data:
+        raise ValueError("gradle.properties must not contain NUL bytes")
+    if b"\r" in data:
+        raise ValueError("gradle.properties must use LF-only line endings")
+    try:
+        text = data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("gradle.properties must be strict UTF-8") from exc
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError("gradle.properties must not contain bidirectional control characters")
+    return text
 
 
 def parse_properties(text):
     values = {}
     for number, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("!"):
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("!"):
             continue
-        if "=" not in line:
+        if "=" not in raw_line:
             raise ValueError(f"line {number}: expected key=value")
-        key, value = (part.strip() for part in line.split("=", 1))
+        key, value = raw_line.split("=", 1)
+        if key != key.strip() or value != value.strip():
+            raise ValueError(f"line {number}: surrounding whitespace is not allowed")
         if not key:
             raise ValueError(f"line {number}: empty key")
         if key in values:
@@ -32,15 +66,52 @@ def parse_properties(text):
 
 class GradlePropertiesContractTests(unittest.TestCase):
     def setUp(self):
-        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.workflow = read_workflow_text(WORKFLOW)
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_current_gradle_properties_matches_exact_contract(self):
         self.assertFalse(PROPERTIES.is_symlink())
         self.assertTrue(PROPERTIES.is_file())
         raw = PROPERTIES.read_bytes()
-        self.assertNotIn(b"\x00", raw)
-        text = raw.decode("utf-8")
+        text = decode_canonical_properties(raw)
         self.assertEqual(parse_properties(text), EXPECTED)
+
+    def test_canonical_decoder_rejects_ambiguous_source_bytes(self):
+        cases = (
+            (UTF8_BOM + b"android.useAndroidX=true\n", "UTF-8 BOM"),
+            (b"android.useAndroidX=true\r\n", "LF-only line endings"),
+            (b"android.useAndroidX=true\x00\n", "NUL bytes"),
+            (b"android.useAndroidX=\xff\n", "strict UTF-8"),
+            (
+                "android.useAndroidX=true\n# safe\u202eunsafe\n".encode("utf-8"),
+                "bidirectional control",
+            ),
+        )
+        for payload, expected in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    decode_canonical_properties(payload)
 
     def test_parser_rejects_duplicate_key(self):
         with self.assertRaisesRegex(ValueError, "duplicate key android.useAndroidX"):
@@ -52,6 +123,18 @@ class GradlePropertiesContractTests(unittest.TestCase):
     def test_parser_rejects_non_assignment(self):
         with self.assertRaisesRegex(ValueError, "expected key=value"):
             parse_properties("android.useAndroidX true\n")
+
+    def test_parser_rejects_surrounding_assignment_whitespace(self):
+        cases = (
+            " android.useAndroidX=true\n",
+            "android.useAndroidX =true\n",
+            "android.useAndroidX= true\n",
+            "android.useAndroidX=true \n",
+        )
+        for payload in cases:
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(ValueError, "surrounding whitespace"):
+                    parse_properties(payload)
 
     def _trigger_paths(self, event):
         lines = self.workflow.splitlines()
@@ -209,8 +292,13 @@ class GradlePropertiesContractTests(unittest.TestCase):
             'path = pathlib.Path("gradle.properties")',
             "path.is_symlink()",
             "path.is_file()",
-            'path.read_bytes().decode("utf-8")',
-            'if "\\x00" in text:',
+            'UTF8_BOM = b"\\xef\\xbb\\xbf"',
+            'if data.startswith(UTF8_BOM):',
+            'if b"\\x00" in data:',
+            'if b"\\r" in data:',
+            "BIDI_CONTROL_RE.search(text)",
+            "key != key.strip() or value != value.strip()",
+            "surrounding whitespace is not allowed",
             '"org.gradle.jvmargs": "-Xmx2048m -Dfile.encoding=UTF-8"',
             '"android.useAndroidX": "true"',
             '"kotlin.code.style": "official"',
@@ -321,6 +409,31 @@ class GradlePropertiesContractTests(unittest.TestCase):
                 expected_keys[name],
                 f"{name} must not gain unreviewed step-level controls",
             )
+
+    def test_workflow_rejects_quoted_mapping_keys(self):
+        quoted_mapping_key = re.compile(
+            r'''(?m)^ {0,10}(?:"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+')\s*:'''
+        )
+        fixtures = (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "timeout-minutes": 30',
+            "  'pull_request_target':",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                self.assertRegex(
+                    fixture,
+                    quoted_mapping_key,
+                    "regression fixture must exercise the quoted-key detector",
+                )
+
+        self.assertNotRegex(
+            self.workflow,
+            quoted_mapping_key,
+            "quoted YAML mapping keys can bypass the Gradle workflow exact-surface parsers",
+        )
+
 
     def test_all_run_steps_are_explicit_strict_bash(self):
         lines = self.workflow.splitlines()

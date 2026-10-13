@@ -1,4 +1,7 @@
+from contextlib import chdir
 from pathlib import Path
+import os
+import stat
 import sys
 import unittest
 
@@ -13,7 +16,105 @@ def contract_exit_code(result: unittest.TestResult) -> int:
     return 0 if result.wasSuccessful() else 1
 
 
-def main() -> int:
+def invalid_contract_package_links() -> list[str]:
+    invalid: list[str] = []
+    for root, dirnames, _ in os.walk(TESTS_DIR, topdown=True, followlinks=False):
+        root_path = Path(root)
+        for dirname in list(dirnames):
+            path = root_path / dirname
+            try:
+                mode = path.lstat().st_mode
+            except OSError as exc:
+                invalid.append(f"{path.relative_to(TESTS_DIR)}: lstat failed: {exc}")
+                dirnames.remove(dirname)
+                continue
+            if stat.S_ISLNK(mode):
+                invalid.append(
+                    f"{path.relative_to(TESTS_DIR).as_posix()}/: "
+                    "symbolic link directories are forbidden"
+                )
+                dirnames.remove(dirname)
+    return invalid
+
+
+def contract_module_paths() -> list[Path]:
+    return sorted(TESTS_DIR.rglob("test_*.py"))
+
+
+def unsafe_contract_module_paths(paths: list[Path]) -> list[str]:
+    unsafe: list[str] = []
+    for path in paths:
+        try:
+            mode = path.lstat().st_mode
+        except OSError as exc:
+            unsafe.append(f"{path.name}: lstat failed: {exc}")
+            continue
+
+        if stat.S_ISLNK(mode):
+            unsafe.append(f"{path.name}: symbolic links are forbidden")
+        elif not stat.S_ISREG(mode):
+            unsafe.append(f"{path.name}: must be a regular file")
+    return unsafe
+
+
+def contract_module_names(paths: list[Path] | None = None) -> list[str]:
+    if paths is None:
+        paths = contract_module_paths()
+    return sorted(
+        ".".join(path.relative_to(TESTS_DIR).with_suffix("").parts)
+        for path in paths
+    )
+
+
+def discovered_test_origins(suite: unittest.TestSuite) -> set[tuple[str, str]]:
+    origins: set[tuple[str, str]] = set()
+    for item in suite:
+        if isinstance(item, unittest.TestSuite):
+            origins.update(discovered_test_origins(item))
+            continue
+        class_module = item.__class__.__module__
+        method_module = ""
+        method_name = getattr(item, "_testMethodName", "")
+        if method_name:
+            method = getattr(item.__class__, method_name, None)
+            method_module = getattr(method, "__module__", "")
+        origins.add((class_module, method_module))
+    return origins
+
+
+def run_contracts() -> int:
+    try:
+        root_mode = TESTS_DIR.lstat().st_mode
+    except OSError as exc:
+        print(f"ERROR: contract test root inaccessible: {exc}", file=sys.stderr)
+        return 1
+    if not stat.S_ISDIR(root_mode):
+        print("ERROR: contract test root must be a real directory, not a symlink or file", file=sys.stderr)
+        return 1
+
+    invalid_packages = invalid_contract_package_links()
+    if invalid_packages:
+        print(
+            "ERROR: aggregate Python contract discovery found invalid package entries; "
+            "test package directories may not use symlinks.",
+            file=sys.stderr,
+        )
+        for violation in invalid_packages:
+            print(f"INVALID-CONTRACT-PACKAGE: {violation}", file=sys.stderr)
+        return 1
+
+    module_paths = contract_module_paths()
+    unsafe_modules = unsafe_contract_module_paths(module_paths)
+    if unsafe_modules:
+        print(
+            "ERROR: aggregate Python contract discovery found unsafe test module "
+            "entries; test_*.py inputs must be regular files and may not use symlinks.",
+            file=sys.stderr,
+        )
+        for violation in unsafe_modules:
+            print(f"UNSAFE-CONTRACT-MODULE: {violation}", file=sys.stderr)
+        return 1
+
     suite = unittest.TestLoader().discover(
         str(TESTS_DIR),
         pattern="test_*.py",
@@ -26,6 +127,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    expected_modules = contract_module_names(module_paths)
+    discovered_origins = discovered_test_origins(suite)
+    missing_modules = sorted(
+        module
+        for module in expected_modules
+        if (module, module) not in discovered_origins
+    )
 
     result = unittest.TextTestRunner(
         stream=sys.stdout,
@@ -50,7 +159,23 @@ def main() -> int:
         for test, _ in result.expectedFailures:
             print(f"EXPECTED-FAILURE: {test.id()}", file=sys.stderr)
 
+    if missing_modules:
+        print(
+            "ERROR: aggregate Python contract discovery found tracked test modules "
+            "that contributed zero tests; every test_*.py contract module must execute.",
+            file=sys.stderr,
+        )
+        for module in missing_modules:
+            print(f"EMPTY-CONTRACT-MODULE: {module}", file=sys.stderr)
+
+    if missing_modules:
+        return 1
     return contract_exit_code(result)
+
+
+def main() -> int:
+    with chdir(ROOT):
+        return run_contracts()
 
 
 if __name__ == "__main__":

@@ -61,11 +61,13 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import pathlib
+          import re
           import subprocess
           import xml.etree.ElementTree as ET
 
           FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
           UTF8_BOM = b"\xef\xbb\xbf"
+          BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
           raw = subprocess.check_output(["git", "ls-files", "-z"])
           paths = sorted(
@@ -94,6 +96,8 @@ jobs:
                   text = data.decode("utf-8", errors="strict")
               except UnicodeDecodeError as exc:
                   raise SystemExit(f"{path}: XML source must be strict UTF-8: {exc}") from None
+              if BIDI_CONTROL_RE.search(text):
+                  raise SystemExit(f"{path}: XML source must not contain bidirectional control characters")
               upper = text.upper()
               for declaration in FORBIDDEN_DECLARATIONS:
                   if declaration in upper:

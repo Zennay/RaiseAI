@@ -1,12 +1,27 @@
 import pathlib
 import re
+import stat
 import subprocess
+import tempfile
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "css-surface-contract.yml"
 EXPECTED_CRITICAL = {"app/src/main/assets/raiseai_wear/wear.css"}
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def read_workflow_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
 
 
 def tracked_css_paths() -> list[str]:
@@ -200,6 +215,8 @@ def validate_css_source(data: bytes, *, label: str) -> None:
         raise ValueError(f"{label}: CSS source must not contain NUL characters")
     if "\r" in text:
         raise ValueError(f"{label}: CSS source must use LF line endings")
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError(f"{label}: CSS source must not contain bidirectional control characters")
 
     visible = _visible_css_code(text, label=label)
     if "\\" in visible:
@@ -249,7 +266,29 @@ def validate_css_source(data: bytes, *, label: str) -> None:
 
 class CssSurfaceContractTests(unittest.TestCase):
     def setUp(self):
-        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.workflow = read_workflow_text(WORKFLOW)
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_tracked_css_surface_is_nonempty_and_includes_wear_asset(self):
         paths = tracked_css_paths()
@@ -282,6 +321,7 @@ class CssSurfaceContractTests(unittest.TestCase):
             ("\ufeff.a {}".encode("utf-8"), "UTF-8 BOM"),
             (b".a {\r\n  color: red;\r\n}\r\n", "LF line endings"),
             (b".a { color: red;\x00 }", "NUL"),
+            (".a { content: \"safe\u202eunsafe\"; }\n".encode("utf-8"), "bidirectional control"),
         )
         for payload, expected in cases:
             with self.subTest(expected=expected):
@@ -437,6 +477,31 @@ class CssSurfaceContractTests(unittest.TestCase):
         ):
             with self.subTest(token=token):
                 self.assertIn(token, self.workflow)
+
+    def test_workflow_rejects_quoted_mapping_keys(self):
+        quoted_mapping_key = re.compile(
+            r'''(?m)^ {0,10}(?:"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+')\s*:'''
+        )
+        fixtures = (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "timeout-minutes": 30',
+            "  'pull_request_target':",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                self.assertRegex(
+                    fixture,
+                    quoted_mapping_key,
+                    "regression fixture must exercise the quoted-key detector",
+                )
+
+        self.assertNotRegex(
+            self.workflow,
+            quoted_mapping_key,
+            "quoted YAML mapping keys can bypass the CSS workflow exact-surface parsers",
+        )
+
 
     def test_all_run_steps_are_explicit_strict_bash(self):
         lines = self.workflow.splitlines()

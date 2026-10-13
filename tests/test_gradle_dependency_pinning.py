@@ -1,5 +1,7 @@
 from pathlib import Path
 import re
+import stat
+import tempfile
 import unittest
 from urllib.parse import urlsplit
 
@@ -10,6 +12,79 @@ APP_BUILD = ROOT / "app" / "build.gradle.kts"
 SETTINGS = ROOT / "settings.gradle.kts"
 
 DYNAMIC_VERSION_MARKERS = ("+", "latest.", "snapshot")
+
+
+def read_gradle_text(path: Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: Gradle contract input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: Gradle contract input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: Gradle contract input must be valid UTF-8") from exc
+CANONICAL_DEPENDENCY_DECLARATION = re.compile(
+    r'^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(\s*"'
+    r'([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[^"\n]+)"'
+    r'\s*\)\s*$'
+)
+
+
+def literal_custom_maven_urls(settings_text: str) -> list[str]:
+    return re.findall(r'maven\("([^"]+)"\)', settings_text)
+
+
+def dynamic_version_markers(version: str) -> list[str]:
+    lowered = version.lower()
+    markers = [
+        marker
+        for marker in DYNAMIC_VERSION_MARKERS
+        if marker in lowered
+    ]
+    stripped = version.strip()
+    if (
+        len(stripped) >= 3
+        and stripped[0] in "[("
+        and stripped[-1] in "])"
+        and "," in stripped
+    ):
+        markers.append("version-range")
+    return markers
+
+
+def dependency_declaration_lines(build_text: str) -> list[str]:
+    lines = build_text.splitlines()
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if re.fullmatch(r"\s*dependencies\s*\{\s*", line.split("//", 1)[0])
+    ]
+    if len(starts) != 1:
+        raise ValueError("build script must contain exactly one canonical dependencies block")
+
+    declarations: list[str] = []
+    depth = 1
+    for line in lines[starts[0] + 1 :]:
+        code = line.split("//", 1)[0].strip()
+        if not code:
+            continue
+
+        depth += code.count("{") - code.count("}")
+        if depth == 0:
+            return declarations
+        if depth != 1:
+            raise ValueError(
+                "dependencies block must use flat canonical dependency declarations"
+            )
+        declarations.append(code)
+
+    raise ValueError("dependencies block is not closed")
+
+
+def canonical_dependency_coordinate(line: str) -> str | None:
+    match = CANONICAL_DEPENDENCY_DECLARATION.fullmatch(line)
+    return match.group(1) if match else None
 
 
 def literal_dependency_coordinates(build_text: str) -> list[str]:
@@ -23,9 +98,29 @@ def literal_dependency_coordinates(build_text: str) -> list[str]:
 
 class GradleDependencyPinningTests(unittest.TestCase):
     def setUp(self):
-        self.root_build = ROOT_BUILD.read_text(encoding="utf-8")
-        self.app_build = APP_BUILD.read_text(encoding="utf-8")
-        self.settings = SETTINGS.read_text(encoding="utf-8")
+        self.root_build = read_gradle_text(ROOT_BUILD)
+        self.app_build = read_gradle_text(APP_BUILD)
+        self.settings = read_gradle_text(SETTINGS)
+
+    def test_gradle_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular = root / "regular.gradle.kts"
+            regular.write_text("plugins {}\n", encoding="utf-8")
+            linked = root / "linked.gradle.kts"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_gradle_text(linked)
+
+            directory = root / "directory.gradle.kts"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_gradle_text(directory)
+
+            invalid = root / "invalid.gradle.kts"
+            invalid.write_bytes(b"plugins {}\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_gradle_text(invalid)
 
     def test_android_plugin_version_is_literal_and_non_dynamic(self):
         matches = re.findall(
@@ -53,6 +148,47 @@ class GradleDependencyPinningTests(unittest.TestCase):
                 version = parts[1].strip()
                 self.assertTrue(version, f"dependency version must not be empty: {coordinate}")
                 self._assert_non_dynamic(version, coordinate)
+
+    def test_every_dependency_declaration_uses_reviewed_literal_coordinate_form(self):
+        declarations = dependency_declaration_lines(self.app_build)
+        self.assertTrue(declarations, "dependencies block must not be empty")
+
+        parsed = []
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                coordinate = canonical_dependency_coordinate(declaration)
+                self.assertIsNotNone(
+                    coordinate,
+                    "dependency declarations must use configuration(\"group:artifact:version\") "
+                    "so every version remains visible to the pinning contract",
+                )
+                parsed.append(coordinate)
+
+        self.assertEqual(
+            parsed,
+            literal_dependency_coordinates(self.app_build),
+            "canonical declaration scan and coordinate discovery must cover the same surface",
+        )
+
+    def test_unsupported_dependency_declaration_forms_fail_closed(self):
+        unsupported = (
+            'implementation("example.group:artifact")',
+            'implementation(platform("example.group:bom:1.0.0"))',
+            'add("implementation", "example.group:artifact:1.0.0")',
+            'implementation(group = "example.group", name = "artifact", version = "1.0.0")',
+        )
+        for declaration in unsupported:
+            with self.subTest(declaration=declaration):
+                self.assertIsNone(canonical_dependency_coordinate(declaration))
+
+        with self.assertRaisesRegex(ValueError, "flat canonical"):
+            dependency_declaration_lines(
+                "dependencies {\n"
+                "    constraints {\n"
+                '        implementation("example.group:artifact:1.0.0")\n'
+                "    }\n"
+                "}\n"
+            )
 
     def test_dependency_coordinate_discovery_is_configuration_name_agnostic(self):
         fixture = """
@@ -93,7 +229,7 @@ dependencies {
             self.settings,
         )
 
-        custom_urls = re.findall(r'maven\\("([^"]+)"\\)', self.settings)
+        custom_urls = literal_custom_maven_urls(self.settings)
         for raw_url in custom_urls:
             with self.subTest(url=raw_url):
                 parsed = urlsplit(raw_url)
@@ -105,7 +241,7 @@ dependencies {
                 self.assertFalse(parsed.fragment)
 
     def test_repository_sources_are_explicitly_allowlisted(self):
-        custom_urls = re.findall(r'maven\("([^"]+)"\)', self.settings)
+        custom_urls = literal_custom_maven_urls(self.settings)
         self.assertEqual(
             custom_urls,
             ["https://maven.mozilla.org/maven2/"],
@@ -137,6 +273,36 @@ dependencies {
                     forbidden_form,
                     "repository declarations must use the reviewed canonical forms",
                 )
+
+    def test_custom_maven_repository_parser_covers_literal_urls(self):
+        fixture = """
+repositories {
+    maven("https://repo.example.test/releases/")
+    maven("http://repo.example.test/insecure/")
+}
+"""
+        self.assertEqual(
+            literal_custom_maven_urls(fixture),
+            [
+                "https://repo.example.test/releases/",
+                "http://repo.example.test/insecure/",
+            ],
+        )
+
+    def test_rejects_gradle_maven_version_ranges(self):
+        for version in (
+            "[1.0,2.0)",
+            "(,1.5]",
+            "[1.0,)",
+            "(1.0,2.0]",
+        ):
+            with self.subTest(version=version):
+                with self.assertRaises(AssertionError):
+                    self._assert_non_dynamic(version, "range fixture")
+
+        for version in ("1.2.3", "2026.10.0-alpha1"):
+            with self.subTest(version=version):
+                self._assert_non_dynamic(version, "fixed fixture")
 
     def test_mozilla_repository_is_scoped_to_geckoview_only(self):
         self.assertEqual(
@@ -172,12 +338,7 @@ dependencies {
                 self.assertNotIn(forbidden, combined)
 
     def _assert_non_dynamic(self, version: str, label: str):
-        lowered = version.lower()
-        markers = [
-            marker
-            for marker in DYNAMIC_VERSION_MARKERS
-            if marker in lowered
-        ]
+        markers = dynamic_version_markers(version)
         self.assertEqual(
             markers,
             [],

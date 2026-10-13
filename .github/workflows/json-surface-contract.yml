@@ -99,7 +99,12 @@ jobs:
                   raise SystemExit(f"{path}: tracked JSON path must be a regular file")
 
               try:
-                  text = candidate.read_bytes().decode("utf-8")
+                  raw = candidate.read_bytes()
+                  if raw.startswith(b"\xef\xbb\xbf"):
+                      raise ValueError("UTF-8 BOM is not allowed")
+                  if b"\r" in raw:
+                      raise ValueError("CR bytes are not allowed; JSON must use LF line endings")
+                  text = raw.decode("utf-8")
                   json.loads(
                       text,
                       object_pairs_hook=reject_duplicate_keys,

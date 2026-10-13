@@ -1,5 +1,7 @@
 from pathlib import Path
 import re
+import stat
+import tempfile
 import unittest
 
 
@@ -8,9 +10,43 @@ WORKFLOW = ROOT / ".github" / "workflows" / "all-python-contracts.yml"
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
+def read_workflow_text(path: Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
+
+
 class AllPythonContractsWorkflowTests(unittest.TestCase):
     def setUp(self):
-        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.text = read_workflow_text(WORKFLOW)
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_runs_on_every_pull_request_and_main_push(self):
         self.assertRegex(
@@ -70,8 +106,13 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
 
     def test_discovers_every_python_contract_through_zero_skip_runner(self):
         self.assertEqual(
-            self.text.count("          python3 tools/run_python_contracts.py"),
+            self.text.count("          python3 -I tools/run_python_contracts.py"),
             1,
+        )
+        self.assertNotIn(
+            "          python3 tools/run_python_contracts.py",
+            self.text,
+            "aggregate contracts must ignore inherited Python environment/import paths",
         )
         self.assertNotRegex(
             self.text,
@@ -286,6 +327,31 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
             ["group", "cancel-in-progress"],
             "concurrency must not gain unreviewed controls",
         )
+
+    def test_rejects_quoted_yaml_mapping_keys(self):
+        quoted_mapping_key = re.compile(
+            r'''(?m)^\s*(?:"[^"\n]+"|'[^'\n]+')\s*:'''
+        )
+        fixtures = (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "timeout-minutes": 30',
+            "  'pull_request_target':",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                self.assertRegex(
+                    fixture,
+                    quoted_mapping_key,
+                    "regression fixture must exercise the quoted-key detector",
+                )
+
+        self.assertNotRegex(
+            self.text,
+            quoted_mapping_key,
+            "quoted YAML mapping keys can bypass aggregate workflow exact-surface parsers",
+        )
+
 
     def test_checkout_and_revision_verifier_nested_mappings_are_exact(self):
         lines = self.text.splitlines()

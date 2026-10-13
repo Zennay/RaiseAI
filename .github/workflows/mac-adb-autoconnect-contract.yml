@@ -9,6 +9,7 @@ on:
       - "login-from-mac.command"
       - "tests/test_mac_adb_autoconnect_contract.py"
       - "tests/test_mac_watch_login_contract.py"
+      - "tests/test_mac_operator_workflow.py"
       - ".github/workflows/mac-adb-autoconnect-contract.yml"
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - "login-from-mac.command"
       - "tests/test_mac_adb_autoconnect_contract.py"
       - "tests/test_mac_watch_login_contract.py"
+      - "tests/test_mac_operator_workflow.py"
       - ".github/workflows/mac-adb-autoconnect-contract.yml"
 
 permissions:
@@ -27,8 +29,15 @@ concurrency:
 
 jobs:
   contract:
-    runs-on: [self-hosted, vps-bb300bba]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
     steps:
       - name: Checkout exact tested revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
@@ -44,9 +53,18 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
+      - name: Verify Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
+
       - name: Validate macOS Watch operator contracts
         shell: bash
         run: |
           set -euo pipefail
           bash -n install-mac-adb-autoconnect.command login-from-mac.command
-          python3 -m unittest tests.test_mac_adb_autoconnect_contract tests.test_mac_watch_login_contract
+          python3 -m unittest tests.test_mac_adb_autoconnect_contract tests.test_mac_watch_login_contract tests.test_mac_operator_workflow
+          git diff --exit-code -- .
+          git diff --cached --exit-code -- .
+          test -z "$(git ls-files --others --exclude-standard)"

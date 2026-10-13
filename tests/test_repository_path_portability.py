@@ -1,4 +1,7 @@
+import os
+import pathlib
 import subprocess
+import tempfile
 import unicodedata
 import unittest
 
@@ -10,12 +13,21 @@ WINDOWS_RESERVED_BASENAMES = {
     "nul",
     *(f"com{index}" for index in range(1, 10)),
     *(f"lpt{index}" for index in range(1, 10)),
+    *(f"com{digit}" for digit in "¹²³"),
+    *(f"lpt{digit}" for digit in "¹²³"),
 }
 WINDOWS_FORBIDDEN_CHARACTERS = set('<>:"\\|?*')
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+ALLOWED_EXECUTABLE_SHEBANGS = {
+    "#!/bin/bash",
+    "#!/usr/bin/env bash",
+    "#!/usr/bin/env node",
+    "#!/usr/bin/env python3",
+}
 
 
 def tracked_paths() -> list[str]:
-    raw = subprocess.check_output(["git", "ls-files", "-z"])
+    raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
     try:
         decoded = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
@@ -24,7 +36,7 @@ def tracked_paths() -> list[str]:
 
 
 def tracked_index_entries() -> list[tuple[str, str, str]]:
-    raw = subprocess.check_output(["git", "ls-files", "--stage", "-z"])
+    raw = subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=ROOT)
     entries: list[tuple[str, str, str]] = []
     for record in raw.split(b"\0"):
         if not record:
@@ -49,6 +61,36 @@ def validate_regular_file_entries(entries: list[tuple[str, str, str]]) -> None:
         if mode not in {"100644", "100755"}:
             raise ValueError(
                 f"{path!r}: tracked entry mode {mode} is not a regular file"
+            )
+
+
+def validate_executable_entry_sources(
+    entries: list[tuple[str, str, str]],
+    *,
+    root: pathlib.Path = ROOT,
+) -> None:
+    for mode, stage, path in entries:
+        if mode != "100755":
+            continue
+        if stage != "0":
+            raise ValueError(f"{path!r}: executable entry must be at canonical stage 0")
+
+        candidate = root / path
+        if candidate.is_symlink() or not candidate.is_file():
+            raise ValueError(f"{path!r}: executable entry must be a regular file")
+
+        with candidate.open("rb") as source:
+            first_line = source.readline(257)
+        if len(first_line) > 256 and not first_line.endswith(b"\n"):
+            raise ValueError(f"{path!r}: executable shebang is unreasonably long")
+        try:
+            shebang = first_line.removesuffix(b"\n").decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"{path!r}: executable shebang must be strict UTF-8") from exc
+
+        if shebang not in ALLOWED_EXECUTABLE_SHEBANGS:
+            raise ValueError(
+                f"{path!r}: executable entry must declare a reviewed interpreter"
             )
 
 
@@ -77,6 +119,10 @@ def validate_portable_paths(paths: list[str]) -> None:
             if any(unicodedata.category(char) in {"Cc", "Cf"} for char in segment):
                 raise ValueError(
                     f"{path!r}: Unicode control and format characters are forbidden"
+                )
+            if any(unicodedata.category(char) in {"Zl", "Zp"} for char in segment):
+                raise ValueError(
+                    f"{path!r}: Unicode line and paragraph separators are forbidden"
                 )
             if any(char in WINDOWS_FORBIDDEN_CHARACTERS for char in segment):
                 raise ValueError(
@@ -108,10 +154,28 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
         entries = tracked_index_entries()
         self.assertTrue(entries)
         validate_regular_file_entries(entries)
+        validate_executable_entry_sources(entries)
         self.assertEqual(
             [path for _mode, _stage, path in entries],
             tracked_paths(),
             "stage metadata and tracked-path discovery must describe the same ordered surface",
+        )
+
+    def test_git_discovery_is_bound_to_repository_root(self):
+        original_cwd = pathlib.Path.cwd()
+        with tempfile.TemporaryDirectory(prefix="raiseai-portability-cwd-") as temporary:
+            try:
+                os.chdir(temporary)
+                paths = tracked_paths()
+                entries = tracked_index_entries()
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertIn("tests/test_repository_path_portability.py", paths)
+        self.assertEqual(
+            [path for _mode, _stage, path in entries],
+            paths,
+            "repository discovery must not depend on the caller's working directory",
         )
 
     def test_accepts_regular_file_modes(self):
@@ -137,6 +201,47 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
     def test_rejects_empty_index_surface(self):
         with self.assertRaisesRegex(ValueError, "index discovery must not be empty"):
             validate_regular_file_entries([])
+
+    def test_executable_entries_require_reviewed_shebangs(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-executable-") as temporary:
+            root = pathlib.Path(temporary)
+            fixtures = {
+                "bash.sh": "#!/usr/bin/env bash\necho ok\n",
+                "wrapper": "#!/bin/bash\necho ok\n",
+                "tool.py": "#!/usr/bin/env python3\nprint('ok')\n",
+                "smoke.mjs": "#!/usr/bin/env node\nconsole.log('ok')\n",
+            }
+            entries = []
+            for name, source in fixtures.items():
+                (root / name).write_text(source, encoding="utf-8")
+                entries.append(("100755", "0", name))
+
+            validate_executable_entry_sources(entries, root=root)
+
+    def test_nonexecutable_entries_do_not_require_shebangs(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-executable-") as temporary:
+            root = pathlib.Path(temporary)
+            (root / "README.md").write_text("# docs\n", encoding="utf-8")
+            validate_executable_entry_sources(
+                [("100644", "0", "README.md")],
+                root=root,
+            )
+
+    def test_rejects_executable_without_reviewed_interpreter(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-executable-") as temporary:
+            root = pathlib.Path(temporary)
+            fixtures = {
+                "missing.txt": "plain text\n",
+                "unsupported.py": "#!/usr/bin/python3\nprint('no')\n",
+            }
+            for name, source in fixtures.items():
+                with self.subTest(name=name):
+                    (root / name).write_text(source, encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "reviewed interpreter"):
+                        validate_executable_entry_sources(
+                            [("100755", "0", name)],
+                            root=root,
+                        )
 
     def test_accepts_normal_cross_platform_paths(self):
         validate_portable_paths(
@@ -164,6 +269,19 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
             "nested/NUL.json",
             "tools/Com1.py",
             "artifacts/lPt9.log",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "Windows-reserved basename"):
+                    validate_portable_paths([path])
+
+    def test_rejects_windows_superscript_device_basenames(self):
+        for path in (
+            "COM¹",
+            "docs/com².txt",
+            "nested/Com³.json",
+            "LPT¹",
+            "tools/lpt².py",
+            "artifacts/LpT³.log",
         ):
             with self.subTest(path=path):
                 with self.assertRaisesRegex(ValueError, "Windows-reserved basename"):
@@ -199,6 +317,16 @@ class RepositoryPathPortabilityTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     ValueError,
                     "Unicode control and format characters",
+                ):
+                    validate_portable_paths([path])
+
+    def test_rejects_unicode_line_and_paragraph_separators(self):
+        for codepoint in (0x2028, 0x2029):
+            with self.subTest(codepoint=f"U+{codepoint:04X}"):
+                path = f"docs/bad{chr(codepoint)}name.md"
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Unicode line and paragraph separators",
                 ):
                     validate_portable_paths([path])
 

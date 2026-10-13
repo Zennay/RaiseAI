@@ -59,6 +59,10 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import pathlib
+          import re
+
+          UTF8_BOM = b"\xef\xbb\xbf"
+          BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
           path = pathlib.Path("gradle.properties")
           if path.is_symlink():
@@ -66,12 +70,19 @@ jobs:
           if not path.is_file():
               raise SystemExit("gradle.properties must be a regular file")
 
+          data = path.read_bytes()
+          if data.startswith(UTF8_BOM):
+              raise SystemExit("gradle.properties must not start with a UTF-8 BOM")
+          if b"\x00" in data:
+              raise SystemExit("gradle.properties must not contain NUL bytes")
+          if b"\r" in data:
+              raise SystemExit("gradle.properties must use LF-only line endings")
           try:
-              text = path.read_bytes().decode("utf-8")
+              text = data.decode("utf-8", errors="strict")
           except UnicodeDecodeError as exc:
               raise SystemExit(f"gradle.properties must be strict UTF-8: {exc}") from None
-          if "\x00" in text:
-              raise SystemExit("gradle.properties must not contain NUL bytes")
+          if BIDI_CONTROL_RE.search(text):
+              raise SystemExit("gradle.properties must not contain bidirectional control characters")
 
           expected = {
               "org.gradle.jvmargs": "-Xmx2048m -Dfile.encoding=UTF-8",
@@ -80,12 +91,16 @@ jobs:
           }
           values = {}
           for number, raw_line in enumerate(text.splitlines(), start=1):
-              line = raw_line.strip()
-              if not line or line.startswith("#") or line.startswith("!"):
+              stripped = raw_line.strip()
+              if not stripped or stripped.startswith("#") or stripped.startswith("!"):
                   continue
-              if "=" not in line:
+              if "=" not in raw_line:
                   raise SystemExit(f"gradle.properties:{number}: expected key=value")
-              key, value = (part.strip() for part in line.split("=", 1))
+              key, value = raw_line.split("=", 1)
+              if key != key.strip() or value != value.strip():
+                  raise SystemExit(
+                      f"gradle.properties:{number}: surrounding whitespace is not allowed"
+                  )
               if not key or key in values:
                   raise SystemExit(f"gradle.properties:{number}: duplicate or empty key {key!r}")
               values[key] = value

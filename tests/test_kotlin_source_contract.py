@@ -15,6 +15,7 @@ EXPECTED_CRITICAL = {
     "app/src/main/java/nl/zennay/raiseai/WatchE2eEvidence.kt",
 }
 UTF8_BOM = b"\xef\xbb\xbf"
+BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def tracked_kotlin_paths() -> list[str]:
@@ -42,6 +43,8 @@ def validate_kotlin_source(data: bytes, *, label: str) -> str:
         raise ValueError(f"{label} must not contain NUL bytes")
     if "\r" in text:
         raise ValueError(f"{label} must use LF-only line endings")
+    if BIDI_CONTROL_RE.search(text):
+        raise ValueError(f"{label} must not contain bidirectional control characters")
     return text
 
 
@@ -86,6 +89,11 @@ class KotlinSourceContractTests(unittest.TestCase):
     def test_validator_rejects_nul_bytes(self):
         with self.assertRaisesRegex(ValueError, "must not contain NUL bytes"):
             validate_kotlin_source(b"fun main() {}\x00\n", label="fixture.kt")
+
+    def test_validator_rejects_bidirectional_control_characters(self):
+        payload = 'val label = "safe\u202eunsafe"\n'.encode("utf-8")
+        with self.assertRaisesRegex(ValueError, "bidirectional control characters"):
+            validate_kotlin_source(payload, label="fixture.kt")
 
     def _trigger_paths(self, event: str) -> list[str]:
         lines = self.workflow.splitlines()
