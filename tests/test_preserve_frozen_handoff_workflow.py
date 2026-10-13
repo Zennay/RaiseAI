@@ -1,5 +1,7 @@
 import pathlib
 import re
+import stat
+import tempfile
 import unittest
 
 
@@ -7,6 +9,19 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "preserve-frozen-physical-handoff.yml"
 CONTRACT_WORKFLOW = ROOT / ".github" / "workflows" / "frozen-preserve-contract-test.yml"
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
+
+
+def read_workflow_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
+
 
 EXPECTED_ENV = {
     "ARTIFACT_ID": "11317304352",
@@ -22,8 +37,30 @@ EXPECTED_ENV = {
 
 class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
     def setUp(self):
-        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.text = read_workflow_text(WORKFLOW)
         self.lines = self.text.splitlines()
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_trigger_surface_cannot_expand_to_untrusted_events(self):
         self.assertIn("  workflow_dispatch:", self.lines)
@@ -56,6 +93,32 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
         self.assertIn("    timeout-minutes: 10", self.text)
         self.assertIn("  cancel-in-progress: false", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
+
+    def test_production_python_runtime_is_pinned_and_isolated(self):
+        for line in (
+            "      LANG: C.UTF-8",
+            "      LC_ALL: C.UTF-8",
+            '      PYTHONHASHSEED: "1"',
+            '      PYTHONNOUSERSITE: "1"',
+            '      PYTHONDONTWRITEBYTECODE: "1"',
+            "      TZ: UTC",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.text.count(line), 1)
+
+        self.assertEqual(
+            len(re.findall(r'(?m)^\s+PYTHONNOUSERSITE:\s*', self.text)),
+            1,
+            "production preserve job must expose exactly one PYTHONNOUSERSITE binding",
+        )
+        self.assertEqual(
+            self.text.count(
+                'python3 -c \'import platform, sys; assert platform.python_implementation() == "CPython"; '
+                'assert sys.version_info[:2] == (3, 12), sys.version\''
+            ),
+            1,
+            "production preservation must fail before parsing if the VPS Python runtime drifts",
+        )
 
     def test_frozen_identity_constants_are_exact_and_unique(self):
         for key, value in EXPECTED_ENV.items():
@@ -157,7 +220,7 @@ class PreserveFrozenHandoffWorkflowContractTests(unittest.TestCase):
 
 class FrozenPreserveContractWorkflowTests(unittest.TestCase):
     def setUp(self):
-        self.text = CONTRACT_WORKFLOW.read_text(encoding="utf-8")
+        self.text = read_workflow_text(CONTRACT_WORKFLOW)
 
     def test_contract_lane_runtime_and_checkout_are_pinned(self):
         self.assertIn("    runs-on: ubuntu-24.04", self.text)

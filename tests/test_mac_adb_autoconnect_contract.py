@@ -1,5 +1,7 @@
 import pathlib
 import re
+import stat
+import tempfile
 import unittest
 
 
@@ -7,9 +9,43 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "install-mac-adb-autoconnect.command"
 
 
+def read_script_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: script input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: script input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: script input must be valid UTF-8") from exc
+
+
 class MacAdbAutoconnectContractTests(unittest.TestCase):
     def setUp(self):
-        self.script = SCRIPT.read_text(encoding="utf-8")
+        self.script = read_script_text(SCRIPT)
+
+    def test_script_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.command"
+            regular.write_text("#!/bin/bash\n", encoding="utf-8")
+            self.assertEqual(read_script_text(regular), "#!/bin/bash\n")
+
+            linked = root / "linked.command"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_script_text(linked)
+
+            directory = root / "directory.command"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_script_text(directory)
+
+            invalid = root / "invalid.command"
+            invalid.write_bytes(b"#!/bin/bash\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_script_text(invalid)
 
     def test_accepts_both_canonical_galaxy_watch_7_model_spellings(self):
         self.assertIn("SM-L315F|SM_L315F)", self.script)
@@ -45,7 +81,7 @@ class MacAdbAutoconnectContractTests(unittest.TestCase):
         loop = self.script.index('while IFS= read -r ENDPOINT')
         connect = self.script.index('"$ADB" connect "$ENDPOINT"', loop)
         identity = self.script.index('if is_expected_watch "$ENDPOINT"; then', connect)
-        cache = self.script.index('printf \'%s\\n\' "$ENDPOINT" > "$ENDPOINT_FILE"', identity)
+        cache = self.script.index("printf '%s\\n' \"$ENDPOINT\" > \"$ENDPOINT_FILE\"", identity)
         source = self.script.index("awk '/_adb-tls-connect[.]_tcp/ {print $3}'", loop)
 
         self.assertLess(loop, connect)

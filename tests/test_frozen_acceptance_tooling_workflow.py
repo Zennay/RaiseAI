@@ -1,5 +1,7 @@
 import pathlib
 import re
+import stat
+import tempfile
 import unittest
 
 
@@ -15,9 +17,43 @@ FALLBACK_GUIDES = {
 CHECKOUT_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
+def read_contract_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: contract input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: contract input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: contract input must be valid UTF-8") from exc
+
+
 class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
     def setUp(self):
-        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.text = read_contract_text(WORKFLOW)
+
+    def test_contract_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.txt"
+            regular.write_text("safe\n", encoding="utf-8")
+            self.assertEqual(read_contract_text(regular), "safe\n")
+
+            linked = root / "linked.txt"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_contract_text(linked)
+
+            directory = root / "directory.txt"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_contract_text(directory)
+
+            invalid = root / "invalid.txt"
+            invalid.write_bytes(b"safe\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_contract_text(invalid)
 
     def test_uses_pinned_node24_checkout_only(self):
         refs = re.findall(
@@ -150,7 +186,7 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
         self.assertEqual(self.text.count(command), 1)
 
     def test_operator_start_guide_stays_bound_to_frozen_handoff(self):
-        guide = START_GUIDE.read_text(encoding="utf-8")
+        guide = read_contract_text(START_GUIDE)
         section = guide.split("## Preferred physical validation flow", 1)[1].split(
             "\n## 1. Install or upgrade the Watch app", 1
         )[0]
@@ -187,7 +223,7 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
         )
 
     def test_legacy_device_checklist_cannot_pose_as_current_acceptance(self):
-        guide = DEVICE_TEST_GUIDE.read_text(encoding="utf-8")
+        guide = read_contract_text(DEVICE_TEST_GUIDE)
         self.assertIn("Historical fallback checklist only.", guide)
         self.assertIn(
             "8f719bb273f9b997848864f342598e7df5f090e5",
@@ -212,7 +248,7 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
         )
         for path, warning in FALLBACK_GUIDES.items():
             with self.subTest(path=path):
-                guide = (ROOT / path).read_text(encoding="utf-8")
+                guide = read_contract_text(ROOT / path)
                 self.assertIn(warning, guide)
                 self.assertIn("GitHub issue #34", guide)
                 self.assertIn(

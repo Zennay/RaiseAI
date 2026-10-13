@@ -1,6 +1,8 @@
 import pathlib
 import re
+import stat
 import subprocess
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -16,6 +18,18 @@ EXPECTED_CRITICAL = {
 FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
 UTF8_BOM = b"\xef\xbb\xbf"
 BIDI_CONTROL_RE = re.compile("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def read_workflow_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
 
 
 def tracked_xml_paths():
@@ -45,7 +59,29 @@ def decode_canonical_xml_source(data: bytes, *, relative: str) -> str:
 
 class XmlSurfaceContractTests(unittest.TestCase):
     def setUp(self):
-        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.workflow = read_workflow_text(WORKFLOW)
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_tracked_xml_surface_is_nonempty_and_includes_critical_android_files(self):
         paths = tracked_xml_paths()
@@ -199,6 +235,24 @@ class XmlSurfaceContractTests(unittest.TestCase):
                 step = lines[step_start:step_end]
                 self.assertIn("        shell: bash", step)
                 self.assertEqual(lines[run_index + 1], "          set -euo pipefail")
+
+    def test_workflow_control_keys_cannot_hide_behind_yaml_quotes(self):
+        quoted_key = re.compile(
+            r"""(?m)^(?: {0}| {2}| {4}| {6}| {8}| {10})(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*:"""
+        )
+        self.assertNotRegex(
+            self.workflow,
+            quoted_key,
+            "quoted YAML mapping keys can bypass the exact workflow-surface key parsers",
+        )
+        for fixture in (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "if": false',
+            "  'pull_request':",
+        ):
+            with self.subTest(fixture=fixture):
+                self.assertRegex(fixture, quoted_key)
 
     def test_workflow_keeps_exact_top_level_and_job_surfaces(self):
         lines = self.workflow.splitlines()

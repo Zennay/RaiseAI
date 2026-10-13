@@ -24,38 +24,70 @@ def unquote_scalar(value):
     return value
 
 
-def yaml_scalar_values_for_key(path, key):
+def executable_uses_values(path, kind):
     script = r"""
 require "psych"
 raw = File.binread(ARGV.fetch(0))
 raw.force_encoding(Encoding::UTF_8)
 abort("invalid UTF-8") unless raw.valid_encoding?
-target = ARGV.fetch(1)
+kind = ARGV.fetch(1)
 tree = Psych.parse_stream(raw)
 abort("YAML stream must contain exactly one document") unless tree.children.length == 1
-values = []
-walk = nil
-walk = lambda do |node|
-  if node.is_a?(Psych::Nodes::Mapping)
-    node.children.each_slice(2) do |key_node, value_node|
-      if key_node.is_a?(Psych::Nodes::Scalar) &&
-         key_node.value == target &&
-         value_node.is_a?(Psych::Nodes::Scalar)
-        values << value_node.value
-      end
-      walk.call(value_node)
-    end
-    return
+root = tree.children.fetch(0).root
+abort("GitHub Actions document root must be a mapping") unless root.is_a?(Psych::Nodes::Mapping)
+
+lookup = lambda do |mapping, target|
+  next nil unless mapping.is_a?(Psych::Nodes::Mapping)
+  mapping.children.each_slice(2) do |key_node, value_node|
+    next unless key_node.is_a?(Psych::Nodes::Scalar)
+    return value_node if key_node.value == target
   end
-  children = node.respond_to?(:children) ? node.children : nil
-  Array(children).each { |child| walk.call(child) }
+  nil
 end
-walk.call(tree)
+
+values = []
+append_uses = lambda do |mapping, context|
+  uses = lookup.call(mapping, "uses")
+  next unless uses
+  abort("#{context} uses must be a scalar") unless uses.is_a?(Psych::Nodes::Scalar)
+  values << uses.value
+end
+append_steps = lambda do |steps, context|
+  next unless steps
+  abort("#{context} steps must be a sequence") unless steps.is_a?(Psych::Nodes::Sequence)
+  steps.children.each do |step|
+    abort("#{context} steps must be mappings") unless step.is_a?(Psych::Nodes::Mapping)
+    append_uses.call(step, "#{context} step")
+  end
+end
+
+case kind
+when "workflow"
+  jobs = lookup.call(root, "jobs")
+  if jobs
+    abort("workflow jobs must be a mapping") unless jobs.is_a?(Psych::Nodes::Mapping)
+    jobs.children.each_slice(2) do |job_name, job|
+      abort("workflow job names must be scalars") unless job_name.is_a?(Psych::Nodes::Scalar)
+      abort("workflow jobs must be mappings") unless job.is_a?(Psych::Nodes::Mapping)
+      append_uses.call(job, "workflow job")
+      append_steps.call(lookup.call(job, "steps"), "workflow job")
+    end
+  end
+when "action"
+  runs = lookup.call(root, "runs")
+  if runs
+    abort("action runs must be a mapping") unless runs.is_a?(Psych::Nodes::Mapping)
+    append_steps.call(lookup.call(runs, "steps"), "composite action")
+  end
+else
+  abort("unknown GitHub Actions document kind")
+end
+
 STDOUT.write(values.join("\\0"))
 STDOUT.write("\\0") unless values.empty?
 """
     result = subprocess.run(
-        ["ruby", "--disable-gems", "-e", script, str(path), key],
+        ["ruby", "--disable-gems", "-e", script, str(path), kind],
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -63,7 +95,7 @@ STDOUT.write("\\0") unless values.empty?
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"{path}: YAML semantic scan failed with exit {result.returncode}: "
+            f"{path}: executable uses scan failed with exit {result.returncode}: "
             f"{result.stderr.decode('utf-8', errors='replace').strip()}"
         )
     return [
@@ -74,10 +106,55 @@ STDOUT.write("\\0") unless values.empty?
 
 
 def docker_action_image_values(path):
+    script = r"""
+require "psych"
+raw = File.binread(ARGV.fetch(0))
+raw.force_encoding(Encoding::UTF_8)
+abort("invalid UTF-8") unless raw.valid_encoding?
+tree = Psych.parse_stream(raw)
+abort("YAML stream must contain exactly one document") unless tree.children.length == 1
+root = tree.children.fetch(0).root
+abort("action manifest root must be a mapping") unless root.is_a?(Psych::Nodes::Mapping)
+
+lookup = lambda do |mapping, target|
+  next nil unless mapping.is_a?(Psych::Nodes::Mapping)
+  mapping.children.each_slice(2) do |key_node, value_node|
+    next unless key_node.is_a?(Psych::Nodes::Scalar)
+    return value_node if key_node.value == target
+  end
+  nil
+end
+
+value = nil
+runs = lookup.call(root, "runs")
+if runs
+  abort("action runs must be a mapping") unless runs.is_a?(Psych::Nodes::Mapping)
+  image = lookup.call(runs, "image")
+  if image
+    abort("action runs.image must be a scalar") unless image.is_a?(Psych::Nodes::Scalar)
+    value = image.value if image.value.start_with?("docker://")
+  end
+end
+
+STDOUT.write(value) if value
+STDOUT.write("\\0") if value
+"""
+    result = subprocess.run(
+        ["ruby", "--disable-gems", "-e", script, str(path)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{path}: Docker action image scan failed with exit {result.returncode}: "
+            f"{result.stderr.decode('utf-8', errors='replace').strip()}"
+        )
     return [
-        value
-        for value in yaml_scalar_values_for_key(path, "image")
-        if value.startswith("docker://")
+        value.decode("utf-8", errors="strict")
+        for value in result.stdout.split(b"\\0")
+        if value
     ]
 
 
@@ -316,8 +393,11 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
     def test_every_local_uses_ref_is_canonical_and_resolvable(self):
         workflows, action_manifests = github_action_documents()
 
-        for document in [*workflows, *action_manifests]:
-            for value in yaml_scalar_values_for_key(document, "uses"):
+        for document, kind in [
+            *((workflow, "workflow") for workflow in workflows),
+            *((manifest, "action") for manifest in action_manifests),
+        ]:
+            for value in executable_uses_values(document, kind):
                 if not value.startswith("./"):
                     continue
                 with self.subTest(
@@ -365,8 +445,11 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
         self.assertTrue(workflows, "repository must retain GitHub Actions workflows")
 
         remote_refs = []
-        for document in [*workflows, *action_manifests]:
-            for value in yaml_scalar_values_for_key(document, "uses"):
+        for document, kind in [
+            *((workflow, "workflow") for workflow in workflows),
+            *((manifest, "action") for manifest in action_manifests),
+        ]:
+            for value in executable_uses_values(document, kind):
                 if value.startswith("./"):
                     continue
                 remote_refs.append((str(document.relative_to(ROOT)), value))
@@ -413,6 +496,17 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                 "  using: docker\n"
                 "  image: Dockerfile\n"
             ),
+            "lookalike.yml": (
+                "name: lookalike\n"
+                "inputs:\n"
+                "  image:\n"
+                "    default: docker://ghcr.io/example/unrelated:latest\n"
+                "runs: {using: node20, main: index.js}\n"
+            ),
+            "invalid.yml": (
+                "name: invalid\n"
+                "runs: {using: docker, image: {repo: example/tool}}\n"
+            ),
         }
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
@@ -431,6 +525,13 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                 ["docker://ghcr.io/example/tool:latest"],
             )
             self.assertEqual(docker_action_image_values(paths["local.yml"]), [])
+            self.assertEqual(
+                docker_action_image_values(paths["lookalike.yml"]),
+                [],
+                "non-runs image keys must not be treated as executable Docker action images",
+            )
+            with self.assertRaisesRegex(RuntimeError, "runs.image must be a scalar"):
+                docker_action_image_values(paths["invalid.yml"])
             self.assertIsNone(
                 immutable_uses_error(docker_action_image_values(paths["pinned.yml"])[0])
             )
@@ -438,40 +539,62 @@ class AllWorkflowActionPinsTests(unittest.TestCase):
                 immutable_uses_error(docker_action_image_values(paths["mutable.yml"])[0])
             )
 
-    def test_yaml_semantic_scan_catches_quoted_spaced_and_flow_uses_keys(self):
+    def test_semantic_uses_scan_is_scoped_to_executable_workflow_positions(self):
         sha = "d" * 40
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
-            pinned = root / "pinned.yml"
-            pinned.write_text(
+            workflow = root / "workflow.yml"
+            workflow.write_text(
+                "uses: ignored/top-level@v1\n"
                 "jobs:\n"
+                "  reusable:\n"
+                f"    uses: owner/repo/.github/workflows/reuse.yml@{sha}\n"
                 "  audit:\n"
-                "    steps: [{\"uses\" : "
-                f"\"actions/checkout@{sha}\"}}]\n",
-                encoding="utf-8",
-            )
-            mutable = root / "mutable.yml"
-            mutable.write_text(
-                "jobs:\n"
-                "  audit:\n"
-                "    steps: [{uses : actions/checkout@v7}]\n",
+                "    env: {uses: ignored/env@v1}\n"
+                "    steps:\n"
+                f"      - {{\"uses\" : \"actions/checkout@{sha}\", "
+                "with: {uses: ignored/input@v1}}\n",
                 encoding="utf-8",
             )
 
             self.assertEqual(
-                yaml_scalar_values_for_key(pinned, "uses"),
-                [f"actions/checkout@{sha}"],
+                executable_uses_values(workflow, "workflow"),
+                [
+                    f"owner/repo/.github/workflows/reuse.yml@{sha}",
+                    f"actions/checkout@{sha}",
+                ],
             )
-            self.assertIsNone(
-                immutable_uses_error(yaml_scalar_values_for_key(pinned, "uses")[0])
+
+    def test_semantic_uses_scan_is_scoped_to_composite_action_steps(self):
+        sha = "e" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            manifest = root / "action.yml"
+            manifest.write_text(
+                "name: fixture\n"
+                "inputs: {uses: {default: ignored/input@v1}}\n"
+                "runs:\n"
+                "  using: composite\n"
+                "  steps:\n"
+                f"    - uses: owner/action@{sha}\n"
+                "      with: {uses: ignored/nested@v1}\n",
+                encoding="utf-8",
             )
             self.assertEqual(
-                yaml_scalar_values_for_key(mutable, "uses"),
-                ["actions/checkout@v7"],
+                executable_uses_values(manifest, "action"),
+                [f"owner/action@{sha}"],
             )
-            self.assertIsNotNone(
-                immutable_uses_error(yaml_scalar_values_for_key(mutable, "uses")[0])
+
+    def test_semantic_uses_scan_fails_closed_on_non_scalar_executable_uses(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            workflow = root / "invalid.yml"
+            workflow.write_text(
+                "jobs: {audit: {steps: [{uses: {repo: action}}]}}\n",
+                encoding="utf-8",
             )
+            with self.assertRaisesRegex(RuntimeError, "uses must be a scalar"):
+                executable_uses_values(workflow, "workflow")
 
     def test_composite_action_manifest_discovery_is_recursive(self):
         with tempfile.TemporaryDirectory() as temp:

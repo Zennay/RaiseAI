@@ -21,6 +21,12 @@ jobs:
     runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 10
     env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONHASHSEED: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
       ARTIFACT_ID: "11317304352"
       ARTIFACT_RUN_ID: "37241768528"
       EXPECTED_ARTIFACT_DIGEST: "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce"
@@ -39,6 +45,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          python3 -c 'import platform, sys; assert platform.python_implementation() == "CPython"; assert sys.version_info[:2] == (3, 12), sys.version'
           archive="$RUNNER_TEMP/$ASSET_NAME"
           api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
 

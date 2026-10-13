@@ -9,9 +9,9 @@ import errno
 import json
 import os
 import re
+import secrets
 import stat
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -170,32 +170,67 @@ def build_template(session: Any, *, recorded_at_utc: str | None = None) -> dict[
 
 def _write_new_json_atomic(output: Path, payload: dict[str, Any]) -> None:
     serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    fd, stage_name = tempfile.mkstemp(
-        prefix=f".{output.name}.",
-        suffix=".tmp",
-        dir=str(output.parent),
+    _require(output.name not in {"", ".", ".."}, "observation output path must name a file")
+    _require(
+        hasattr(os, "O_DIRECTORY") and hasattr(os, "O_NOFOLLOW"),
+        "observation output directory cannot be verified safely on this platform",
     )
-    stage = Path(stage_name)
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_flags |= getattr(os, "O_CLOEXEC", 0)
+    directory_fd = os.open(output.parent, directory_flags)
+    stage_name: str | None = None
     published = False
     try:
+        metadata = os.fstat(directory_fd)
+        _require(stat.S_ISDIR(metadata.st_mode), "observation output parent must be a directory")
+
+        create_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        create_flags |= getattr(os, "O_CLOEXEC", 0)
+        for _ in range(32):
+            candidate = f".{output.name}.{secrets.token_hex(8)}.tmp"
+            try:
+                fd = os.open(
+                    candidate,
+                    create_flags,
+                    stat.S_IRUSR | stat.S_IWUSR,
+                    dir_fd=directory_fd,
+                )
+            except FileExistsError:
+                continue
+            stage_name = candidate
+            break
+        else:
+            raise TemplateError("could not allocate a secure temporary observation file")
+
         with os.fdopen(fd, "w", encoding="utf-8") as output_file:
             output_file.write(serialized)
             output_file.flush()
             os.fsync(output_file.fileno())
 
         try:
-            os.link(stage, output)
+            os.link(
+                stage_name,
+                output.name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
         except FileExistsError as exc:
             raise TemplateError(
                 f"refusing to overwrite existing observation file: {output}"
             ) from exc
         published = True
     finally:
-        try:
-            stage.unlink(missing_ok=True)
-        except OSError:
-            if not published:
-                raise
+        if stage_name is not None:
+            try:
+                os.unlink(stage_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                if not published:
+                    raise
+        os.close(directory_fd)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

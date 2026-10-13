@@ -88,6 +88,95 @@ class PassingContract(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertNotIn("SKIPPED:", output)
 
+    def test_symlinked_contract_module_is_rejected_before_discovery(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-link-") as tmp:
+            root = Path(tmp)
+            tests_dir = root / "tests"
+            tests_dir.mkdir()
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+            target = root / "linked_contract.py"
+            target.write_text(
+                'raise RuntimeError("linked contract target must not be imported")\n',
+                encoding="utf-8",
+            )
+            (tests_dir / "test_linked_contract.py").symlink_to(target)
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("unsafe test module entries", rendered)
+        self.assertIn(
+            "UNSAFE-CONTRACT-MODULE: test_linked_contract.py: symbolic links are forbidden",
+            rendered,
+        )
+        self.assertNotIn("linked contract target must not be imported", rendered)
+
+    def test_non_regular_contract_module_entry_is_rejected_before_discovery(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-nonregular-") as tmp:
+            tests_dir = Path(tmp)
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+            (tests_dir / "test_directory.py").mkdir()
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("unsafe test module entries", rendered)
+        self.assertIn(
+            "UNSAFE-CONTRACT-MODULE: test_directory.py: must be a regular file",
+            rendered,
+        )
+
+    def test_symlinked_contract_package_is_rejected_before_discovery(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-package-link-") as tmp:
+            root = Path(tmp)
+            tests_dir = root / "tests"
+            tests_dir.mkdir()
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+            target = root / "linked_package"
+            target.mkdir()
+            (target / "__init__.py").write_text("", encoding="utf-8")
+            (target / "test_linked_package.py").write_text(
+                'raise RuntimeError("linked package target must not be imported")\n',
+                encoding="utf-8",
+            )
+            (tests_dir / "linked_package").symlink_to(target, target_is_directory=True)
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("invalid package entries", rendered)
+        self.assertIn(
+            "INVALID-CONTRACT-PACKAGE: linked_package/: symbolic link directories are forbidden",
+            rendered,
+        )
+        self.assertNotIn("linked package target must not be imported", rendered)
+
     def test_named_contract_module_without_tests_returns_nonzero(self):
         exit_code, output = self.run_temporary_suite(
             """
@@ -108,6 +197,66 @@ class PassingContract(unittest.TestCase):
             "EMPTY-CONTRACT-MODULE: test_runner_empty_contract_case",
             output,
         )
+
+    def test_inherited_only_contract_module_is_reported_empty(self):
+        exit_code, output = self.run_temporary_suite(
+            "from source_contract import SourceContract\n"
+            "class InheritedContract(SourceContract):\n"
+            "    pass\n",
+            "test_inherited_contract.py",
+            extra_files={
+                "source_contract.py": (
+                    "import unittest\n"
+                    "class SourceContract(unittest.TestCase):\n"
+                    "    def test_passes(self):\n"
+                    "        self.assertTrue(True)\n"
+                ),
+            },
+        )
+        self.assertEqual(exit_code, 1, output)
+        self.assertIn("contributed zero tests", output)
+        self.assertIn(
+            "EMPTY-CONTRACT-MODULE: test_inherited_contract",
+            output,
+        )
+
+    def test_same_basename_nested_contracts_keep_distinct_module_identity(self):
+        with tempfile.TemporaryDirectory(prefix="raiseai-runner-qualified-") as tmp:
+            tests_dir = Path(tmp)
+            (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+            alpha = tests_dir / "alpha"
+            beta = tests_dir / "beta"
+            alpha.mkdir()
+            beta.mkdir()
+            (alpha / "__init__.py").write_text("", encoding="utf-8")
+            (beta / "__init__.py").write_text("", encoding="utf-8")
+            (alpha / "test_collision.py").write_text(
+                "import unittest\n\n"
+                "class AlphaContract(unittest.TestCase):\n"
+                "    def test_passes(self):\n"
+                "        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            (beta / "test_collision.py").write_text(
+                "CONTRACT_SENTINEL = True\n",
+                encoding="utf-8",
+            )
+
+            previous = MODULE.TESTS_DIR
+            MODULE.TESTS_DIR = tests_dir
+            output = StringIO()
+            try:
+                with redirect_stdout(output), redirect_stderr(output):
+                    exit_code = MODULE.main()
+            finally:
+                MODULE.TESTS_DIR = previous
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 1, rendered)
+        self.assertIn("contributed zero tests", rendered)
+        self.assertIn("EMPTY-CONTRACT-MODULE: beta.test_collision", rendered)
+        self.assertNotIn("EMPTY-CONTRACT-MODULE: alpha.test_collision", rendered)
 
     def test_failing_suite_returns_nonzero(self):
         exit_code, _ = self.run_temporary_suite(
