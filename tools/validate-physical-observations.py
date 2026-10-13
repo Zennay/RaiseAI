@@ -151,7 +151,15 @@ def validate_observations(
     _require(not missing, f"missing observation fields: {', '.join(missing)}")
     _require(not unexpected, f"unexpected observation fields: {', '.join(unexpected)}")
 
-    for key in ("watch_serial", "app_version", "source_revision", "apk_sha256", "started_at_utc"):
+    for key in (
+        "watch_serial",
+        "app_version",
+        "source_revision",
+        "apk_sha256",
+        "started_at_utc",
+        "e2e_passed",
+        "v1_gate_passed",
+    ):
         _require(key in session, f"session is missing {key}")
 
     watch_serial = observations["watch_serial"]
@@ -171,6 +179,10 @@ def validate_observations(
     _require(app_version == session["app_version"], "app_version does not match physical session")
     _require(source_revision == expected_revision, "source_revision does not match physical session")
     _require(apk_sha256 == expected_apk, "apk_sha256 does not match physical session")
+
+    for key in ("e2e_passed", "v1_gate_passed"):
+        _require(type(session[key]) is bool, f"session {key} must be boolean")
+        _require(session[key], f"session {key} must be true before quality evidence is complete")
 
     recorded_at = _parse_timestamp(observations["recorded_at_utc"], "recorded_at_utc")
     started_at = _parse_timestamp(session["started_at_utc"], "session started_at_utc")
