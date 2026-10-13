@@ -2,7 +2,9 @@ import json
 import math
 import pathlib
 import re
+import stat
 import subprocess
+import tempfile
 import unittest
 
 
@@ -15,6 +17,18 @@ EXPECTED_CRITICAL = {
     "runtime-evidence/ftmo-pr437-runner-recovery-37006363914.json",
     "runtime-evidence/ftmo-pr439-runner-recovery-37022076400.json",
 }
+
+
+def read_workflow_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
 
 
 def tracked_json_paths():
@@ -47,7 +61,12 @@ def parse_finite_float(value):
 
 
 def load_strict_json(path):
-    text = path.read_bytes().decode("utf-8")
+    raw = path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raise ValueError("UTF-8 BOM is not allowed")
+    if b"\r" in raw:
+        raise ValueError("CR bytes are not allowed; JSON must use LF line endings")
+    text = raw.decode("utf-8")
     return json.loads(
         text,
         object_pairs_hook=reject_duplicate_keys,
@@ -58,7 +77,29 @@ def load_strict_json(path):
 
 class JsonSurfaceContractTests(unittest.TestCase):
     def setUp(self):
-        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.workflow = read_workflow_text(WORKFLOW)
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_tracked_json_surface_is_nonempty_and_includes_critical_files(self):
         paths = tracked_json_paths()
@@ -81,6 +122,20 @@ class JsonSurfaceContractTests(unittest.TestCase):
                     load_strict_json(path)
                 except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                     self.fail(f"{relative} must be strict UTF-8 JSON: {exc}")
+
+    def test_strict_loader_rejects_bom_and_cr_line_endings(self):
+        import tempfile
+
+        for payload, message in (
+            (b"\xef\xbb\xbf{\"ok\": true}\n", "UTF-8 BOM is not allowed"),
+            (b"{\"ok\": true}\r\n", "CR bytes are not allowed"),
+        ):
+            with self.subTest(message=message):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = pathlib.Path(directory) / "sample.json"
+                    path.write_bytes(payload)
+                    with self.assertRaisesRegex(ValueError, message):
+                        load_strict_json(path)
 
     def test_strict_loader_rejects_duplicate_keys_and_nonfinite_numbers(self):
         with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
@@ -254,6 +309,8 @@ class JsonSurfaceContractTests(unittest.TestCase):
             "object_pairs_hook=reject_duplicate_keys",
             "parse_constant=reject_nonfinite",
             "parse_float=parse_finite_float",
+            'raw.startswith(b"\\xef\\xbb\\xbf")',
+            'b"\\r" in raw',
             'decode("utf-8")',
             "python3 -m unittest tests.test_json_surface_contract",
             "git diff --exit-code -- .",
@@ -351,6 +408,31 @@ class JsonSurfaceContractTests(unittest.TestCase):
                 expected_keys[name],
                 f"{name} must not gain unreviewed step-level controls",
             )
+
+    def test_workflow_rejects_quoted_mapping_keys(self):
+        quoted_mapping_key = re.compile(
+            r'''(?m)^ {0,10}(?:"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+')\s*:'''
+        )
+        fixtures = (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '    "timeout-minutes": 30',
+            "  'pull_request_target':",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                self.assertRegex(
+                    fixture,
+                    quoted_mapping_key,
+                    "regression fixture must exercise the quoted-key detector",
+                )
+
+        self.assertNotRegex(
+            self.workflow,
+            quoted_mapping_key,
+            "quoted YAML mapping keys can bypass the JSON workflow exact-surface parsers",
+        )
+
 
     def test_all_run_steps_are_explicit_strict_bash(self):
         lines = self.workflow.splitlines()

@@ -1,6 +1,8 @@
 from pathlib import Path
 import re
+import stat
 import subprocess
+import tempfile
 import unittest
 
 
@@ -10,6 +12,18 @@ FROZEN_SOURCE_REVISION = "8f719bb273f9b997848864f342598e7df5f090e5"
 FROZEN_RELEASE_TAG = "physical-handoff-v1.5.2-8f719bb"
 FROZEN_RELEASE_ASSET_ID = "611084738"
 FROZEN_ARCHIVE_SHA256 = "867f2a75260c89d9d92416d407df5dc559a05d99d6f506006003b163ad3e51ce"
+
+def read_contract_text(path: Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: documentation input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: documentation input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: documentation input must be valid UTF-8") from exc
+
 
 PHYSICAL_ACCEPTANCE_ENTRYPOINTS = (
     "start-frozen-acceptance.command",
@@ -21,19 +35,38 @@ PHYSICAL_ACCEPTANCE_ENTRYPOINTS = (
 
 
 class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
+    def test_documentation_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular = root / "regular.md"
+            regular.write_text("# Raise\n", encoding="utf-8")
+            linked = root / "linked.md"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_contract_text(linked)
+
+            directory = root / "directory.md"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_contract_text(directory)
+
+            invalid = root / "invalid.md"
+            invalid.write_bytes(b"# Raise\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_contract_text(invalid)
+
     def test_version_file_is_canonical_single_line_utf8(self):
-        raw = (ROOT / "VERSION.txt").read_bytes()
-        text = raw.decode("utf-8")
+        text = read_contract_text(ROOT / "VERSION.txt")
         self.assertIsNotNone(
             re.fullmatch(r"\d+\.\d+\.\d+\n", text),
             "VERSION.txt must contain exactly one canonical SemVer line terminated by LF",
         )
 
     def test_repository_version_matches_android_version_name(self):
-        version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
+        version = read_contract_text(ROOT / "VERSION.txt").strip()
         self.assertRegex(version, VERSION_RE)
 
-        build_text = (ROOT / "app" / "build.gradle.kts").read_text(encoding="utf-8")
+        build_text = read_contract_text(ROOT / "app" / "build.gradle.kts")
         version_names = re.findall(
             r'(?m)^\s*versionName\s*=\s*"([^"]+)"\s*$',
             build_text,
@@ -45,14 +78,14 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
         )
 
     def test_readme_tracks_repository_version(self):
-        version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
+        version = read_contract_text(ROOT / "VERSION.txt").strip()
         self.assertRegex(version, VERSION_RE)
 
-        first_line = (ROOT / "README.md").read_text(encoding="utf-8").splitlines()[0]
+        first_line = read_contract_text(ROOT / "README.md").splitlines()[0]
         self.assertEqual(first_line, f"# Raise AI v{version} — Galaxy Watch 7")
 
     def test_readme_next_gate_pins_exact_preserved_carrier_identity(self):
-        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "README.md")
         self.assertEqual(text.count("## Next proof gate\n"), 1)
         next_gate = text.split("## Next proof gate\n", 1)[1].split("\n## ", 1)[0]
         required = (
@@ -71,7 +104,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                 )
 
     def test_start_here_distinguishes_tip_from_frozen_acceptance(self):
-        text = (ROOT / "START-HERE.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "START-HERE.md")
         self.assertTrue(
             text.startswith("# Raise AI — START HERE (frozen v1.5.2 acceptance)\n"),
             "START-HERE must identify itself as the frozen acceptance guide, not the repository-tip release",
@@ -87,7 +120,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                 self.assertIn(marker, text)
 
     def test_start_here_pins_exact_preserved_carrier_identity(self):
-        text = (ROOT / "START-HERE.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "START-HERE.md")
         required = (
             f"merged-main revision `{FROZEN_SOURCE_REVISION}`",
             f"GitHub Release tag `{FROZEN_RELEASE_TAG}`",
@@ -104,9 +137,9 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
 
     def test_operator_guides_pin_the_same_frozen_carrier(self):
         guides = {
-            "START-HERE.md": (ROOT / "START-HERE.md").read_text(encoding="utf-8"),
-            "PHYSICAL-ACCEPTANCE.md": (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8"),
-            "DEVICE-TEST.md": (ROOT / "DEVICE-TEST.md").read_text(encoding="utf-8"),
+            "START-HERE.md": read_contract_text(ROOT / "START-HERE.md"),
+            "PHYSICAL-ACCEPTANCE.md": read_contract_text(ROOT / "PHYSICAL-ACCEPTANCE.md"),
+            "DEVICE-TEST.md": read_contract_text(ROOT / "DEVICE-TEST.md"),
         }
         markers = (
             FROZEN_SOURCE_REVISION,
@@ -124,7 +157,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                     )
 
     def test_historical_device_checklist_cannot_masquerade_as_acceptance(self):
-        text = (ROOT / "DEVICE-TEST.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "DEVICE-TEST.md")
         required = (
             "**Historical fallback checklist only.**",
             "Do not use this V0.3 Gemini-first checklist for the current physical acceptance gate.",
@@ -142,9 +175,9 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
 
     def test_legacy_fallback_guides_redirect_without_partial_carrier_identity(self):
         guides = {
-            "REMOTE-LOGIN.md": (ROOT / "REMOTE-LOGIN.md").read_text(encoding="utf-8"),
-            "GEMINI-HOME-SETUP.md": (ROOT / "GEMINI-HOME-SETUP.md").read_text(encoding="utf-8"),
-            "CHATGPT-WEB-SETUP.md": (ROOT / "CHATGPT-WEB-SETUP.md").read_text(encoding="utf-8"),
+            "REMOTE-LOGIN.md": read_contract_text(ROOT / "REMOTE-LOGIN.md"),
+            "GEMINI-HOME-SETUP.md": read_contract_text(ROOT / "GEMINI-HOME-SETUP.md"),
+            "CHATGPT-WEB-SETUP.md": read_contract_text(ROOT / "CHATGPT-WEB-SETUP.md"),
         }
         required = (
             "GitHub issue #34",
@@ -174,7 +207,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
                     )
 
     def test_frozen_acceptance_version_is_not_derived_from_version_txt(self):
-        current_version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
+        current_version = read_contract_text(ROOT / "VERSION.txt").strip()
         self.assertNotEqual(
             current_version,
             "1.5.2",
@@ -183,7 +216,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
 
 
     def test_physical_acceptance_observation_template_command_uses_real_bash_continuation(self):
-        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "PHYSICAL-ACCEPTANCE.md")
         lines = text.splitlines()
         command = "python3 tools/create-physical-observation-template.py " + "\\"
 
@@ -206,7 +239,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
 
 
     def test_physical_acceptance_entrypoints_are_tracked_regular_files(self):
-        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "PHYSICAL-ACCEPTANCE.md")
         tracked = {
             item
             for item in subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
@@ -239,7 +272,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
 
 
     def test_physical_acceptance_validator_persists_secret_safe_quality_result(self):
-        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "PHYSICAL-ACCEPTANCE.md")
         command = "\n".join(
             (
                 "python3 tools/validate-physical-observations.py " + "\\",
@@ -256,7 +289,7 @@ class ReleaseDocumentationIdentityContractTests(unittest.TestCase):
 
 
     def test_physical_acceptance_default_share_set_excludes_raw_identity_and_notes(self):
-        text = (ROOT / "PHYSICAL-ACCEPTANCE.md").read_text(encoding="utf-8")
+        text = read_contract_text(ROOT / "PHYSICAL-ACCEPTANCE.md")
         share_section = text.split("Default GitHub issue #34 share set:\n", 1)[1].split(
             "\nAttach or link only the reviewed safe evidence", 1
         )[0]

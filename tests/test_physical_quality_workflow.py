@@ -1,4 +1,6 @@
 import re
+import stat
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -31,10 +33,44 @@ EXPECTED_ENV = [
 ]
 
 
+def read_workflow_text(path: Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
+
+
 class PhysicalQualityWorkflowContractTests(unittest.TestCase):
     def setUp(self):
-        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.text = read_workflow_text(WORKFLOW)
         self.lines = self.text.splitlines()
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def _event_paths(self, event):
         event_line = f"  {event}:"

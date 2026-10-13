@@ -1,10 +1,23 @@
+import importlib.util
 import pathlib
 import re
+import stat
+import tempfile
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-tooling-test.yml"
+RUNNER = ROOT / "tools" / "run_quality_tooling_contracts.py"
+RUNNER_SPEC = importlib.util.spec_from_file_location(
+    "raise_quality_tooling_runner_contract",
+    RUNNER,
+)
+if RUNNER_SPEC is None or RUNNER_SPEC.loader is None:
+    raise RuntimeError("could not load quality tooling contract runner")
+RUNNER_MODULE = importlib.util.module_from_spec(RUNNER_SPEC)
+RUNNER_SPEC.loader.exec_module(RUNNER_MODULE)
+QUALITY_MODULES = RUNNER_MODULE.QUALITY_MODULES
 STRICT_COMMAND_ENTRYPOINTS = [
     "pull-diagnostics.command",
     "pull-watch-data.command",
@@ -15,6 +28,18 @@ STRICT_COMMAND_ENTRYPOINTS = [
     "start-physical-handoff.command",
 ]
 POWERSHELL_SYNTAX_ENTRYPOINTS = ["install-watch-windows.ps1"]
+def read_workflow_text(path: pathlib.Path) -> str:
+    mode = path.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"{path.name}: workflow input must not be a symbolic link")
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{path.name}: workflow input must be a regular file")
+    try:
+        return path.read_bytes().decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow input must be valid UTF-8") from exc
+
+
 SHELL_SYNTAX_ENTRYPOINTS = [
     "upgrade-watch.command",
     "watch-preflight.command",
@@ -28,7 +53,29 @@ SHELL_SYNTAX_ENTRYPOINTS = [
 
 class QualityToolingWorkflowContractTests(unittest.TestCase):
     def setUp(self):
-        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.text = read_workflow_text(WORKFLOW)
+
+    def test_workflow_reader_rejects_symlink_nonregular_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            regular = root / "regular.yml"
+            regular.write_text("on: [push]\n", encoding="utf-8")
+            self.assertEqual(read_workflow_text(regular), "on: [push]\n")
+
+            linked = root / "linked.yml"
+            linked.symlink_to(regular)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                read_workflow_text(linked)
+
+            directory = root / "directory.yml"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "must be a regular file"):
+                read_workflow_text(directory)
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"on: [push]\n\xff")
+            with self.assertRaisesRegex(ValueError, "must be valid UTF-8"):
+                read_workflow_text(invalid)
 
     def test_uses_only_immutable_external_actions(self):
         refs = re.findall(
@@ -165,6 +212,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "*.py",
             "*.ps1",
             "tools/*.py",
+            "tests/__init__.py",
             "tests/test_adb_device_binding.py",
             "tests/test_all_workflow_action_pins.py",
             "tests/test_frozen_acceptance_launcher.py",
@@ -173,6 +221,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests/test_physical_observation_validator.py",
             "tests/test_physical_validation_cli.py",
             "tests/test_quality_tooling_workflow.py",
+            "tests/test_quality_tooling_runner.py",
             "tests/test_quality_workflow_action_pinning.py",
             "tests/test_source_text_review_integrity.py",
             "tests/test_watch_data_analyzer.py",
@@ -229,7 +278,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         for event in ("push", "pull_request"):
             with self.subTest(event=event):
                 self.assertEqual(self._trigger_paths(event)[:2], ["*.command", "*.py"])
-        self.assertIn("python3 -m py_compile *.py ", self.text)
+        self.assertIn("python3 -I -m py_compile *.py ", self.text)
         discovered = sorted(path.name for path in ROOT.glob("*.py"))
         self.assertTrue(discovered, "repository must retain at least one root Python entrypoint")
         for path in discovered:
@@ -269,12 +318,17 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
     def test_compiles_all_python_quality_tools(self):
         self.assertIn("tools/*.py", self._trigger_paths("push"))
         self.assertIn("tools/*.py", self._trigger_paths("pull_request"))
-        self.assertIn("python3 -m py_compile *.py tools/*.py", self.text)
+        self.assertIn("python3 -I -m py_compile *.py tools/*.py", self.text)
+        self.assertNotIn(
+            "python3 -m py_compile",
+            self.text,
+            "hosted Python syntax validation must not allow ambient import-path customization",
+        )
         discovered = sorted(path.name for path in (ROOT / "tools").glob("*.py"))
         self.assertTrue(discovered, "tools/ must retain Python quality tooling")
 
-    def test_runs_complete_hosted_quality_regression_set(self):
-        modules = [
+    def test_runs_complete_hosted_quality_regression_set_in_isolated_mode(self):
+        modules = (
             "tests.test_adb_device_binding",
             "tests.test_all_workflow_action_pins",
             "tests.test_frozen_acceptance_launcher",
@@ -282,19 +336,27 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "tests.test_physical_observation_template",
             "tests.test_physical_observation_validator",
             "tests.test_physical_validation_cli",
+            "tests.test_quality_tooling_runner",
             "tests.test_quality_tooling_workflow",
             "tests.test_quality_workflow_action_pinning",
             "tests.test_source_text_review_integrity",
             "tests.test_watch_data_analyzer",
             "tests.test_watch_apk_identity",
             "tests.test_watch_e2e_evidence_validator",
+            "tests.test_wear_extension_asset_contract",
             "tests.test_watch_sensor_trace_analyzer",
             "tests.test_watch_sensor_trial_analyzer",
-        ]
-        self.assertIn("python3 -m unittest", self.text)
-        for module in modules:
-            with self.subTest(module=module):
-                self.assertIn(module, self.text)
+        )
+        self.assertEqual(QUALITY_MODULES, modules)
+        self.assertIn(
+            "python3 -I tools/run_quality_tooling_contracts.py",
+            self.text,
+        )
+        self.assertNotIn(
+            "python3 -m unittest",
+            self.text,
+            "hosted quality regressions must not re-enable environment-controlled imports",
+        )
 
     def test_all_run_steps_use_bash_strict_mode(self):
         lines = self.text.splitlines()
@@ -408,6 +470,15 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("PYTHONPYCACHEPREFIX: /tmp/raise-quality-pyc", self.text)
         self.assertIn("TZ: UTC", self.text)
         self.assertIn("- name: Verify Python runtime", self.text)
+        self.assertIn(
+            "python3 -I -c 'import platform, sys;",
+            self.text,
+        )
+        self.assertNotIn(
+            "python3 -c 'import platform, sys;",
+            self.text,
+            "runtime verification must not allow ambient import-path customization",
+        )
         self.assertIn('platform.python_implementation() == "CPython"', self.text)
         self.assertIn("sys.version_info[:2] == (3, 12)", self.text)
 
@@ -708,6 +779,31 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
 
 
+    def test_workflow_rejects_quoted_mapping_keys(self):
+        quoted_mapping_key = re.compile(
+            r'''(?m)^\s*(?:"[^"\n]+"|'[^'\n]+')\s*:'''
+        )
+        fixtures = (
+            '        "continue-on-error": true',
+            "        'working-directory': /tmp",
+            '      "timeout-minutes": 30',
+            "  'pull_request_target':",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                self.assertRegex(
+                    fixture,
+                    quoted_mapping_key,
+                    "regression fixture must exercise the quoted-key detector",
+                )
+
+        self.assertNotRegex(
+            self.text,
+            quoted_mapping_key,
+            "quoted YAML mapping keys can bypass the hosted quality exact-surface parsers",
+        )
+
+
     def test_reproducibility_nested_mapping_surfaces_are_exact(self):
         lines = self.text.splitlines()
 
@@ -786,7 +882,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Verify Python runtime": [
                 "set -euo pipefail",
-                "python3 -c 'import platform, sys; assert platform.python_implementation() == \"CPython\"; assert sys.version_info[:2] == (3, 12), sys.version'",
+                "python3 -I -c 'import platform, sys; assert platform.python_implementation() == \"CPython\"; assert sys.version_info[:2] == (3, 12), sys.version'",
             ],
             "Shell syntax": [
                 "set -euo pipefail",
@@ -794,7 +890,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Python syntax": [
                 "set -euo pipefail",
-                "python3 -m py_compile *.py tools/*.py",
+                "python3 -I -m py_compile *.py tools/*.py",
             ],
             "PowerShell syntax": [
                 "set -euo pipefail",
@@ -803,7 +899,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             ],
             "Quality tooling regressions": [
                 "set -euo pipefail",
-                "python3 -m unittest tests.test_adb_device_binding tests.test_all_workflow_action_pins tests.test_frozen_acceptance_launcher tests.test_frozen_physical_handoff_fetcher tests.test_physical_observation_template tests.test_physical_observation_validator tests.test_physical_validation_cli tests.test_quality_tooling_workflow tests.test_quality_workflow_action_pinning tests.test_source_text_review_integrity tests.test_watch_data_analyzer tests.test_watch_apk_identity tests.test_watch_e2e_evidence_validator tests.test_watch_sensor_trace_analyzer tests.test_watch_sensor_trial_analyzer",
+                "python3 -I tools/run_quality_tooling_contracts.py",
             ],
             "Verify worktree remains clean": [
                 "set -euo pipefail",

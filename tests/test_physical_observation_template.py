@@ -235,6 +235,54 @@ class PhysicalObservationTemplateTests(unittest.TestCase):
             self.assertTrue(output.is_symlink())
             self.assertFalse(target.exists())
 
+    def test_cli_rejects_symlinked_output_parent_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            session_path = root / "session.json"
+            session_path.write_text(json.dumps(session_payload()), encoding="utf-8")
+            real_output = root / "real-output"
+            real_output.mkdir()
+            linked_output = root / "linked-output"
+            linked_output.symlink_to(real_output, target_is_directory=True)
+            output = linked_output / "operator-observations.json"
+
+            code = generator.main([str(session_path), "--output", str(output)])
+
+            self.assertEqual(code, 1)
+            self.assertFalse((real_output / "operator-observations.json").exists())
+            self.assertFalse(output.exists())
+
+    def test_output_publish_stays_bound_to_opened_parent_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            output_dir = root / "output"
+            output_dir.mkdir()
+            moved_dir = root / "opened-output"
+            replacement_dir = root / "replacement-output"
+            replacement_dir.mkdir()
+            output = output_dir / "operator-observations.json"
+            real_open = generator.os.open
+            parent_opened = False
+
+            def open_then_replace_parent(target, flags, *args, **kwargs):
+                nonlocal parent_opened
+                fd = real_open(target, flags, *args, **kwargs)
+                if not parent_opened and pathlib.Path(target) == output_dir and "dir_fd" not in kwargs:
+                    parent_opened = True
+                    output_dir.rename(moved_dir)
+                    replacement_dir.rename(output_dir)
+                return fd
+
+            with mock.patch.object(generator.os, "open", side_effect=open_then_replace_parent):
+                generator._write_new_json_atomic(output, {"schema_version": 1})
+
+            self.assertTrue((moved_dir / "operator-observations.json").exists())
+            self.assertFalse((output_dir / "operator-observations.json").exists())
+            self.assertEqual(
+                json.loads((moved_dir / "operator-observations.json").read_text(encoding="utf-8")),
+                {"schema_version": 1},
+            )
+
     def test_normalizes_uppercase_hashes(self):
         payload = generator.build_template(
             session_payload(source_revision=REVISION.upper(), apk_sha256=APK.upper()),
