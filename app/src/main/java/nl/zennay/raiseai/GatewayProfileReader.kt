@@ -24,7 +24,20 @@ internal object GatewayProfileReader {
         ) {
             null
         } else {
-            val bytes = file.inputStream().use { it.readNBytes(MAX_PROFILE_BYTES + 1) }
+            // InputStream.readNBytes is not available on every supported Wear SDK.
+            // Read at most (limit + 1) bytes using the Android-compatible API.
+            val buffer = ByteArray(MAX_PROFILE_BYTES + 1)
+            val count = file.inputStream().use { stream ->
+                var filled = 0
+                while (filled < buffer.size) {
+                    val read = stream.read(buffer, filled, buffer.size - filled)
+                    if (read < 0) break
+                    if (read == 0) throw java.io.IOException("No forward progress reading profile")
+                    filled += read
+                }
+                filled
+            }
+            val bytes = buffer.copyOf(count)
             if (bytes.size !in 1..MAX_PROFILE_BYTES) {
                 null
             } else {
