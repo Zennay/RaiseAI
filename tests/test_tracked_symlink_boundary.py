@@ -27,6 +27,22 @@ def validate_target(path: str, target: str) -> None:
             parts.append(component)
 
 
+
+def validate_checkout_symlink(root: pathlib.Path, name: str) -> None:
+    """Validate the lexical target and the fully resolved symlink chain."""
+    link = root / name
+    if not link.is_symlink():
+        raise ValueError(f"{name}: checked-out link is missing")
+    validate_target(name, link.readlink().as_posix())
+    repo_root = root.resolve(strict=True)
+    try:
+        destination = link.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError(f"{name}: invalid or unresolved symlink chain") from exc
+    if not destination.is_relative_to(repo_root):
+        raise ValueError(f"{name}: symlink chain escapes repository")
+
+
 def tracked_symlinks():
     raw = subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=ROOT)
     for entry in filter(None, raw.split(b"\0")):
@@ -47,9 +63,33 @@ class TrackedSymlinkBoundaryTests(unittest.TestCase):
     def test_tracked_symlink_targets_stay_inside_repository(self):
         for filename in tracked_symlinks():
             with self.subTest(path=filename):
-                link = ROOT / filename
-                self.assertTrue(link.is_symlink(), f"{filename}: Git symlink missing from checkout")
-                validate_target(filename, link.readlink().as_posix())
+                validate_checkout_symlink(ROOT, filename)
+
+    def test_symlink_chain_that_escapes_repository_is_rejected(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            parent = pathlib.Path(folder)
+            repo = parent / "repo"
+            repo.mkdir()
+            outside = parent / "private.txt"
+            outside.write_text("private", encoding="utf-8")
+            (repo / "indirect").symlink_to("../private.txt")
+            (repo / "public-link").symlink_to("indirect")
+            with self.assertRaisesRegex(ValueError, "chain escapes repository"):
+                validate_checkout_symlink(repo, "public-link")
+
+    def test_internal_symlink_chain_is_allowed_and_broken_chain_fails_closed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            repo = pathlib.Path(folder) / "repo"
+            repo.mkdir()
+            (repo / "file.txt").write_text("ok", encoding="utf-8")
+            (repo / "indirect").symlink_to("file.txt")
+            (repo / "public-link").symlink_to("indirect")
+            validate_checkout_symlink(repo, "public-link")
+            (repo / "indirect").unlink()
+            with self.assertRaisesRegex(ValueError, "invalid or unresolved"):
+                validate_checkout_symlink(repo, "public-link")
 
     def test_rejects_absolute_and_parent_escape(self):
         for path, target in (
