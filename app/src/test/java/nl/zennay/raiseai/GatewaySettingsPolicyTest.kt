@@ -35,10 +35,10 @@ class GatewaySettingsPolicyTest {
     @Test fun rejectsHiddenControlCharactersInTlsPin() {
         val validPin = "ab".repeat(32)
         for (candidate in listOf(
-            "\\t$validPin",
-            "$validPin\\r",
-            "${validPin.take(16)}\\n${validPin.drop(16)}",
-            "$validPin\\u007f"
+            "\t$validPin",
+            "$validPin\r",
+            "${validPin.take(16)}\n${validPin.drop(16)}",
+            "$validPin\u007f"
         )) {
             assertNull(GatewaySettingsPolicy.parse("https://gateway.example", validToken, candidate))
         }
