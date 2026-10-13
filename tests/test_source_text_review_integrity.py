@@ -32,7 +32,7 @@ TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
-EXACT_TEXT_PATHS = {".gitignore", "gradlew", "VERSION.txt"}
+EXACT_TEXT_PATHS = {".gitignore", ".gitattributes", "gradlew", "VERSION.txt"}
 APPROVED_BINARY_PATHS: set[str] = set()
 ALLOWED_CONTROL_CODEPOINTS = {0x0009, 0x000A}  # horizontal tab and LF
 ALLOWED_FORMAT_CODEPOINTS = {0x200C, 0x200D}  # ZWNJ and ZWJ
