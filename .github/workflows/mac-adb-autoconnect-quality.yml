@@ -26,7 +26,7 @@ concurrency:
 jobs:
   quality:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: [self-hosted, vps-bb300bba]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       LANG: C.UTF-8
@@ -42,13 +42,13 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Verify runner and exact tested revision
+      - name: Verify hosted runner and exact tested revision
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          test "$RUNNER_NAME" = "vps-bb300bba"
+          test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Validate autoconnect contract
