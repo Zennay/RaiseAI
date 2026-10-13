@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.Properties
 
 /**
@@ -21,10 +22,11 @@ internal object GatewayProfileReader {
     fun read(file: File): GatewaySettings? {
         return try {
             val path = file.toPath()
-            if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return null
-
-            val expectedLength = Files.size(path)
-            if (expectedLength !in 1L..MAX_PROFILE_BYTES.toLong()) return null
+            val before = Files.readAttributes(
+                path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS
+            )
+            if (!before.isRegularFile || before.size() !in 1L..MAX_PROFILE_BYTES.toLong()) return null
+            val expectedLength = before.size()
 
             // The minimum supported Wear SDK supports Files.newInputStream
             // with NOFOLLOW_LINKS and ordinary InputStream.read.
@@ -41,9 +43,14 @@ internal object GatewayProfileReader {
             }
 
             // A concurrently truncated/extended profile is ambiguous.
+            val after = Files.readAttributes(
+                path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS
+            )
             if (count !in 1..MAX_PROFILE_BYTES ||
                 count.toLong() != expectedLength ||
-                Files.size(path) != expectedLength
+                !after.isRegularFile ||
+                after.size() != expectedLength ||
+                (before.fileKey() != null && before.fileKey() != after.fileKey())
             ) return null
 
             // The stock Properties parser silently prefers the last
