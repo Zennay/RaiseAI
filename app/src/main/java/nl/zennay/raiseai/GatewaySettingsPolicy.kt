@@ -12,14 +12,18 @@ import java.net.URISyntaxException
  * network. This helper has no Android dependencies and can run in JVM tests.
  */
 internal object GatewaySettingsPolicy {
+    private const val MAX_ORIGIN_CHARS = 2_048
+    private const val MAX_TOKEN_CHARS = 512
+    private val BEARER_TOKEN = Regex("^[A-Za-z0-9._~+/-]+={0,2}$")
+
     fun parse(rawUrl: String?, rawToken: String?, rawPin: String?): GatewaySettings? {
         if (rawUrl == null || rawUrl.any { Character.isISOControl(it) }) return null
-        val url = rawUrl.trim().takeIf { it.isNotEmpty() } ?: return null
+        val url = rawUrl.trim().takeIf { it.isNotEmpty() && it.length <= MAX_ORIGIN_CHARS } ?: return null
         if (rawToken == null || rawToken.any { Character.isISOControl(it) }) return null
-        val token = rawToken.trim().takeIf { it.length >= 32 } ?: return null
+        val token = rawToken.trim().takeIf { it.length in 32..MAX_TOKEN_CHARS } ?: return null
 
         // Header values must never contain embedded whitespace/control bytes.
-        if (token.any { it.isWhitespace() }) return null
+        if (!BEARER_TOKEN.matches(token)) return null
 
         val origin = try {
             URI(url)
