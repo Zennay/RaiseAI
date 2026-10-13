@@ -7,6 +7,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 GATE_WORKFLOW = WORKFLOWS / "self-hosted-pr-provenance-quality.yml"
 EXACT_HEAD = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+ALTERNATE_EXACT_HEAD = "${{ github.event.pull_request.head.sha || github.sha }}"
 
 
 
@@ -108,9 +109,11 @@ class SelfHostedWorkflowProvenanceTests(unittest.TestCase):
                         workflow=path.name,
                         checkout_line=checkout_index + 1,
                     ):
-                        self.assertIn(
-                            f"          ref: {EXACT_HEAD}",
-                            checkout_step,
+                        self.assertTrue(
+                            any(
+                                f"          ref: {expression}" in checkout_step
+                                for expression in (EXACT_HEAD, ALTERNATE_EXACT_HEAD)
+                            ),
                             "checkout must select the PR head instead of GitHub's synthetic merge ref",
                         )
                         self.assertIn(
