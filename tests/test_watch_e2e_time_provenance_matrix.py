@@ -30,7 +30,7 @@ def evidence(**replacements):
         "input_length_chars": 24,
         "latency_ms": 800,
         "route": "quick_ai",
-        "status": "ok",
+        "status": "answered",
         "execution_enabled": False,
         "execution_reason_present": False,
         "answer_present": True,
