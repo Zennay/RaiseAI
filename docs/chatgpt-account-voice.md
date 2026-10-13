@@ -12,25 +12,25 @@ Keep the existing Raise gateway as a **distinct, explicitly chosen** alternative
 
 ## Why an Android phone companion
 
-OpenAI's official **Sign in with ChatGPT** (SIWC) open-source integration lets eligible users authorize an OSS client to use ChatGPT-plan-backed Responses API requests. The documented public-client flow uses browser/OIDC/PKCE, dynamic client registration, a stable \`ext_agent_host_id\`, and a \`127.0.0.1\` callback. For this product, the paired Android phone is the proposed **user-controlled OAuth host**: it has a normal browser and secure local credential storage. Do not assume a callback flow tested on desktop automatically works on Android; prove it on the actual phone.
+OpenAI's official **Sign in with ChatGPT** (SIWC) open-source integration lets eligible users authorize an OSS client to use ChatGPT-plan-backed Responses API requests. The documented public-client flow uses browser/OIDC/PKCE, dynamic client registration, a stable `ext_agent_host_id`, and a `127.0.0.1` callback. For this product, the paired Android phone is the proposed **user-controlled OAuth host**: it has a normal browser and secure local credential storage. Do not assume a callback flow tested on desktop automatically works on Android; prove it on the actual phone.
 
 The Wear app sends only a bounded transcript and request identifier over Wear OS Data Layer. The Android phone obtains user consent, owns the local OAuth session and makes inference calls. Only text deltas, terminal status, and safe error labels return to the Watch. Do not put tokens, browser cookies, refresh tokens, raw transcript logs, or identity claims in the VPS, APK, project telemetry, GitHub Actions, or watch-to-phone messages.
 
 ## Explicit limitations (October 2026)
 
 - ChatGPT identity alone is not permission to spend plan usage; separate Responses scopes and user consent are required.
-- SIWC open-source preview supports the **Responses API**, with \`store: false\`, \`stream: true\`, \`input\` as an array and explicit relevant conversational context per turn.
+- SIWC open-source preview supports the **Responses API**, with `store: false`, `stream: true`, `input` as an array and explicit relevant conversational context per turn.
 - Audio/video input and OpenAI transcription API are **not supported** in this sign-in flow. Perform speech recognition and TTS with Android/Wear facilities.
 - No access to normal ChatGPT memories, chat history, uploaded files or Voice experience.
-- Do not use \`chatgpt.com/backend-api\`, copy cookies or use the ChatGPT website as an inference API.
-- Do not send unsupported Responses fields (\`temperature\`, \`max_output_tokens\`, \`previous_response_id\`, \`conversation\`, \`metadata\`, etc.).
+- Do not use `chatgpt.com/backend-api`, copy cookies or use the ChatGPT website as an inference API.
+- Do not send unsupported Responses fields (`temperature`, `max_output_tokens`, `previous_response_id`, `conversation`, `metadata`, etc.).
 - Account-owned limits apply and can be exhausted. Present an honest out-of-usage state. Never silently switch to a billed provider.
 - Local user-controlled storage is a condition of SIWC use. Never use a centrally managed token relay.
 - No real latency, battery, wake-word or physical Watch quality claims without physical testing.
 
 ## Proposed architecture
 
-\`\`\`text
+```text
 Galaxy Watch 7 (Raise AI native Wear app)
   -> trusted user gesture or tap
   -> Watch SpeechRecognizer / transcript
@@ -43,19 +43,19 @@ Galaxy Watch 7 (Raise AI native Wear app)
        -> validate SSE deltas and require response.completed
   <- bounded text chunks or safe terminal error (no credentials)
   -> native Watch TTS, short by default, cancel/retry controls
-\`\`\`
+```
 
-**App core owner safety:** no changes in this proof to \`NativeVoiceActivity\`, gesture service, TLS/gateway clients, login Gecko wrapper, CI, physical acceptance artifact or the active PRs that own those files.
+**App core owner safety:** no changes in this proof to `NativeVoiceActivity`, gesture service, TLS/gateway clients, login Gecko wrapper, CI, physical acceptance artifact or the active PRs that own those files.
 
 ## First committed proof
 
-\`tools/siwc_voice_request.py\` and \`tests/test_siwc_voice_request.py\` implement and test a **network-free text request and response-stream contract**. This is only a portable fixture/reference for the future phone-client implementation. It does not perform OAuth, access an account, contact OpenAI, install on a Watch, or dispatch to an Android phone. The companion must implement equivalent validation in its production language and own integration tests.
+`tools/siwc_voice_request.py` and `tests/test_siwc_voice_request.py` implement and test a **network-free text request and response-stream contract**. This is only a portable fixture/reference for the future phone-client implementation. It does not perform OAuth, access an account, contact OpenAI, install on a Watch, or dispatch to an Android phone. The companion must implement equivalent validation in its production language and own integration tests.
 
 Run focused proof locally:
 
-\`\`\`bash
+```bash
 python3 -m unittest tests.test_siwc_voice_request -v
-\`\`\`
+```
 
 ## Acceptance stages
 
