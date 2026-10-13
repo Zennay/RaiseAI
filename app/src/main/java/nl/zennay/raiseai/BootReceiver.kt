@@ -3,6 +3,8 @@ package nl.zennay.raiseai
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -35,13 +37,29 @@ class BootReceiver : BroadcastReceiver() {
                 false
             }
 
-        when (BootMonitoringRestorePolicy.decide(enabled, calibrated, backgroundGranted)) {
+        val accelerometerAvailable = if (calibrated && backgroundGranted) {
+            runCatching {
+                val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+                manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null
+            }.getOrElse {
+                Log.w(TAG, "Could not check accelerometer for monitor restore after $action", it)
+                false
+            }
+        } else {
+            false
+        }
+
+        when (
+            BootMonitoringRestorePolicy.decide(
+                enabled, calibrated, backgroundGranted, accelerometerAvailable
+            )
+        ) {
             BootMonitoringRestorePolicy.Decision.SKIP -> return
             BootMonitoringRestorePolicy.Decision.DISABLE_UNUSABLE_MONITORING -> {
                 // Do not show "monitoring on" when gestures cannot open anything.
                 runCatching { CalibrationStore.setMonitoringEnabled(context, false) }
                     .onFailure { Log.w(TAG, "Could not clear unusable monitoring state", it) }
-                Log.w(TAG, "Monitoring restore skipped: calibration or background grant missing")
+                Log.w(TAG, "Monitoring restore skipped: calibration, background grant or accelerometer missing")
                 return
             }
             BootMonitoringRestorePolicy.Decision.START -> Unit
