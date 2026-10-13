@@ -7,8 +7,9 @@ class BootMonitoringRestorePolicyTest {
     private fun decision(
         enabled: Boolean,
         calibrated: Boolean,
-        backgroundGranted: Boolean
-    ) = BootMonitoringRestorePolicy.decide(enabled, calibrated, backgroundGranted)
+        backgroundGranted: Boolean,
+        accelerometerAvailable: Boolean = true
+    ) = BootMonitoringRestorePolicy.decide(enabled, calibrated, backgroundGranted, accelerometerAvailable)
 
     @Test
     fun fullyConfiguredEnabledMonitorCanRestart() {
@@ -53,11 +54,13 @@ class BootMonitoringRestorePolicyTest {
         for (enabled in listOf(false, true)) {
             for (calibrated in listOf(false, true)) {
                 for (grant in listOf(false, true)) {
-                    assertEquals(
-                        enabled && calibrated && grant,
-                        decision(enabled, calibrated, grant) ==
-                            BootMonitoringRestorePolicy.Decision.START
-                    )
+                    for (accelerometer in listOf(false, true)) {
+                        assertEquals(
+                            enabled && calibrated && grant && accelerometer,
+                            decision(enabled, calibrated, grant, accelerometer) ==
+                                BootMonitoringRestorePolicy.Decision.START
+                        )
+                    }
                 }
             }
         }
@@ -106,5 +109,27 @@ class BootMonitoringRestorePolicyTest {
         assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, 0f, 0.1f)))
         assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(0f, 0f, 10f)))
         assertEquals(false, BootMonitoringRestorePolicy.hasUsableCalibration(MouthPose(Float.MAX_VALUE, 0f, 0f)))
+    }
+
+    @Test
+    fun sensorUnavailableDisablesPreviouslyEnabledMonitor() {
+        assertEquals(
+            BootMonitoringRestorePolicy.Decision.DISABLE_UNUSABLE_MONITORING,
+            decision(
+                enabled = true, calibrated = true,
+                backgroundGranted = true, accelerometerAvailable = false
+            )
+        )
+    }
+
+    @Test
+    fun sensorFailureMustNotChangeUserOptOut() {
+        assertEquals(
+            BootMonitoringRestorePolicy.Decision.SKIP,
+            decision(
+                enabled = false, calibrated = true,
+                backgroundGranted = true, accelerometerAvailable = false
+            )
+        )
     }
 }
