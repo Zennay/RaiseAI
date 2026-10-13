@@ -70,6 +70,31 @@ class GatewayProfileReaderTest {
         assertNull(GatewayProfileReader.read(badToken))
     }
 
+    @Test fun rejectsRepeatedGatewayUrlEvenWhenBothAppearValid() {
+        val file = write("duplicate-url.properties",
+            "url=https://first.example\ntoken=$token\nurl=https://second.example\n"
+        )
+        assertNull(GatewayProfileReader.read(file))
+    }
+
+    @Test fun rejectsRepeatedTokenAndPinKeys() {
+        val repeatedToken = write("duplicate-token.properties",
+            "url=https://watch.example\ntoken=$token\ntoken=$token\n"
+        )
+        val repeatedPin = write("duplicate-pin.properties",
+            "url=https://watch.example\ntoken=$token\nspki_sha256=cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\nspki_sha256=cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\n"
+        )
+        assertNull(GatewayProfileReader.read(repeatedToken))
+        assertNull(GatewayProfileReader.read(repeatedPin))
+    }
+
+    @Test fun rejectsEscapedKeyAliasesThatMapToSameProperty() {
+        val file = write("encoded-key.properties",
+            "url=https://watch.example\ntoken=$token\n\\u0075rl=https://second.example\n"
+        )
+        assertNull(GatewayProfileReader.read(file))
+    }
+
     @Test fun rejectsProfileWithUntrustedLineEndingInBearerToken() {
         val file = write("linebreak.properties", "url=https://watch.example\ntoken=bad\\nheader$token\n")
         assertNull(GatewayProfileReader.read(file))
