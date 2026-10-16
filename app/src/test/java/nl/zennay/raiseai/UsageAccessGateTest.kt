@@ -43,6 +43,23 @@ class UsageAccessGateTest {
         })
     }
 
+    @Test fun unknownForegroundPackageDoesNotBypassFallback() {
+        listOf(null, "", " ", "\t\n").forEach { candidate ->
+            assertTrue(UsageAccessGate.verifiedForegroundPackage(candidate) == null)
+        }
+    }
+
+    @Test fun validForegroundPackagePreservesIdentity() {
+        assertTrue(
+            UsageAccessGate.verifiedForegroundPackage("com.google.android.wearable.assistant") ==
+                "com.google.android.wearable.assistant"
+        )
+        assertTrue(
+            UsageAccessGate.verifiedForegroundPackage("nl.zennay.raiseai") ==
+                "nl.zennay.raiseai"
+        )
+    }
+
     @Test(expected = AssertionError::class)
     fun fatalErrorsAreNotHidden() {
         UsageAccessGate.isAllowed(allowed) {
