@@ -42,15 +42,15 @@ class AssistantSessionGuard(private val context: Context) {
         return ageMs < FALLBACK_SESSION_LOCK_MS
     }
 
-    fun hasUsageAccess(): Boolean {
-        val appOps = context.getSystemService(AppOpsManager::class.java)
-        val mode = appOps.unsafeCheckOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            context.applicationInfo.uid,
-            context.packageName
-        )
-        return mode == AppOpsManager.MODE_ALLOWED
-    }
+    fun hasUsageAccess(): Boolean =
+        UsageAccessGate.isAllowed(AppOpsManager.MODE_ALLOWED) {
+            context.getSystemService(AppOpsManager::class.java)
+                ?.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    context.applicationInfo.uid,
+                    context.packageName
+                )
+        }
 
     private fun currentForegroundPackage(): String? {
         if (!hasUsageAccess()) return null
@@ -69,9 +69,10 @@ class AssistantSessionGuard(private val context: Context) {
                     event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
                     event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND
 
-                if (resumed && event.timeStamp >= latestTimestamp) {
+                val candidate = UsageAccessGate.verifiedForegroundPackage(event.packageName)
+                if (resumed && candidate != null && event.timeStamp >= latestTimestamp) {
                     latestTimestamp = event.timeStamp
-                    latestPackage = event.packageName
+                    latestPackage = candidate
                 }
             }
             latestPackage
