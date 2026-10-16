@@ -79,16 +79,21 @@ def inspect_phone(adb: str, serial: str) -> dict[str, str]:
 
 
 def launch_official_app(adb: str, serial: str) -> float:
-    # Standard installed-package LAUNCHER activity; no private intent, cookies
-    # or undocumented Voice URI. Requires user's explicit --launch consent.
+    # Public, package-scoped Android MAIN/LAUNCHER intent only. Unlike
+    # 'monkey', am start does not inject a random tap or other user event.
+    # No private component, cookies or undocumented Voice URI.
     start = time.monotonic()
     output = adb_call(adb, [
-        "-s", serial, "shell", "monkey", "-p", OFFICIAL_PACKAGE,
-        "-c", "android.intent.category.LAUNCHER", "1",
+        "-s", serial, "shell", "am", "start",
+        "-a", "android.intent.action.MAIN",
+        "-c", "android.intent.category.LAUNCHER",
+        "-p", OFFICIAL_PACKAGE,
     ], timeout=20)
     elapsed = (time.monotonic() - start) * 1000
-    if "Events injected: 1" not in output:
-        raise ProbeError("Official app launcher did not confirm an injected launch event")
+    if "Error:" in output or not (
+        "Starting: Intent" in output or "Warning: Activity not started" in output
+    ):
+        raise ProbeError("Android did not confirm a standard public launcher start")
     return round(elapsed, 1)
 
 
