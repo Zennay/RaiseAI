@@ -2,6 +2,7 @@ package nl.zennay.raiseai
 
 import android.content.Context
 import java.io.File
+import java.io.IOException
 
 data class SensorTrialProgress(
     val mouthTrials: Int = 0,
@@ -30,6 +31,7 @@ data class SensorTrialProgress(
 
 object SensorTrialRecorder {
     private const val FILE_NAME = "sensor-trials.csv"
+    private const val MAX_TRIAL_FILE_BYTES = 2L * 1024L * 1024L
 
     @Synchronized
     fun append(
@@ -63,8 +65,18 @@ object SensorTrialRecorder {
     fun progress(context: Context): SensorTrialProgress {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return SensorTrialProgress()
-
-        return file.useLines { lines -> SensorTrialCsvPolicy.evaluate(lines) }
+        // Corrupted local capture storage must not crash the Watch setup screen, or block
+        // on a non-regular path. An unreadable/oversized dataset can never be a V1 PASS.
+        if (!file.isFile || file.length() > MAX_TRIAL_FILE_BYTES) {
+            return SensorTrialProgress(rejectedTrials = 1)
+        }
+        return try {
+            file.useLines { lines -> SensorTrialCsvPolicy.evaluate(lines) }
+        } catch (_: IOException) {
+            SensorTrialProgress(rejectedTrials = 1)
+        } catch (_: SecurityException) {
+            SensorTrialProgress(rejectedTrials = 1)
+        }
     }
 
     fun clear(context: Context) {
