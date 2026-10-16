@@ -84,6 +84,32 @@ class AccelerometerEventOrderPolicyTest {
     }
 
     @Test
+    fun finiteSensorOverflowSpikesAreRejectedBeforeDetectorStateChanges() {
+        val extreme = listOf(
+            floatArrayOf(Float.MAX_VALUE, 0f, 9.81f),
+            floatArrayOf(0f, -Float.MAX_VALUE, 9.81f),
+            floatArrayOf(0f, 0f, Float.MAX_VALUE),
+            floatArrayOf(400f, 400f, 0f)
+        )
+        extreme.forEach { assertFalse(policy.accept(it, now - 2L, now)) }
+        // Rejected spikes must not consume the monotonic event slot.
+        assertTrue(policy.accept(gravity, now - 2L, now))
+    }
+
+    @Test
+    fun physicallyPlausibleHighImpactSamplesRemainAllowed() {
+        assertTrue(policy.accept(floatArrayOf(499f, 0f, 0f), now - 2L, now))
+        assertTrue(policy.accept(floatArrayOf(0f, 0f, 9.81f), now - 1L, now))
+    }
+
+    @Test
+    fun totalMagnitudeNotIndividualAxisIsBounded() {
+        // Each axis is below 500 m/s² but the combined vector is not.
+        assertFalse(policy.accept(floatArrayOf(300f, 400f, 1f), now - 2L, now))
+        assertTrue(policy.accept(floatArrayOf(300f, 400f, 0f), now - 2L, now))
+    }
+
+    @Test
     fun resettingAfterUnregistrationStartsFreshStream() {
         assertTrue(policy.accept(gravity, now, now))
         assertFalse(policy.accept(gravity, now - 100_000_000L, now))

@@ -19,6 +19,14 @@ internal class AccelerometerEventOrderPolicy {
         if (!values[0].isFinite() || !values[1].isFinite() || !values[2].isFinite()) {
             return false
         }
+        // A sensor driver can return finite but impossible magnitudes. Letting a giant
+        // impulse reach the detector overflows Float square/square-root calculations and
+        // corrupts its persistent gravity estimate. Measure squared magnitude in Double
+        // without allocating on this hot 10 Hz path; real Watch raises stay far below 50g.
+        val x = values[0].toDouble()
+        val y = values[1].toDouble()
+        val z = values[2].toDouble()
+        if (x * x + y * y + z * z > MAX_SENSOR_MAGNITUDE_SQUARED) return false
         if (timestampNs <= 0L || nowElapsedRealtimeNs <= 0L) return false
 
         // Strict monotonicity prevents replay and out-of-order batches from rewinding detector
@@ -43,6 +51,10 @@ internal class AccelerometerEventOrderPolicy {
     }
 
     companion object {
+        // >50g is outside intentional wrist movement, even allowing for impact spikes.
+        internal const val MAX_SENSOR_MAGNITUDE_MS2 = 500.0
+        private const val MAX_SENSOR_MAGNITUDE_SQUARED =
+            MAX_SENSOR_MAGNITUDE_MS2 * MAX_SENSOR_MAGNITUDE_MS2
         internal const val MAX_SAMPLE_AGE_NS = 10_000_000_000L
         internal const val MAX_FUTURE_SKEW_NS = 100_000_000L
     }
