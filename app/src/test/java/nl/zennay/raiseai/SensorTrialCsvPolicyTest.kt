@@ -110,6 +110,28 @@ class SensorTrialCsvPolicyTest {
         assertEquals(0, result.rejectedTrials)
     }
 
+    @Test fun oldBuildEvidenceCannotQualifyAsCurrentWatchProgress() {
+        val expected = SensorTrialIdentity("1.5.3", revision, "detector-v1")
+        val valid = SensorTrialCsvPolicy.evaluate(
+            sequenceOf(SensorTrialCsvPolicy.HEADER, row()), expected
+        )
+        assertEquals(1, valid.mouthTrials)
+        assertEquals(0, valid.rejectedTrials)
+
+        for (stale in listOf(
+            row(version = "1.5.2"),
+            row(source = "b".repeat(40)),
+            row(detector = "detector-v2")
+        )) {
+            val result = SensorTrialCsvPolicy.evaluate(
+                sequenceOf(SensorTrialCsvPolicy.HEADER, stale), expected
+            )
+            assertEquals(0, result.mouthTrials)
+            assertEquals(1, result.rejectedTrials)
+            assertFalse(result.v1GatePassed)
+        }
+    }
+
     @Test fun mixedDetectorSourceOrVersionNeverPasses() {
         val result = parse(
             row(), row(sessionId = "2", detector = "detector-v2"),
