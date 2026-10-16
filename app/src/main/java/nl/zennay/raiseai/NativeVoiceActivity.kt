@@ -275,9 +275,10 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         }
 
         setState("sending", "Naar je VPS…")
-        val answerMode = ResponseModeStore.load(this)
-        // Prepare TTS while the HTTPS gateway request is running.
-        if (answerMode != ResponseMode.SILENT) ensureSpeechEngine()
+        val prewarmMode = ResponseModeStore.load(this)
+        // Prepare TTS while the HTTPS gateway request is running. This is only a hint;
+        // the user may switch audio mode before the reply reaches the UI.
+        if (prewarmMode != ResponseMode.SILENT) ensureSpeechEngine()
         val requestStartedMs = SystemClock.elapsedRealtime()
 
         io.execute {
@@ -317,7 +318,12 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                         replayButton.visibility =
                             if (response.answer.isNullOrBlank()) View.GONE else View.VISIBLE
 
-                        SpokenReplyPolicy.textFor(answerMode, response.answer)?.let(::speakText)
+                        // Honor the *current* Watch selection, not the mode when Send was tapped.
+                        // In particular, muting while the VPS is answering must never auto-speak.
+                        SpokenReplyPolicy.textFor(
+                            ResponseModeStore.load(this@NativeVoiceActivity),
+                            response.answer
+                        )?.let(::speakText)
                         fallbackButton.visibility = View.GONE
                     }
                 }
