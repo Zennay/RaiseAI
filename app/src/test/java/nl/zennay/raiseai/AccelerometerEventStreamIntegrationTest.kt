@@ -48,6 +48,9 @@ class AccelerometerEventStreamIntegrationTest {
         assertFalse(deliver(7f, 0f, 7f, 450L))
         assertFalse(deliver(0f, 0f, 9.81f, 425L, arrivalMs = 700L))
         assertFalse(deliver(Float.NaN, 0f, 9.81f, 475L, arrivalMs = 725L))
+        // A finite overflow spike is no safer than NaN: reject before gravity/filter state.
+        assertFalse(deliver(Float.MAX_VALUE, 0f, 9.81f, 480L, arrivalMs = 725L))
+        assertFalse(deliver(400f, 400f, 0f, 485L, arrivalMs = 725L))
         assertEquals(beforeBadBatch, accepted)
 
         deliver(4f, 0f, 10f, 500L)
