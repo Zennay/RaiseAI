@@ -77,3 +77,11 @@ jobs:
                   assert activity.attrib.get(android + 'name') == '.PhoneCompanionActivity'
           print('Phone permissions and exported activity contract OK')
           PY
+
+      - name: Upload exact-head phone development APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 (node24)
+        with:
+          name: raiseai-phone-companion-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          path: phone-companion/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
