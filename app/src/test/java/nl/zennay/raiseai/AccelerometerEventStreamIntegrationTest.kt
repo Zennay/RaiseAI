@@ -87,7 +87,7 @@ class AccelerometerEventStreamIntegrationTest {
         val event = floatArrayOf(0f, 0f, 9.81f)
         assertNotNull(stream.process(event, 60_000_000_000L, 60_000_000_000L, null))
         assertNull(stream.process(event, 59_000_000_000L, 60_000_000_000L, null))
-        stream.resetOrdering()
+        stream.restartWithFreshDetector(RaiseGestureDetector())
         assertNotNull(stream.process(event, 59_000_000_000L, 60_000_000_000L, null))
     }
 }
