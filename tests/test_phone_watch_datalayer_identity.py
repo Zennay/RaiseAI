@@ -16,7 +16,7 @@ SIGNER_A = "ab" * 32
 SIGNER_B = "cd" * 32
 PACKAGE = "package: name='nl.zennay.raiseai' versionCode='1' versionName='0.1.0'"
 CERT = "Signer #1 certificate SHA-256 digest: " + SIGNER_A
-WATCH_PACKAGE = PACKAGE + "\\nuses-feature: name=\u0027android.hardware.type.watch\u0027"
+WATCH_PACKAGE = PACKAGE + chr(10) + "uses-feature: name='android.hardware.type.watch'"
 
 
 class IdentityPreflightTests(unittest.TestCase):
