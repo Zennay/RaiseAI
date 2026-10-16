@@ -6,7 +6,7 @@ It **does not** open ChatGPT Voice automatically, inherit account tokens, read C
 
 ## Features and security boundary
 
-- Dedicated package `nl.zennay.raiseai.phone` — never installed over the Watch app `nl.zennay.raiseai`.
+- Dedicated source namespace `nl.zennay.raiseai.phone` but **application ID `nl.zennay.raiseai` intentionally matches the Watch** for future Google Wear Data Layer. Google requires both the same app ID **and APK signing identity** across Watch and phone; transport is not wired yet. A phone build MUST NOT be installed on the Watch.
 - Phone manifest contains **no** requested Android permissions; no network, mic, accessibility, background starts or notifications. Only the companion UI is exported.
 - The user explicitly pastes a SHA-256 from an **independently authenticated official publisher reference**. Never extract and trust a digest from a potentially compromised phone/APK itself. No fingerprint is shipped, cached, uploaded or generated from a signing key that we control.
 - Android `PackageManager.GET_SIGNING_CERTIFICATES` reads the installed `com.openai.chatgpt` signer DER certificate. The app refuses missing, malformed, multiple, nonmatching or unverified signers. It then asks PackageManager for its public MAIN/LAUNCHER component and opens **only** that package.
@@ -19,10 +19,10 @@ From the root of the RaiseAI repo with a development Android 35 SDK and Gradle d
 
 ```bash
 ./gradlew -p phone-companion testDebugUnitTest assembleDebug
-adb -s <PHONE_SERIAL> install -r phone-companion/build/outputs/apk/debug/phone-companion-debug.apk
+bash phone-companion/install-phone.command <PHONE_SERIAL>\n# Explicit phone-side replacement/upgrade only after reviewing existing app data:\n# bash phone-companion/install-phone.command <PHONE_SERIAL> --allow-replace
 ```
 
-Confirm the target is a genuine **Android phone**, not the Galaxy Watch 7, before installing. Obtain the official ChatGPT signing certificate SHA-256 from a trusted source separate from the installed phone; the project **does not provide an assumed signing reference**. Open Raise AI Phone, enter that fingerprint, and press the explicit verification/launch button. Observe whether the official ChatGPT app opens; Voice activation remains a manual tap and must be separately tested. Never install development APKs onto the frozen physical v1.5.2 Watch acceptance device under [#34](https://github.com/Zennay/RaiseAI/issues/34).
+The guarded script confirms your explicit ADB serial is an authorized **Android phone**, rejects Wear devices and ambiguous or wrong phone APK identities, and refuses replacing an existing app unless you explicitly pass `--allow-replace`. Because the phone application ID matches the Watch, do **not** run a raw `adb install` against your Watch 7. Do not claim a Data Layer connection unless the phone and Watch builds are actually signed by the same signing key; the self-hosted/debug APK and a separately installed Watch APK may use different keys. Obtain the official ChatGPT signing certificate SHA-256 from a trusted source separate from the installed phone; the project **does not provide an assumed signing reference**. Open Raise AI Phone, enter that fingerprint, and press the explicit verification/launch button. Observe whether the official ChatGPT app opens; Voice activation remains a manual tap and must be separately tested. Never install development APKs onto the frozen physical v1.5.2 Watch acceptance device under [#34](https://github.com/Zennay/RaiseAI/issues/34).
 
 ### Required evidence before declaring feature ready
 
