@@ -14,4 +14,8 @@ internal object UsageAccessGate {
         } catch (_: RuntimeException) {
             false
         }
+
+    /** A blank or absent foreground package is not evidence of a usable UsageStats answer. */
+    fun verifiedForegroundPackage(raw: String?): String? =
+        raw?.takeIf { it.isNotBlank() }
 }
