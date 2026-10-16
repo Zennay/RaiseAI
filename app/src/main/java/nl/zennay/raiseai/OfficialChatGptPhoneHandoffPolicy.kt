@@ -28,6 +28,7 @@ internal class OfficialChatGptPhoneHandoffPolicy(
         INVALID_REQUEST,
         EXPIRED_OR_CLOCK_SKEW,
         REPLAYED,
+        TOO_FREQUENT,
         REPLAY_CACHE_FULL
     }
 
@@ -84,6 +85,11 @@ internal class OfficialChatGptPhoneHandoffPolicy(
             ) iterator.remove()
         }
         if (seen.containsKey(request.requestId)) return Decision.REPLAYED
+        // Distinct random IDs must not become an assistant-start flood when a Watch retries.
+        // This is per paired receiver session, not a device-global launch quota.
+        if (lastAcceptedNowMs > 0L && nowEpochMs - lastAcceptedNowMs < MIN_LAUNCH_INTERVAL_MS) {
+            return Decision.TOO_FREQUENT
+        }
 
         // Never evict an in-window request to make room for a replay.
         if (replayCapacity < 1 || seen.size >= replayCapacity) return Decision.REPLAY_CACHE_FULL
@@ -95,6 +101,7 @@ internal class OfficialChatGptPhoneHandoffPolicy(
     internal companion object {
         const val VERSION = 1
         const val OPEN_APP_ACTION = "OPEN_OFFICIAL_CHATGPT_APP"
+        const val MIN_LAUNCH_INTERVAL_MS = 3_000L
         const val MAX_AGE_MS = 15_000L
         const val FUTURE_SKEW_MS = 5_000L
         private val REQUEST_ID = Regex("^[0-9a-f]{32}$")
