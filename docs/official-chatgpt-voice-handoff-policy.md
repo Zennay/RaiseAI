@@ -10,10 +10,10 @@ This pure Kotlin policy is an **app-core protocol preparation** for [issue #782]
 2. Obtain explicit, current user consent on the phone. A past request or Watch setting is not consent for arbitrary future launches.
 3. Verify the **official app publisher's cryptographic signing identity** and installed package on the phone through supported Android APIs. A package name such as `com.openai.chatgpt` alone is not sufficient.
 4. Decode exactly the version-1 command `OPEN_OFFICIAL_CHATGPT_APP`, a 32-character lowercase hex random request ID and an issued-at UTC epoch millisecond timestamp. Do not carry passwords, tokens, audio, transcripts, cookies, personal content, URLs or arbitrary intents.
-5. Call the policy once on a serialized per-pair session receiver. It rejects missing authorization, mismatched versions/actions, malformed IDs, duplicate IDs, expired (>15 seconds) or >5-second future clock skew, clock rollback and replay-cache saturation. Only `OPEN_OFFICIAL_APP` permits a public MAIN/LAUNCHER request.
+5. Call the policy once on a serialized per-pair session receiver. It rejects missing authorization, mismatched versions/actions, malformed IDs, duplicate IDs, expired (>15 seconds) or >5-second future clock skew, clock rollback, a three-second app-launch rate limit and replay-cache saturation. Only `OPEN_OFFICIAL_APP` permits a public MAIN/LAUNCHER request.
 6. If the public launcher fails, show a **clear local failure**. Do not automate the Voice button via undocumented intents, accessibility, screenshots or private endpoints. Do not silently fall back to separately billed APIs.
 7. For any real implementation, establish physical phone and Watch 7 evidence for foreground/permissions, audio routing and observed latency before advertising the feature as working.
 
 ## Verification
 
-Pure JUnit 4 regression tests are in `app/src/test/java/nl/zennay/raiseai/OfficialChatGptPhoneHandoffPolicyTest.kt`. They cover authorization, consent, publisher gate, strict schema, expiry, replay, cache overflow, rollback and integer limits. A passing JVM test is **not** a demonstration of Android package attestation or physical Voice transport.
+Pure JUnit 4 regression tests are in `app/src/test/java/nl/zennay/raiseai/OfficialChatGptPhoneHandoffPolicyTest.kt`. They cover authorization, consent, publisher gate, strict schema, expiry, replay, distinct-ID launch flooding, cache overflow, rollback and integer limits. A passing JVM test is **not** a demonstration of Android package attestation or physical Voice transport.
