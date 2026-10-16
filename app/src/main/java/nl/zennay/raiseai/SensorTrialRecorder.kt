@@ -71,7 +71,12 @@ object SensorTrialRecorder {
             return SensorTrialProgress(rejectedTrials = 1)
         }
         return try {
-            file.useLines { lines -> SensorTrialCsvPolicy.evaluate(lines) }
+            val expected = SensorTrialIdentity(
+                appVersion = BuildConfig.VERSION_NAME,
+                sourceRevision = BuildConfig.SOURCE_REVISION,
+                detectorConfig = RaiseGestureDetector().configurationId()
+            )
+            file.useLines { lines -> SensorTrialCsvPolicy.evaluate(lines, expected) }
         } catch (_: IOException) {
             SensorTrialProgress(rejectedTrials = 1)
         } catch (_: SecurityException) {
