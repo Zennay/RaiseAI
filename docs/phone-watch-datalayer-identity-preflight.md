@@ -2,13 +2,13 @@
 
 Android Wear Data Layer communication **requires the same application ID and APK signing identity** on both the phone and Watch. The separate [phone companion PR #791](https://github.com/Zennay/RaiseAI/pull/791) therefore uses the Watch's application ID `nl.zennay.raiseai`. Android's own [Data Layer documentation](https://developer.android.com/training/wearables/data/overview) confirms the package and signing restrictions.
 
-For two **already built** APK files, this independent read-only check fails closed unless both cryptographically verified APKs contain exactly the same application ID and one identical signing certificate:
+For two **already built** APK files, this independent read-only check fails closed unless both cryptographically verified APKs contain exactly the same application ID and one identical signing certificate, with phone-versus-Wear-required APK roles independently distinguished:
 
 ```bash
-python3 tools/verify_phone_watch_datalayer_identity.py \\
-  --phone-apk path/to/phone-companion-debug.apk \\
-  --watch-apk path/to/watch-debug.apk \\
-  --aapt /path/to/android-sdk/build-tools/35.0.0/aapt \\
+python3 tools/verify_phone_watch_datalayer_identity.py \
+  --phone-apk path/to/phone-companion-debug.apk \
+  --watch-apk path/to/watch-debug.apk \
+  --aapt /path/to/android-sdk/build-tools/35.0.0/aapt \
   --apksigner /path/to/android-sdk/build-tools/35.0.0/apksigner
 ```
 
