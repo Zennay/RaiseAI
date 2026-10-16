@@ -8,10 +8,12 @@ app through the public launcher. Human timestamps are labelled observations.
 from __future__ import annotations
 
 import argparse
+import hmac
 from datetime import datetime, timezone
 import json
+import tempfile
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -21,6 +23,8 @@ import time
 OFFICIAL_PACKAGE = "com.openai.chatgpt"
 SERIAL = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 MAX_OUTPUT = 16_384
+MAX_BASE_APK_BYTES = 200_000_000
+SIGNER_SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 class ProbeError(Exception):
@@ -42,6 +46,86 @@ def adb_call(adb: str, args: list[str], timeout: int = 12) -> str:
     if proc.returncode != 0:
         raise ProbeError(f"ADB command failed (exit={proc.returncode}); check phone authorisation")
     return proc.stdout[:MAX_OUTPUT]
+
+
+def base_apk_path(pm_paths: str) -> str:
+    """Find one safe, regular Android app base.apk path (not split APKs)."""
+    matches: list[str] = []
+    for line in pm_paths.splitlines():
+        if not line.startswith("package:"):
+            continue
+        path = line[len("package:"):]
+        if (len(path) > 512 or not path.startswith("/") or
+                not re.fullmatch(r"/[a-zA-Z0-9_./+~=:-]+", path)):
+            raise ProbeError("Invalid Android package APK path")
+        parts = PurePosixPath(path).parts
+        if ".." in path.split("/") or len(parts) < 4:
+            raise ProbeError("Unsafe Android package APK path")
+        if parts[-1] == "base.apk":
+            if not (path.startswith("/data/app/") or
+                    path.startswith("/mnt/expand/")):
+                raise ProbeError("Unexpected Android package APK directory")
+            matches.append(path)
+    if len(matches) != 1:
+        raise ProbeError("Exactly one installed base.apk required for signature verification")
+    return matches[0]
+
+
+def extract_apksigner_sha256(output: str) -> str:
+    """Require exactly one signer certificate SHA-256, never an ambiguous signer set."""
+    values = re.findall(r"^Signer #[0-9]+ certificate SHA-256 digest:\\s*(.+)$", output, re.M)
+    if len(values) != 1:
+        raise ProbeError("APK signer certificate unavailable or ambiguous")
+    digest = values[0].strip().replace(":", "").lower()
+    if not SIGNER_SHA256.fullmatch(digest):
+        raise ProbeError("APK signer certificate fingerprint malformed")
+    return digest
+
+
+def verify_signing_certificate(
+    adb: str, serial: str, expected_sha256: str, apksigner: str = "apksigner"
+) -> None:
+    """Attest locally pulled package signer against a user-supplied trusted SHA-256.
+
+    This is NOT an independently maintained OpenAI trust registry. The expected digest
+    must come from an independently authenticated publisher record, not from this phone.
+    """
+    if not SIGNER_SHA256.fullmatch(expected_sha256):
+        raise ProbeError("Expected signer fingerprint must contain exactly 64 hex digits")
+    if not shutil.which(apksigner):
+        raise ProbeError("Android Build-Tools apksigner is required for APK signature verification")
+    prefix = ["-s", serial, "shell"]
+    apk_path = base_apk_path(adb_call(adb, prefix + ["pm", "path", OFFICIAL_PACKAGE]))
+    size = adb_call(adb, prefix + ["stat", "-c", "%s", apk_path]).strip()
+    if not size.isascii() or not size.isdecimal():
+        raise ProbeError("Could not establish trusted APK size")
+    if not 0 < int(size) <= MAX_BASE_APK_BYTES:
+        raise ProbeError("APK size outside bounded attestation budget")
+
+    with tempfile.TemporaryDirectory(prefix="raise-phone-signature-") as workdir:
+        apk = Path(workdir) / "base.apk"
+        try:
+            pull = subprocess.run(
+                [adb, "-s", serial, "pull", apk_path, str(apk)],
+                check=False, capture_output=True, text=True, timeout=90
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ProbeError(f"ADB signature read failed: {type(error).__name__}") from error
+        if (pull.returncode != 0 or not apk.is_file() or
+                not 0 < apk.stat().st_size <= MAX_BASE_APK_BYTES):
+            raise ProbeError("Android APK retrieval failed or exceeded size budget")
+        try:
+            verified = subprocess.run(
+                [apksigner, "verify", "--print-certs", str(apk)],
+                check=False, capture_output=True, text=True, timeout=30
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ProbeError(f"APK signature verification failed: {type(error).__name__}") from error
+        if verified.returncode != 0:
+            raise ProbeError("Installed APK did not pass apksigner verification")
+        observed = extract_apksigner_sha256(verified.stdout[:MAX_OUTPUT])
+        if not hmac.compare_digest(observed, expected_sha256.lower()):
+            raise ProbeError("Installed APK signer does not match supplied trusted publisher SHA-256")
 
 
 def select_serial(adb: str, requested: str | None) -> str:
@@ -127,10 +211,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", help="ADB device serial (required when multiple devices present)")
     parser.add_argument("--adb", default="adb", help="ADB executable (default: adb)")
+    parser.add_argument("--expected-signer-sha256",
+        help="optional known-good official publisher certificate SHA-256 from an independent trusted source; requires apksigner")
+    parser.add_argument("--apksigner", default="apksigner", help="Android SDK Build-Tools apksigner executable")
     parser.add_argument("--launch", action="store_true", help="explicitly launch the installed official ChatGPT app")
     parser.add_argument("--interactive", action="store_true", help="time manually observed app/Voice states; requires --launch")
     parser.add_argument("--evidence", type=Path, help="write private, new-only JSON measurements")
     args = parser.parse_args(argv)
+    if args.expected_signer_sha256 is not None and not SIGNER_SHA256.fullmatch(args.expected_signer_sha256):
+        parser.error("--expected-signer-sha256 must be exactly 64 hexadecimal digits")
     if args.interactive and not args.launch:
         parser.error("--interactive requires --launch")
     if args.evidence and not args.launch:
@@ -140,10 +229,13 @@ def main(argv: list[str] | None = None) -> int:
             raise ProbeError("ADB not found; install Android platform-tools first")
         serial = select_serial(args.adb, args.serial)
         phone = inspect_phone(args.adb, serial)
+        if args.expected_signer_sha256 is not None:
+            verify_signing_certificate(args.adb, serial, args.expected_signer_sha256, args.apksigner)
         result: dict[str, object] = {
             "schema_version": 1, "date_utc": utc_now(),
             "phone_model": phone["model"], "package": OFFICIAL_PACKAGE,
             "launch_requested": args.launch, "launch_command_ms": None,
+            "publisher_signature_verified": args.expected_signer_sha256 is not None,
             "operator_observations": {},
             "watch_microphone_bridge_verified": False,
             "watch_speaker_bridge_verified": False,
@@ -151,7 +243,10 @@ def main(argv: list[str] | None = None) -> int:
             "measurement_level": "ADB launcher observation, not physical Watch integration",
         }
         print(f"Phone: {phone['model']}; package {OFFICIAL_PACKAGE} present.")
-        print("Verify publisher/signature using a trusted source; package name alone is NOT authenticity proof.")
+        if args.expected_signer_sha256 is not None:
+            print("APK signer verified against the supplied independent publisher certificate SHA-256.")
+        else:
+            print("Verify publisher/signature using a trusted source; package name alone is NOT authenticity proof.")
         if args.launch:
             start = time.monotonic()
             result["launch_command_ms"] = launch_official_app(args.adb, serial)
@@ -166,7 +261,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.evidence:
                 evidence_write(args.evidence, result)
                 print(f"Private evidence saved to: {args.evidence}")
-        print("NOT PROVEN: official app signing, Watch-to-phone mic bridge, Watch speaker route, or automatic Voice start.")
+        if args.expected_signer_sha256 is None:
+            print("NOT PROVEN: official app signing, Watch-to-phone mic bridge, Watch speaker route, or automatic Voice start.")
+        else:
+            print("NOT PROVEN: Watch-to-phone mic bridge, Watch speaker route, or automatic Voice start.")
         return 0
     except (ProbeError, OSError) as error:
         print(f"FAIL-CLOSED: {error}", file=sys.stderr)
