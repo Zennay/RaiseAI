@@ -73,7 +73,7 @@ def base_apk_path(pm_paths: str) -> str:
 
 def extract_apksigner_sha256(output: str) -> str:
     """Require exactly one signer certificate SHA-256, never an ambiguous signer set."""
-    values = re.findall(r"^Signer #[0-9]+ certificate SHA-256 digest:\\s*(.+)$", output, re.M)
+    values = re.findall(r"^Signer #[0-9]+ certificate SHA-256 digest:\s*(.+)$", output, re.M)
     if len(values) != 1:
         raise ProbeError("APK signer certificate unavailable or ambiguous")
     digest = values[0].strip().replace(":", "").lower()
