@@ -9,7 +9,7 @@ usage() {
 }
 [[ "$#" -ge 1 && "$#" -le 2 ]] || usage
 serial="$1"
-[[ "$serial" =~ ^[A-Za-z0-9._:-]{1,128}$ ]] || usage
+[[ "$serial" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]] || usage
 [[ "$#" -eq 1 || "$2" == "--allow-replace" ]] || usage
 command -v adb >/dev/null || { echo "ADB is required" >&2; exit 1; }
 
