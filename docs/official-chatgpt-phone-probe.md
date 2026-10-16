@@ -62,3 +62,17 @@ python3 -m unittest discover -s tests -p 'test_official_chatgpt_phone_probe.py' 
 The 19 Python test scenarios mock ADB and the operator; they check supported launcher-only invocation, fail-closed handling, device selection, no silent app start, strict evidence output, no secret/serial leakage, no symlink overwrite and the missing Watch transport gates. They do **not** provide physical or CI confirmation until the hosted run completes.
 
 **Unchanged hard gate:** [issue #34](https://github.com/Zennay/RaiseAI/issues/34) freezes a specific v1.5.2 Watch acceptance artefact. This tool neither replaces that artefact nor marks the Watch/VPS/model/Watch session verified.
+
+
+## Optional cryptographic APK signer attestation
+
+Checking the Android package name **does not verify the publisher**. If you have already obtained the official ChatGPT Android signing certificate SHA-256 fingerprint from an **independently authenticated and trusted publisher record**, you can add:
+
+```bash
+python3 tools/probe_official_chatgpt_phone.py --expected-signer-sha256 <64_HEX_DIGITS>
+python3 tools/probe_official_chatgpt_phone.py --launch --expected-signer-sha256 <64_HEX_DIGITS>
+```
+
+This opt-in mode requires Android Build-Tools `apksigner` on `PATH` (or `--apksigner /absolute/path/to/apksigner`). It checks one non-Wear phone, retrieves one installed `base.apk` under a strictly bounded size budget (200 MB maximum), validates its APK signature cryptographically, and compares its **single** signer certificate fingerprint with your trusted reference. Ambiguous signatures, unparseable paths, oversized APKs and mismatches fail before the public launcher can run. Temporary APK bytes are removed after validation.
+
+**Do not get the expected fingerprint from the installed APK itself or from an untrusted forum**—that would compare a package against its own asserted identity. No fingerprint is embedded here because the official signing identity has not been independently established. If the option is omitted, the existing probe still works, but signing remains **NOT PROVEN** and the JSON `publisher_signature_verified` value remains `false`. Signature verification alone proves neither an official account session nor working ChatGPT Voice, Watch microphone or Watch audio routing.
