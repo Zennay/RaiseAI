@@ -16,6 +16,7 @@ SIGNER_A = "ab" * 32
 SIGNER_B = "cd" * 32
 PACKAGE = "package: name='nl.zennay.raiseai' versionCode='1' versionName='0.1.0'"
 CERT = "Signer #1 certificate SHA-256 digest: " + SIGNER_A
+WATCH_PACKAGE = PACKAGE + "\\nuses-feature: name=\u0027android.hardware.type.watch\u0027"
 
 
 class IdentityPreflightTests(unittest.TestCase):
@@ -80,7 +81,7 @@ class IdentityPreflightTests(unittest.TestCase):
             phone.write_bytes(b"phone")
             watch.write_bytes(b"watch")
             with mock.patch.object(datalayer, "checked_command", side_effect=[
-                PACKAGE, CERT, PACKAGE, CERT
+                PACKAGE, CERT, WATCH_PACKAGE, CERT
             ]) as calls:
                 datalayer.preflight(phone, watch, "aapt", "apksigner")
             self.assertEqual(calls.call_count, 4)
@@ -91,10 +92,19 @@ class IdentityPreflightTests(unittest.TestCase):
             phone.write_bytes(b"phone")
             watch.write_bytes(b"watch")
             with mock.patch.object(datalayer, "checked_command", side_effect=[
-                PACKAGE, CERT, PACKAGE, "Signer #1 certificate SHA-256 digest: " + SIGNER_B
+                PACKAGE, CERT, WATCH_PACKAGE, "Signer #1 certificate SHA-256 digest: " + SIGNER_B
             ]):
                 with self.assertRaises(datalayer.CompatibilityError):
                     datalayer.preflight(phone, watch, "aapt", "apksigner")
+
+    def test_two_phone_apks_cannot_be_mistaken_for_watch_pair(self):
+        with tempfile.TemporaryDirectory() as d:
+            phone, fake_watch = Path(d)/"phone.apk", Path(d)/"fake-watch.apk"
+            phone.write_bytes(b"phone")
+            fake_watch.write_bytes(b"phone copy")
+            with mock.patch.object(datalayer, "checked_command", side_effect=[PACKAGE, CERT, PACKAGE, CERT]):
+                with self.assertRaisesRegex(datalayer.CompatibilityError, "device roles"):
+                    datalayer.preflight(phone, fake_watch, "aapt", "apksigner")
 
     def test_same_apk_path_is_not_two_device_identity_evidence(self):
         with tempfile.TemporaryDirectory() as d:
