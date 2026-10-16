@@ -6,6 +6,12 @@ package nl.zennay.raiseai
  * The UI may show progress only for complete, independent, source-bound trials.
  * Corrupted or duplicated rows cannot be used to claim a physical acceptance PASS.
  */
+internal data class SensorTrialIdentity(
+    val appVersion: String,
+    val sourceRevision: String,
+    val detectorConfig: String
+)
+
 internal object SensorTrialCsvPolicy {
     const val HEADER =
         "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config"
@@ -13,7 +19,7 @@ internal object SensorTrialCsvPolicy {
     private const val MIN_DURATION_MS = 3_000L
     private const val MIN_SAMPLES = 20
 
-    fun evaluate(lines: Sequence<String>): SensorTrialProgress {
+    fun evaluate(lines: Sequence<String>, expected: SensorTrialIdentity? = null): SensorTrialProgress {
         val iterator = lines.iterator()
         if (!iterator.hasNext() || iterator.next() != HEADER) {
             return SensorTrialProgress(rejectedTrials = 1)
@@ -57,7 +63,12 @@ internal object SensorTrialCsvPolicy {
                 similarity < -1f || similarity > 1f ||
                 version.isBlank() || version.length > 64 ||
                 !REVISION.matches(revision) ||
-                detector.isBlank() || detector == "missing" || detector.length > 1_024
+                detector.isBlank() || detector == "missing" || detector.length > 1_024 ||
+                (expected != null && (
+                    version != expected.appVersion ||
+                    !revision.equals(expected.sourceRevision, ignoreCase = true) ||
+                    detector != expected.detectorConfig
+                ))
             ) {
                 rejectedTrials++
                 continue
