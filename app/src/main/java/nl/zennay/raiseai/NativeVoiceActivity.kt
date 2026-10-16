@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -33,8 +34,14 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private lateinit var detailText: TextView
     private lateinit var orb: View
     private lateinit var fallbackButton: Button
+    private lateinit var replayButton: Button
+    private lateinit var speechModeButton: Button
 
     private var recognizer: SpeechRecognizer? = null
+    private var speechEngine: TextToSpeech? = null
+    private val speechStartup = TtsStartupGate()
+    private var queuedSpeech: String? = null
+    private var lastAnswer: String? = null
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
@@ -107,7 +114,41 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         column.addView(transcriptText, fullWidth(bottom = 10))
 
         detailText = textView(12f, Color.LTGRAY)
-        column.addView(detailText, fullWidth(bottom = 14))
+        column.addView(detailText, fullWidth(bottom = 8))
+
+        val audioControls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        speechModeButton = Button(this).apply {
+            text = spokenModeLabel(ResponseModeStore.load(this@NativeVoiceActivity))
+            textSize = 11f
+            isAllCaps = false
+            setOnClickListener {
+                val next = ResponseModeStore.cycle(this@NativeVoiceActivity)
+                text = spokenModeLabel(next)
+                if (next == ResponseMode.SILENT) {
+                    queuedSpeech = null
+                    speechEngine?.stop()
+                }
+            }
+        }
+        audioControls.addView(
+            speechModeButton,
+            LinearLayout.LayoutParams(0, dp(44), 1f)
+        )
+        replayButton = Button(this).apply {
+            text = "↻ Luister"
+            textSize = 11f
+            isAllCaps = false
+            visibility = View.GONE
+            setOnClickListener { lastAnswer?.let(::speakText) }
+        }
+        audioControls.addView(
+            replayButton,
+            LinearLayout.LayoutParams(0, dp(44), 1f)
+        )
+        column.addView(audioControls, fullWidth(bottom = 8))
 
         fallbackButton = Button(this).apply {
             text = "Open Gemini fallback"
@@ -234,6 +275,10 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         }
 
         setState("sending", "Naar je VPS…")
+        val prewarmMode = ResponseModeStore.load(this)
+        // Prepare TTS while the HTTPS gateway request is running. This is only a hint;
+        // the user may switch audio mode before the reply reaches the UI.
+        if (prewarmMode != ResponseMode.SILENT) ensureSpeechEngine()
         val requestStartedMs = SystemClock.elapsedRealtime()
 
         io.execute {
@@ -269,6 +314,16 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                                 append(response.executionReason ?: "nog niet gekoppeld")
                             }
                         }
+                        lastAnswer = response.answer
+                        replayButton.visibility =
+                            if (response.answer.isNullOrBlank()) View.GONE else View.VISIBLE
+
+                        // Honor the *current* Watch selection, not the mode when Send was tapped.
+                        // In particular, muting while the VPS is answering must never auto-speak.
+                        SpokenReplyPolicy.textFor(
+                            ResponseModeStore.load(this@NativeVoiceActivity),
+                            response.answer
+                        )?.let(::speakText)
                         fallbackButton.visibility = View.GONE
                     }
                 }
@@ -285,6 +340,78 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                         detailText.text = error.message ?: "Onbekende netwerkfout"
                     }
                 }
+        }
+    }
+
+    private fun spokenModeLabel(mode: ResponseMode): String = when (mode) {
+        ResponseMode.SILENT -> "🔇 Stil"
+        ResponseMode.SHORT_SPOKEN -> "🔊 Kort"
+        ResponseMode.FULL_SPOKEN -> "🔊 Alles"
+    }
+
+    private fun speakText(text: String) {
+        if (isFinishing || isDestroyed) return
+        val limit = (TextToSpeech.getMaxSpeechInputLength() - 32).coerceAtLeast(200)
+        val speech = text.trim().take(limit)
+        if (speech.isBlank()) return
+
+        queuedSpeech = speech
+        if (speechStartup.isReady()) speakQueued() else ensureSpeechEngine()
+    }
+
+    private fun ensureSpeechEngine() {
+        if (isFinishing || isDestroyed) return
+        val ticket = speechStartup.begin() ?: return
+
+        try {
+            speechEngine = TextToSpeech(applicationContext) { status ->
+                mainHandler.post {
+                    if (status != TextToSpeech.SUCCESS) {
+                        if (speechStartup.complete(ticket, false)) onSpeechUnavailable()
+                        return@post
+                    }
+
+                    val language = runCatching {
+                        speechEngine?.setLanguage(Locale.forLanguageTag("nl-NL"))
+                            ?: TextToSpeech.ERROR
+                    }.getOrDefault(TextToSpeech.ERROR)
+
+                    if (language < 0) {
+                        if (speechStartup.complete(ticket, false)) onSpeechUnavailable()
+                        return@post
+                    }
+
+                    if (speechStartup.complete(ticket, true)) speakQueued()
+                }
+            }
+        } catch (_: RuntimeException) {
+            if (speechStartup.complete(ticket, false)) onSpeechUnavailable()
+        }
+    }
+
+    private fun onSpeechUnavailable() {
+        queuedSpeech = null
+        releaseSpeechEngine()
+        // The answer stays visible; an explicit Replay retries the Android TTS engine.
+    }
+
+    private fun releaseSpeechEngine() {
+        val engine = speechEngine
+        speechEngine = null
+        runCatching { engine?.stop() }
+        runCatching { engine?.shutdown() }
+    }
+
+    private fun speakQueued() {
+        val text = queuedSpeech ?: return
+        queuedSpeech = null
+        val status = runCatching {
+            speechEngine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "raiseai-answer")
+                ?: TextToSpeech.ERROR
+        }.getOrDefault(TextToSpeech.ERROR)
+
+        if (status == TextToSpeech.ERROR && speechStartup.invalidateReady()) {
+            releaseSpeechEngine()
         }
     }
 
@@ -344,6 +471,9 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         orbAnimator?.cancel()
         recognizer?.cancel()
         recognizer?.destroy()
+        queuedSpeech = null
+        speechStartup.close()
+        releaseSpeechEngine()
         io.shutdownNow()
         NativeSessionState.set("idle")
         super.onDestroy()
