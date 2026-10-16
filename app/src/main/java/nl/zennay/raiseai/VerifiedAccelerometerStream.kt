@@ -7,11 +7,12 @@ package nl.zennay.raiseai
  * ordering slot. The Android Service owner can replace its direct event indexing with this
  * adapter once the concurrent Service PRs have settled.
  *
- * Use one adapter per sensor registration lifecycle; call [resetOrdering] after unregistering.
- * This deliberately preserves the detector's existing thresholds and pose/state semantics.
+ * One adapter belongs to one registration. After a pause, use [restartWithFreshDetector] to
+ * discard *both* timestamps and old detector gravity/movement/cooldown state. Resetting just the
+ * ordering policy could mistake a sensor wake-up for a real new wrist motion.
  */
 internal class VerifiedAccelerometerStream(
-    private val detector: RaiseGestureDetector,
+    private var detector: RaiseGestureDetector,
     private val policy: AccelerometerEventOrderPolicy = AccelerometerEventOrderPolicy()
 ) {
     /** Null means "drop invalid sample without modifying the gesture state". */
@@ -30,8 +31,16 @@ internal class VerifiedAccelerometerStream(
         )
     }
 
-    /** Clear replay protection only across sensor unregister/re-register, never per event. */
-    fun resetOrdering() = policy.reset()
+    /**
+     * Start a new sensor registration with a fresh detector configured to the same user thresholds.
+     * Reject reuse of the previous detector: its filter/gesture state belongs to the old session.
+     * Do not call per sample or after an ordinary batched delivery.
+     */
+    fun restartWithFreshDetector(freshDetector: RaiseGestureDetector) {
+        require(freshDetector !== detector) { "Sensor registration needs a fresh detector" }
+        detector = freshDetector
+        policy.reset()
+    }
 
     private companion object {
         const val NANOS_PER_MILLI = 1_000_000L
