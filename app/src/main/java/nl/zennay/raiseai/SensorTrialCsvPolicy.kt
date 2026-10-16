@@ -57,7 +57,7 @@ internal object SensorTrialCsvPolicy {
                 similarity < -1f || similarity > 1f ||
                 version.isBlank() || version.length > 64 ||
                 !REVISION.matches(revision) ||
-                detector.isBlank() || detector == "missing" || detector.length > 128
+                detector.isBlank() || detector == "missing" || detector.length > 1_024
             ) {
                 rejectedTrials++
                 continue
