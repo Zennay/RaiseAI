@@ -51,7 +51,7 @@ def adb_call(adb: str, args: list[str], timeout: int = 12) -> str:
 def base_apk_path(pm_paths: str) -> str:
     """Find one safe, regular Android app base.apk path (not split APKs)."""
     # splitlines() would silently erase a forged carriage return in a package path.
-    if any(ord(ch) < 32 and ch != "\\n" for ch in pm_paths):
+    if any(ord(ch) < 32 and ch != "\n" for ch in pm_paths):
         raise ProbeError("Android package paths contain forbidden control characters")
     matches: list[str] = []
     for line in pm_paths.splitlines():
