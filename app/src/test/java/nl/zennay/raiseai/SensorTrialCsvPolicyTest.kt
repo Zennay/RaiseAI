@@ -43,7 +43,7 @@ class SensorTrialCsvPolicyTest {
     @Test fun allThirtyAndHundredUniqueSessionsPassAtThreshold() {
         val mouth = (1..30).map { row(sessionId = "$it", triggered = if (it <= 27) "true" else "false") }
         val movement = (31..130).map {
-            row(label = "normal_move", sessionId = "$it", triggered = if (it <= 5) "true" else "false")
+            row(label = "normal_move", sessionId = "$it", triggered = if (it <= 35) "true" else "false")
         }
         val result = SensorTrialCsvPolicy.evaluate(
             sequenceOf(SensorTrialCsvPolicy.HEADER) + (mouth + movement).asSequence()
@@ -88,6 +88,20 @@ class SensorTrialCsvPolicyTest {
     @Test fun unknownLabelAndAdditionalColumnsAreRejected() {
         val result = parse(row(label = "synthetic"), row() + ",injected")
         assertEquals(2, result.rejectedTrials)
+    }
+
+    @Test fun fullCanonicalDetectorFingerprintIsAccepted() {
+        // configurationId() contains all threshold and timing fields, not only the version.
+        val detector = listOf(
+            "raise-detector-v1",
+            "similarity=0.955", "rearmSimilarity=0.9", "movement=0.85",
+            "holdMs=200", "movementWindowMs=1400", "movementBurstMs=700",
+            "movementHits=2", "approachStart=0.92", "approachWindowMs=1900",
+            "minimumApproachRise=0.025", "cooldownMs=2500", "rearmHoldMs=500"
+        ).joinToString(";")
+        assertTrue(detector.length > 128)
+        assertEquals(0, parse(row(detector = detector)).rejectedTrials)
+        assertEquals(1, parse(row(detector = "x".repeat(1_025))).rejectedTrials)
     }
 
     @Test fun caseVariantRevisionIsSameEvidenceIdentity() {
