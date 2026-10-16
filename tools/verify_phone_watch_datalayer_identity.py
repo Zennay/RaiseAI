@@ -20,7 +20,7 @@ DIGEST = re.compile(r"^[a-fA-F0-9]{64}$")
 PACKAGE = re.compile(r"^package: name='([^']+)'", re.MULTILINE)
 SIGNER = re.compile(r"^Signer #[0-9]+ certificate SHA-256 digest:[ \t]*([^\r\n]+)$", re.MULTILINE)
 
-REQUIRED_WATCH_FEATURE = re.compile(r"^uses-feature: name=\u0027android[.]hardware[.]type[.]watch\u0027(?:[ \\t]|$)", re.MULTILINE)
+REQUIRED_WATCH_FEATURE = re.compile("^uses-feature: name='android[.]hardware[.]type[.]watch'($|[ ])", re.MULTILINE)
 
 
 class CompatibilityError(Exception):
