@@ -61,16 +61,29 @@ class PhoneProbeTests(unittest.TestCase):
             self.assertEqual(probe.inspect_phone("adb", "phone")["chatgpt_package"], "com.openai.chatgpt")
 
     def test_launcher_uses_no_deep_links_or_private_activities(self):
-        with mock.patch.object(probe, "adb_call", return_value="Events injected: 1") as f:
+        with mock.patch.object(probe, "adb_call", return_value="Starting: Intent { act=android.intent.action.MAIN pkg=com.openai.chatgpt }") as f:
             with mock.patch.object(probe.time, "monotonic", side_effect=[10.0, 10.25]):
                 self.assertEqual(probe.launch_official_app("adb", "phone"), 250.0)
         args = f.call_args.args[1]
-        self.assertEqual(args, ["-s", "phone", "shell", "monkey", "-p", "com.openai.chatgpt",
-                                "-c", "android.intent.category.LAUNCHER", "1"])
+        self.assertEqual(args, ["-s", "phone", "shell", "am", "start",
+                                "-a", "android.intent.action.MAIN",
+                                "-c", "android.intent.category.LAUNCHER",
+                                "-p", "com.openai.chatgpt"])
         self.assertNotIn("VOICE", " ".join(args))
+        self.assertNotIn("monkey", args)
 
     def test_launcher_requires_actual_injected_event(self):
-        with mock.patch.object(probe, "adb_call", return_value="Events injected: 0"):
+        with mock.patch.object(probe, "adb_call", return_value="Error: Activity not started"):
+            with self.assertRaises(probe.ProbeError):
+                probe.launch_official_app("adb", "phone")
+
+    def test_existing_foreground_app_is_ok(self):
+        with mock.patch.object(probe, "adb_call", return_value="Warning: Activity not started, its current task has been brought to the front"):
+            with mock.patch.object(probe.time, "monotonic", side_effect=[1.0, 1.01]):
+                self.assertEqual(probe.launch_official_app("adb", "phone"), 10.0)
+
+    def test_blank_launcher_response_is_not_success(self):
+        with mock.patch.object(probe, "adb_call", return_value=""):
             with self.assertRaises(probe.ProbeError):
                 probe.launch_official_app("adb", "phone")
 
