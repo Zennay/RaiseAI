@@ -2,7 +2,7 @@
 
 **Scope:** app-core / [issue #782](https://github.com/Zennay/RaiseAI/issues/782). This is an executable, consent-based feasibility check of the **official consumer ChatGPT Android app**. It is **not** the SIWC/Responses API, not a ChatGPT account emulator, and not proof of a Galaxy Watch audio bridge.
 
-The app uses its real signed-in session on the phone. No passwords, cookies, API credentials or transcripts are collected. No undocumented Voice intent, notification action, accessibility automation, web scraping or private endpoint is used.
+The probe checks the package name, **not the APK's cryptographic signing identity**. Confirm the official publisher/installation through a trusted device app store before testing; a package-name match alone cannot prove authenticity. If the installed app is genuine, it uses its existing signed-in session on the phone. No passwords, cookies, API credentials or transcripts are collected. No undocumented Voice intent, notification action, accessibility automation, web scraping or private endpoint is used.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ From the repository root:
 
 ```bash
 # Safe and read-only: checks exactly one authorised non-Wear Android phone,
-# then checks that the official installed package exists.
+# then checks that the claimed `com.openai.chatgpt` package exists (publisher verification must be done separately).
 python3 tools/probe_official_chatgpt_phone.py
 
 # If multiple ADB devices are present, bind the intended phone:
@@ -42,7 +42,7 @@ The measurement labelled `launch_command_ms` is time spent invoking the ADB laun
 | Check | Meaning |
 | --- | --- |
 | ADB phone + official package present | The official Android app is installed on one verifiable non-Wear device. |
-| Standard launcher reports one injected launch event | Public, package-scoped user-facing app start was requested successfully; **not** proof that a Voice microphone session began. |
+| Android confirms public MAIN/LAUNCHER start | Public, package-scoped user-facing app start was requested without injecting taps or other UI events; **not** proof that a Voice microphone session began. |
 | Operator observes Voice listening and spoken reply | A **phone-only**, manually observed interaction; not an automatic Voice deep link. |
 | Watch mic reaches official ChatGPT Voice | **UNVERIFIED**, requires lawful supported audio route plus physical Watch/phone test. |
 | ChatGPT Voice audible on Watch speaker | **UNVERIFIED**, requires actual paired-device route and physical observation. |
