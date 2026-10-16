@@ -42,7 +42,7 @@ The measurement labelled `launch_command_ms` is time spent invoking the ADB laun
 | Check | Meaning |
 | --- | --- |
 | ADB phone + official package present | The official Android app is installed on one verifiable non-Wear device. |
-| Android confirms public MAIN/LAUNCHER start | Public, package-scoped user-facing app start was requested without injecting taps or other UI events; **not** proof that a Voice microphone session began. |
+| Android confirms public MAIN/LAUNCHER start | Public, package-scoped user-facing app start was requested without injecting taps or other UI events; **not** proof of an authentic signature or Voice microphone session. |
 | Operator observes Voice listening and spoken reply | A **phone-only**, manually observed interaction; not an automatic Voice deep link. |
 | Watch mic reaches official ChatGPT Voice | **UNVERIFIED**, requires lawful supported audio route plus physical Watch/phone test. |
 | ChatGPT Voice audible on Watch speaker | **UNVERIFIED**, requires actual paired-device route and physical observation. |
@@ -59,6 +59,6 @@ The probe refuses offline/unauthorised/multiple unselected devices, Wear devices
 python3 -m unittest discover -s tests -p 'test_official_chatgpt_phone_probe.py' -v
 ```
 
-Tests mock ADB and the operator; they check supported launcher-only invocation, fail-closed handling, device selection, no silent app start, strict evidence output, no secret/serial leakage, no symlink overwrite and the missing Watch transport gates. They do **not** provide physical or CI confirmation until the hosted run completes.
+The 19 Python test scenarios mock ADB and the operator; they check supported launcher-only invocation, fail-closed handling, device selection, no silent app start, strict evidence output, no secret/serial leakage, no symlink overwrite and the missing Watch transport gates. They do **not** provide physical or CI confirmation until the hosted run completes.
 
 **Unchanged hard gate:** [issue #34](https://github.com/Zennay/RaiseAI/issues/34) freezes a specific v1.5.2 Watch acceptance artefact. This tool neither replaces that artefact nor marks the Watch/VPS/model/Watch session verified.
