@@ -30,8 +30,6 @@ data class SensorTrialProgress(
 
 object SensorTrialRecorder {
     private const val FILE_NAME = "sensor-trials.csv"
-    private const val MIN_QUALIFYING_DURATION_MS = 3_000L
-    private const val MIN_QUALIFYING_SAMPLES = 20
 
     @Synchronized
     fun append(
@@ -49,7 +47,7 @@ object SensorTrialRecorder {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
             file.writeText(
-                "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config\n"
+                SensorTrialCsvPolicy.HEADER + "\n"
             )
         }
         file.appendText(
@@ -58,9 +56,8 @@ object SensorTrialRecorder {
     }
 
     fun trialCount(context: Context): Int {
-        val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) return 0
-        return (file.useLines { it.count() } - 1).coerceAtLeast(0)
+        val accepted = progress(context)
+        return accepted.mouthTrials + accepted.nonTriggerTrials
     }
 
     fun progress(context: Context): SensorTrialProgress {
