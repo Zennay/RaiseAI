@@ -85,7 +85,16 @@ class OfficialChatGptPhoneHandoffPolicyTest {
         assertEquals(D.EXPIRED_OR_CLOCK_SKEW,
             decide(request(id = "abcdef0123456789abcdef0123456789"), at = now - 1L))
         assertEquals(D.OPEN_OFFICIAL_APP,
-            decide(request(id = "abcdef0123456789abcdef0123456789"), at = now))
+            decide(request(id = "abcdef0123456789abcdef0123456789"), at = now + 3_000L))
+    }
+
+    @Test fun distinctRequestsCannotFloodThePublicAppLauncher() {
+        val next = request(id = "abcdef0123456789abcdef0123456789")
+        assertEquals(D.OPEN_OFFICIAL_APP, decide())
+        assertEquals(D.TOO_FREQUENT, decide(next, at = now))
+        assertEquals(D.TOO_FREQUENT, decide(next, at = now + 2_999L))
+        assertEquals(D.OPEN_OFFICIAL_APP, decide(next, at = now + 3_000L))
+        assertEquals(D.REPLAYED, decide(next, at = now + 3_000L))
     }
 
     @Test fun cacheRefusesOverflowInsteadOfEvictingValidReplayGuards() {
