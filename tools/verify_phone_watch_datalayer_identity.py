@@ -20,6 +20,8 @@ DIGEST = re.compile(r"^[a-fA-F0-9]{64}$")
 PACKAGE = re.compile(r"^package: name='([^']+)'", re.MULTILINE)
 SIGNER = re.compile(r"^Signer #[0-9]+ certificate SHA-256 digest:[ \t]*([^\r\n]+)$", re.MULTILINE)
 
+REQUIRED_WATCH_FEATURE = re.compile(r"^uses-feature: name=\u0027android[.]hardware[.]type[.]watch\u0027(?:[ \\t]|$)", re.MULTILINE)
+
 
 class CompatibilityError(Exception):
     pass
@@ -66,18 +68,20 @@ def signer_digest(output: str) -> str:
     return fingerprint
 
 
-def inspect_apk(path: Path, aapt: str, apksigner: str) -> tuple[str, str]:
+def inspect_apk(path: Path, aapt: str, apksigner: str) -> tuple[str, str, bool]:
     checked_apk(path)
     info = checked_command(aapt, ["dump", "badging", str(path)])
     signature = checked_command(apksigner, ["verify", "--print-certs", str(path)])
-    return package_name(info), signer_digest(signature)
+    return package_name(info), signer_digest(signature), bool(REQUIRED_WATCH_FEATURE.search(info))
 
 
 def preflight(phone: Path, watch: Path, aapt: str, apksigner: str) -> None:
     if phone.absolute() == watch.absolute():
         raise CompatibilityError("Must use two distinct phone and Watch APK files")
-    phone_package, phone_signer = inspect_apk(phone, aapt, apksigner)
-    watch_package, watch_signer = inspect_apk(watch, aapt, apksigner)
+    phone_package, phone_signer, phone_requires_watch = inspect_apk(phone, aapt, apksigner)
+    watch_package, watch_signer, watch_requires_watch = inspect_apk(watch, aapt, apksigner)
+    if phone_requires_watch or not watch_requires_watch:
+        raise CompatibilityError("APK device roles ambiguous: expected phone APK and Watch-required APK")
     if phone_package != watch_package or not hmac.compare_digest(phone_signer, watch_signer):
         raise CompatibilityError("Phone and Watch package/signing identity mismatch")
     print("PASS: phone and Watch APK application IDs and single active signing certificates match.")
