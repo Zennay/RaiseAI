@@ -17,3 +17,7 @@ This pure Kotlin policy is an **app-core protocol preparation** for [issue #782]
 ## Verification
 
 Pure JUnit 4 regression tests are in `app/src/test/java/nl/zennay/raiseai/OfficialChatGptPhoneHandoffPolicyTest.kt`. They cover authorization, consent, publisher gate, strict schema, expiry, replay, distinct-ID launch flooding, cache overflow, rollback and integer limits. A passing JVM test is **not** a demonstration of Android package attestation or physical Voice transport.
+
+## Canonical wire envelope
+
+The companion and Watch can share `OfficialChatGptPhoneHandoffWireCodec` to encode/decode one ASCII-only, at-most-96-byte command: `r1|OPEN_OFFICIAL_CHATGPT_APP|<32 lower-hex random id>|<positive UTC epoch milliseconds>`. Extra fields, Unicode, control bytes, noncanonical integers and unauthorized actions are rejected. The wire bytes are **never** proof of who sent them; transport identity, user consent and official-publisher verification remain mandatory phone-side. Eight additional JVM regressions cover strict wire behavior and consent enforcement.
