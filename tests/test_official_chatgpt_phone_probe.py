@@ -123,10 +123,13 @@ class PhoneProbeTests(unittest.TestCase):
         with mock.patch.object(probe.shutil, "which", return_value="/bin/adb"), \
              mock.patch.object(probe, "select_serial", return_value="phone"), \
              mock.patch.object(probe, "inspect_phone", return_value={"model": "Pixel 8", "chatgpt_package": "com.openai.chatgpt"}), \
-             mock.patch.object(probe, "launch_official_app") as launcher, \
-             contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(probe.main([]), 0)
+             mock.patch.object(probe, "launch_official_app") as launcher:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(probe.main([]), 0)
         launcher.assert_not_called()
+        self.assertIn("package name alone is NOT authenticity proof", output.getvalue())
+        self.assertIn("NOT PROVEN: official app signing", output.getvalue())
 
     def test_interactive_requires_launch(self):
         with contextlib.redirect_stderr(io.StringIO()):
