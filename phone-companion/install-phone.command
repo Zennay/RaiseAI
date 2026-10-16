@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Explicit phone-only installer. Shares the Watch package ID for future Wear Data Layer;
 # installing a phone build on the Watch would overwrite the Watch app and is forbidden.
-set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   echo "Usage: bash phone-companion/install-phone.command <AUTHORised_ANDROID_PHONE_ADB_SERIAL> [--allow-replace]" >&2
