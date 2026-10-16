@@ -2,6 +2,7 @@ package nl.zennay.raiseai
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import nl.zennay.raiseai.OfficialChatGptPhoneHandoffPolicy.Decision as D
 
 class OfficialChatGptPhoneHandoffPolicyTest {
     private val policy = OfficialChatGptPhoneHandoffPolicy()
@@ -22,7 +23,6 @@ class OfficialChatGptPhoneHandoffPolicyTest {
         at: Long = now
     ) = policy.decide(request, trusted, consent, verified, at)
 
-    private val D = OfficialChatGptPhoneHandoffPolicy.Decision
 
     @Test fun acceptsOneFreshAuthorizedLauncherRequest() {
         assertEquals(D.OPEN_OFFICIAL_APP, decide())
