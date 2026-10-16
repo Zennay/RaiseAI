@@ -54,6 +54,9 @@ jobs:
           set -euo pipefail
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Validate phone-only install guard syntax
+        run: bash -n phone-companion/install-phone.command
+
       - name: Compile and run Android-free signing regression tests
         shell: bash
         run: |
