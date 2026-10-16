@@ -41,8 +41,35 @@ class VerifiedAccelerometerStreamTest {
     fun resetAllowsNewRegistrationButNotReplayWithinOneRegistration() {
         assertNotNull(stream.process(gravity, now - 100_000_000L, now, null))
         assertNull(stream.process(gravity, now - 200_000_000L, now, null))
-        stream.resetOrdering()
+        stream.restartWithFreshDetector(RaiseGestureDetector())
         assertNotNull(stream.process(gravity, now - 200_000_000L, now, null))
+    }
+
+    @Test
+    fun newSensorRegistrationDiscardsOldDetectorGravityAndMovement() {
+        val oldOrientation = floatArrayOf(0f, 0f, 9.81f)
+        val newOrientation = floatArrayOf(8f, 0f, 6f)
+        assertNotNull(stream.process(oldOrientation, now - 500_000_000L, now, null))
+        val previousMovement = requireNotNull(
+            stream.process(newOrientation, now - 300_000_000L, now, null)
+        )
+        assertTrue(previousMovement.dynamicAcceleration > 0f)
+
+        stream.restartWithFreshDetector(RaiseGestureDetector())
+        val freshBaseline = requireNotNull(
+            stream.process(newOrientation, now - 400_000_000L, now, null)
+        )
+        assertFalse(freshBaseline.triggered)
+        assertEquals(0f, freshBaseline.dynamicAcceleration, 0.0001f)
+    }
+
+    @Test
+    fun restartingWithSameDetectorFailsWithoutResettingReplayProtection() {
+        assertNotNull(stream.process(gravity, now - 100_000_000L, now, null))
+        val failed = runCatching { stream.restartWithFreshDetector(detector) }.exceptionOrNull()
+        assertTrue(failed is IllegalArgumentException)
+        assertNull(stream.process(gravity, now - 200_000_000L, now, null))
+        assertNotNull(stream.process(gravity, now - 50_000_000L, now, null))
     }
 
     @Test
