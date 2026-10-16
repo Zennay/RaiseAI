@@ -7,7 +7,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "nl.zennay.raiseai.phone"
+        applicationId = "nl.zennay.raiseai"
         minSdk = 28
         targetSdk = 35
         versionCode = 1
