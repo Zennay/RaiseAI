@@ -71,7 +71,7 @@ def inspect_phone(adb: str, serial: str) -> dict[str, str]:
         raise ProbeError("Target is a Watch or the phone classification could not be verified")
     package = adb_call(adb, prefix + ["pm", "path", OFFICIAL_PACKAGE])
     if not any(line.startswith("package:") for line in package.splitlines()):
-        raise ProbeError("Official ChatGPT Android package not installed")
+        raise ProbeError("ChatGPT Android package name not installed")
     model = adb_call(adb, prefix + ["getprop", "ro.product.model"]).strip()
     if not model or len(model) > 128 or any(ord(c) < 32 for c in model):
         raise ProbeError("Could not read a safe Android phone model")
@@ -150,11 +150,12 @@ def main(argv: list[str] | None = None) -> int:
             "consumer_voice_api_claimed": False,
             "measurement_level": "ADB launcher observation, not physical Watch integration",
         }
-        print(f"Phone: {phone['model']}; official ChatGPT installed.")
+        print(f"Phone: {phone['model']}; package {OFFICIAL_PACKAGE} present.")
+        print("Verify publisher/signature using a trusted source; package name alone is NOT authenticity proof.")
         if args.launch:
             start = time.monotonic()
             result["launch_command_ms"] = launch_official_app(args.adb, serial)
-            print("Standard official-app launcher invoked. Voice is NOT opened automatically.")
+            print("Standard package launcher invoked. Voice is NOT opened automatically.")
             if args.interactive:
                 print("On phone, open Voice using the OFFICIAL ChatGPT app UI.")
                 obs: dict[str, object] = {}
@@ -165,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.evidence:
                 evidence_write(args.evidence, result)
                 print(f"Private evidence saved to: {args.evidence}")
-        print("NOT PROVEN: Watch-to-phone mic bridge, Watch speaker route, or automatic Voice start.")
+        print("NOT PROVEN: official app signing, Watch-to-phone mic bridge, Watch speaker route, or automatic Voice start.")
         return 0
     except (ProbeError, OSError) as error:
         print(f"FAIL-CLOSED: {error}", file=sys.stderr)
