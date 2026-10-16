@@ -69,9 +69,10 @@ class AssistantSessionGuard(private val context: Context) {
                     event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
                     event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND
 
-                if (resumed && event.timeStamp >= latestTimestamp) {
+                val candidate = UsageAccessGate.verifiedForegroundPackage(event.packageName)
+                if (resumed && candidate != null && event.timeStamp >= latestTimestamp) {
                     latestTimestamp = event.timeStamp
-                    latestPackage = event.packageName
+                    latestPackage = candidate
                 }
             }
             latestPackage
