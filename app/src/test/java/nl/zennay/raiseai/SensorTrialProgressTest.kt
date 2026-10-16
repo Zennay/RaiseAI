@@ -42,6 +42,34 @@ class SensorTrialProgressTest {
     }
 
     @Test
+    fun oneRejectedRowBlocksOtherwisePassingEvidence() {
+        val progress = SensorTrialProgress(
+            mouthTrials = 30,
+            mouthDetections = 27,
+            nonTriggerTrials = 100,
+            falseTriggers = 5,
+            rejectedTrials = 1
+        )
+        assertFalse(progress.v1GatePassed)
+    }
+
+    @Test
+    fun impossibleCounterPairsCannotPass() {
+        assertFalse(
+            SensorTrialProgress(
+                mouthTrials = 30, mouthDetections = 31,
+                nonTriggerTrials = 100, falseTriggers = 0
+            ).v1GatePassed
+        )
+        assertFalse(
+            SensorTrialProgress(
+                mouthTrials = 30, mouthDetections = 30,
+                nonTriggerTrials = 100, falseTriggers = -1
+            ).v1GatePassed
+        )
+    }
+
+    @Test
     fun mixedEvidenceCanNeverPass() {
         val progress = SensorTrialProgress(
             mouthTrials = 40,

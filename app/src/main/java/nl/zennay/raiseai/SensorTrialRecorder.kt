@@ -2,6 +2,7 @@ package nl.zennay.raiseai
 
 import android.content.Context
 import java.io.File
+import java.io.IOException
 
 data class SensorTrialProgress(
     val mouthTrials: Int = 0,
@@ -19,16 +20,18 @@ data class SensorTrialProgress(
 
     val v1GatePassed: Boolean
         get() = !mixedEvidenceIdentity &&
+            rejectedTrials == 0 &&
             mouthTrials >= 30 &&
+            mouthDetections in 0..mouthTrials &&
             nonTriggerTrials >= 100 &&
+            falseTriggers in 0..nonTriggerTrials &&
             detectionRate >= 0.90f &&
             falseTriggerRate <= 0.05f
 }
 
 object SensorTrialRecorder {
     private const val FILE_NAME = "sensor-trials.csv"
-    private const val MIN_QUALIFYING_DURATION_MS = 3_000L
-    private const val MIN_QUALIFYING_SAMPLES = 20
+    private const val MAX_TRIAL_FILE_BYTES = 2L * 1024L * 1024L
 
     @Synchronized
     fun append(
@@ -46,7 +49,7 @@ object SensorTrialRecorder {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
             file.writeText(
-                "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config\n"
+                SensorTrialCsvPolicy.HEADER + "\n"
             )
         }
         file.appendText(
@@ -55,79 +58,30 @@ object SensorTrialRecorder {
     }
 
     fun trialCount(context: Context): Int {
-        val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) return 0
-        return (file.useLines { it.count() } - 1).coerceAtLeast(0)
+        val accepted = progress(context)
+        return accepted.mouthTrials + accepted.nonTriggerTrials
     }
 
     fun progress(context: Context): SensorTrialProgress {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return SensorTrialProgress()
-
-        var mouthTrials = 0
-        var mouthDetections = 0
-        var nonTriggerTrials = 0
-        var falseTriggers = 0
-        var rejectedTrials = 0
-        val identities = mutableSetOf<String>()
-
-        file.useLines { lines ->
-            lines.drop(1).forEach { line ->
-                val fields = line.split(',', limit = 9)
-                if (fields.size != 9) {
-                    rejectedTrials++
-                    return@forEach
-                }
-
-                val label = fields[0]
-                val durationMs = fields[2].toLongOrNull()
-                val sampleCount = fields[3].toIntOrNull()
-                val triggered = when (fields[4]) {
-                    "true" -> true
-                    "false" -> false
-                    else -> null
-                }
-                val appVersion = fields[6]
-                val sourceRevision = fields[7].lowercase()
-                val detectorConfig = fields[8]
-
-                if (durationMs == null || sampleCount == null || triggered == null ||
-                    appVersion.isBlank() ||
-                    !sourceRevision.matches(Regex("^[0-9a-f]{40}$")) ||
-                    detectorConfig.isBlank() || detectorConfig == "missing"
-                ) {
-                    rejectedTrials++
-                    return@forEach
-                }
-
-                if (durationMs < MIN_QUALIFYING_DURATION_MS || sampleCount < MIN_QUALIFYING_SAMPLES) {
-                    rejectedTrials++
-                    return@forEach
-                }
-
-                identities += "$appVersion|$sourceRevision|$detectorConfig"
-                when (label) {
-                    "mouth_raise" -> {
-                        mouthTrials++
-                        if (triggered) mouthDetections++
-                    }
-                    "view_time", "normal_move" -> {
-                        nonTriggerTrials++
-                        if (triggered) falseTriggers++
-                    }
-                    else -> rejectedTrials++
-                }
-            }
+        // Corrupted local capture storage must not crash the Watch setup screen, or block
+        // on a non-regular path. An unreadable/oversized dataset can never be a V1 PASS.
+        if (!file.isFile || file.length() > MAX_TRIAL_FILE_BYTES) {
+            return SensorTrialProgress(rejectedTrials = 1)
         }
-
-        return SensorTrialProgress(
-            mouthTrials = mouthTrials,
-            mouthDetections = mouthDetections,
-            nonTriggerTrials = nonTriggerTrials,
-            falseTriggers = falseTriggers,
-            rejectedTrials = rejectedTrials,
-            mixedEvidenceIdentity = identities.size > 1
-        )
+        return try {
+            val expected = SensorTrialIdentity(
+                appVersion = BuildConfig.VERSION_NAME,
+                sourceRevision = BuildConfig.SOURCE_REVISION,
+                detectorConfig = RaiseGestureDetector().configurationId()
+            )
+            file.useLines { lines -> SensorTrialCsvPolicy.evaluate(lines, expected) }
+        } catch (_: IOException) {
+            SensorTrialProgress(rejectedTrials = 1)
+        } catch (_: SecurityException) {
+            SensorTrialProgress(rejectedTrials = 1)
+        }
     }
 
     fun clear(context: Context) {
