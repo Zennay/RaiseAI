@@ -125,6 +125,46 @@ class WatchApkIdentityTests(unittest.TestCase):
             with self.assertRaisesRegex(verifier.ApkIdentityError, "regular file"):
                 verifier.verify_apk(path, expected_source_revision=REVISION)
 
+    def test_rejects_declared_oversize_executable_dex_before_decompression(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "RaiseAI.apk"
+            make_apk(path)
+            original = zipfile.ZipFile.getinfo
+
+            def forged_large_zipinfo(archive, name):
+                info = original(archive, name)
+                if name == "classes.dex":
+                    info.file_size = verifier.MAX_DEX_SCAN_BYTES + 1
+                return info
+
+            with mock.patch.object(zipfile.ZipFile, "getinfo", forged_large_zipinfo):
+                with self.assertRaisesRegex(verifier.ApkIdentityError, "bounded inspection budget"):
+                    verifier.verify_apk(path, expected_source_revision=REVISION)
+
+    def test_streaming_dex_scan_enforces_byte_budget_even_with_forged_small_metadata(self):
+        class FakeArchive:
+            def open(self, name, mode):
+                return io.BytesIO(b"x" * (4 * verifier.DEX_SCAN_CHUNK_BYTES))
+
+        with mock.patch.object(verifier, "MAX_DEX_SCAN_BYTES", 3 * verifier.DEX_SCAN_CHUNK_BYTES):
+            with self.assertRaisesRegex(verifier.ApkIdentityError, "bounded inspection budget"):
+                verifier._zip_member_contains(
+                    FakeArchive(), "classes.dex", REVISION.encode("ascii")
+                )
+
+    def test_bounded_stream_retains_cross_chunk_positive(self):
+        class FakeArchive:
+            def open(self, name, mode):
+                return io.BytesIO(
+                    b"x" * (verifier.DEX_SCAN_CHUNK_BYTES - 20)
+                    + REVISION.encode("ascii") + b"-tail"
+                )
+
+        with mock.patch.object(verifier, "MAX_DEX_SCAN_BYTES", 2 * verifier.DEX_SCAN_CHUNK_BYTES):
+            self.assertTrue(verifier._zip_member_contains(
+                FakeArchive(), "classes.dex", REVISION.encode("ascii")
+            ))
+
     def test_rejects_wrong_abi(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "RaiseAI.apk"
