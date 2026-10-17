@@ -38,6 +38,16 @@ object PinnedTls {
                 val leaf = chain?.firstOrNull()
                     ?: throw CertificateException("Missing server certificate")
 
+                val nowMs = System.currentTimeMillis()
+                if (!isCertificateCurrentlyValid(
+                        notBeforeMs = leaf.notBefore.time,
+                        notAfterMs = leaf.notAfter.time,
+                        nowMs = nowMs
+                    )
+                ) {
+                    throw CertificateException("Raise gateway certificate is not currently valid")
+                }
+
                 val actual = MessageDigest.getInstance("SHA-256")
                     .digest(leaf.publicKey.encoded)
                     .joinToString("") { "%02x".format(it) }
@@ -58,4 +68,14 @@ object PinnedTls {
             init(null, arrayOf(trustManager), SecureRandom())
         }.socketFactory
     }
+
+    internal fun isCertificateCurrentlyValid(
+        notBeforeMs: Long,
+        notAfterMs: Long,
+        nowMs: Long
+    ): Boolean =
+        notBeforeMs <= notAfterMs &&
+            nowMs >= notBeforeMs &&
+            nowMs <= notAfterMs
+
 }
