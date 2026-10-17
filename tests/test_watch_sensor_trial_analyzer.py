@@ -183,5 +183,41 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
                 analyzer.read_trials(path)
 
 
+    def test_read_trials_rejects_symlink_input(self):
+        content = (
+            "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,"
+            "app_version,source_revision,detector_config\n"
+            "mouth_raise,1,4000,40,true,0.98,1.5.2,"
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,"
+            "raise-detector-v1;similarity=0.955\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            target = root / "target.csv"
+            target.write_text(content, encoding="utf-8")
+            linked = root / "linked.csv"
+            linked.symlink_to(target)
+            with self.assertRaisesRegex(
+                analyzer.TrialError,
+                "regular non-symlink file",
+            ):
+                analyzer.read_trials(linked)
+
+    def test_read_trials_rejects_fifo_without_blocking(self):
+        import os
+
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFO unsupported")
+        with tempfile.TemporaryDirectory() as tmp:
+            fifo = pathlib.Path(tmp) / "sensor-trials.csv"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(
+                analyzer.TrialError,
+                "regular non-symlink file",
+            ):
+                analyzer.read_trials(fifo)
+
+
+
 if __name__ == "__main__":
     unittest.main()

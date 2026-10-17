@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -39,77 +41,92 @@ def _parse_bool(value: str, *, line: int) -> bool:
 
 
 def read_trials(path: Path) -> list[dict[str, Any]]:
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise TrialError("safe no-follow trial reads are unavailable on this platform")
+
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+
     try:
-        handle = path.open("r", encoding="utf-8", newline="")
+        fd = os.open(path, flags)
     except OSError as exc:
-        raise TrialError(str(exc)) from exc
+        raise TrialError(f"trial CSV must be a regular non-symlink file: {exc}") from exc
 
-    with handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames is None:
-            raise TrialError("trial CSV has no header")
-        if len(reader.fieldnames) != len(set(reader.fieldnames)):
-            raise TrialError("trial CSV has duplicate column names")
-        columns = set(reader.fieldnames)
-        missing = REQUIRED_COLUMNS - columns
-        unexpected = columns - REQUIRED_COLUMNS
-        if missing:
-            raise TrialError(f"missing columns: {', '.join(sorted(missing))}")
-        if unexpected:
-            raise TrialError(f"unexpected columns: {', '.join(sorted(unexpected))}")
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise TrialError("trial CSV must be a regular non-symlink file")
 
-        rows: list[dict[str, Any]] = []
-        seen_sessions: set[int] = set()
-        for line, row in enumerate(reader, start=2):
-            label = (row.get("label") or "").strip()
-            if label not in ALLOWED_LABELS:
-                raise TrialError(f"line {line}: unknown label {label!r}")
-            try:
-                session_id = int(row["session_id"])
-                duration_ms = int(row["duration_ms"])
-                sample_count = int(row["sample_count"])
-                max_similarity = float(row["max_similarity"])
-            except (KeyError, TypeError, ValueError) as exc:
-                raise TrialError(f"line {line}: invalid numeric field") from exc
+        with os.fdopen(fd, "r", encoding="utf-8", newline="", closefd=False) as handle:
+            reader = csv.DictReader(handle)
+            if reader.fieldnames is None:
+                raise TrialError("trial CSV has no header")
+            if len(reader.fieldnames) != len(set(reader.fieldnames)):
+                raise TrialError("trial CSV has duplicate column names")
+            columns = set(reader.fieldnames)
+            missing = REQUIRED_COLUMNS - columns
+            unexpected = columns - REQUIRED_COLUMNS
+            if missing:
+                raise TrialError(f"missing columns: {', '.join(sorted(missing))}")
+            if unexpected:
+                raise TrialError(f"unexpected columns: {', '.join(sorted(unexpected))}")
 
-            if session_id <= 0:
-                raise TrialError(f"line {line}: session_id must be positive")
-            if session_id in seen_sessions:
-                raise TrialError(f"line {line}: duplicate session_id {session_id}")
-            seen_sessions.add(session_id)
-            if duration_ms < 0 or sample_count < 0:
-                raise TrialError(f"line {line}: duration/sample count must be non-negative")
-            if not -1.0 <= max_similarity <= 1.0:
-                raise TrialError(f"line {line}: max_similarity must be between -1 and 1")
+            rows: list[dict[str, Any]] = []
+            seen_sessions: set[int] = set()
+            for line, row in enumerate(reader, start=2):
+                label = (row.get("label") or "").strip()
+                if label not in ALLOWED_LABELS:
+                    raise TrialError(f"line {line}: unknown label {label!r}")
+                try:
+                    session_id = int(row["session_id"])
+                    duration_ms = int(row["duration_ms"])
+                    sample_count = int(row["sample_count"])
+                    max_similarity = float(row["max_similarity"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise TrialError(f"line {line}: invalid numeric field") from exc
 
-            app_version = (row.get("app_version") or "").strip()
-            source_revision = (row.get("source_revision") or "").strip().lower()
-            detector_config = (row.get("detector_config") or "").strip()
-            if not app_version:
-                raise TrialError(f"line {line}: app_version must be non-empty")
-            if len(source_revision) != 40 or any(char not in "0123456789abcdef" for char in source_revision):
-                raise TrialError(f"line {line}: source_revision must be a 40-character Git SHA")
-            if not detector_config or detector_config == "missing" or "," in detector_config:
-                raise TrialError(f"line {line}: detector_config must be a concrete comma-free id")
+                if session_id <= 0:
+                    raise TrialError(f"line {line}: session_id must be positive")
+                if session_id in seen_sessions:
+                    raise TrialError(f"line {line}: duplicate session_id {session_id}")
+                seen_sessions.add(session_id)
+                if duration_ms < 0 or sample_count < 0:
+                    raise TrialError(f"line {line}: duration/sample count must be non-negative")
+                if not -1.0 <= max_similarity <= 1.0:
+                    raise TrialError(f"line {line}: max_similarity must be between -1 and 1")
 
-            rows.append(
-                {
-                    "label": label,
-                    "session_id": session_id,
-                    "duration_ms": duration_ms,
-                    "sample_count": sample_count,
-                    "detector_triggered": _parse_bool(row["detector_triggered"], line=line),
-                    "max_similarity": max_similarity,
-                    "app_version": app_version,
-                    "source_revision": source_revision,
-                    "detector_config": detector_config,
-                }
-            )
+                app_version = (row.get("app_version") or "").strip()
+                source_revision = (row.get("source_revision") or "").strip().lower()
+                detector_config = (row.get("detector_config") or "").strip()
+                if not app_version:
+                    raise TrialError(f"line {line}: app_version must be non-empty")
+                if len(source_revision) != 40 or any(char not in "0123456789abcdef" for char in source_revision):
+                    raise TrialError(f"line {line}: source_revision must be a 40-character Git SHA")
+                if not detector_config or detector_config == "missing" or "," in detector_config:
+                    raise TrialError(f"line {line}: detector_config must be a concrete comma-free id")
+
+                rows.append(
+                    {
+                        "label": label,
+                        "session_id": session_id,
+                        "duration_ms": duration_ms,
+                        "sample_count": sample_count,
+                        "detector_triggered": _parse_bool(row["detector_triggered"], line=line),
+                        "max_similarity": max_similarity,
+                        "app_version": app_version,
+                        "source_revision": source_revision,
+                        "detector_config": detector_config,
+                    }
+                )
+    finally:
+        os.close(fd)
 
     if not rows:
         raise TrialError("trial CSV contains no trials")
     return rows
-
 
 def build_report(
     trials: list[dict[str, Any]],
