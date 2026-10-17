@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -38,11 +40,31 @@ def _parse_bool(value: str, *, line: int) -> bool:
     raise TrialError(f"line {line}: detector_triggered must be true or false")
 
 
-def read_trials(path: Path) -> list[dict[str, Any]]:
+def _open_regular_csv(path: Path):
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+        raise TrialError("safe non-blocking no-follow trial CSV reads are unavailable on this platform")
+
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+
     try:
-        handle = path.open("r", encoding="utf-8", newline="")
+        fd = os.open(path, flags)
     except OSError as exc:
-        raise TrialError(str(exc)) from exc
+        raise TrialError(f"trial CSV cannot be opened safely: {path}") from exc
+
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise TrialError("trial CSV must be a regular file")
+        return os.fdopen(fd, "r", encoding="utf-8", newline="")
+    except Exception:
+        os.close(fd)
+        raise
+
+
+def read_trials(path: Path) -> list[dict[str, Any]]:
+    handle = _open_regular_csv(path)
 
     with handle:
         reader = csv.DictReader(handle)
@@ -61,6 +83,8 @@ def read_trials(path: Path) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         seen_sessions: set[int] = set()
         for line, row in enumerate(reader, start=2):
+            if None in row:
+                raise TrialError(f"line {line}: row has surplus fields")
             label = (row.get("label") or "").strip()
             if label not in ALLOWED_LABELS:
                 raise TrialError(f"line {line}: unknown label {label!r}")
@@ -233,6 +257,14 @@ def main(argv: list[str] | None = None) -> int:
             expect_app_version=args.expect_app_version,
             expect_source_revision=args.expect_source_revision,
         )
+    except UnicodeDecodeError:
+        print(
+            json.dumps(
+                {"valid": False, "reason": "trial CSV must be valid UTF-8"},
+                separators=(",", ":"),
+            )
+        )
+        return 2
     except TrialError as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}, separators=(",", ":")))
         return 2
