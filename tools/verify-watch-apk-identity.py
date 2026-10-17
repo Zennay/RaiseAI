@@ -15,6 +15,8 @@ from pathlib import Path
 
 
 DEX_SCAN_CHUNK_BYTES = 64 * 1024
+# Reject decompression bombs even if a spoofed revision appears in the first chunk.
+MAX_DEX_SCAN_BYTES = 128 * 1024 * 1024
 EXECUTABLE_DEX_NAME = re.compile(r"^classes(?:[2-9]|[1-9][0-9]+)?[.]dex$")
 
 
@@ -46,6 +48,7 @@ def _zip_member_contains(
 ) -> bool:
     """Search one ZIP member without materializing the full decompressed file."""
     overlap = b""
+    scanned = 0
     keep = max(0, len(needle) - 1)
 
     with archive.open(name, "r") as member:
@@ -53,6 +56,9 @@ def _zip_member_contains(
             chunk = member.read(DEX_SCAN_CHUNK_BYTES)
             if not chunk:
                 return False
+            scanned += len(chunk)
+            if scanned > MAX_DEX_SCAN_BYTES:
+                raise ApkIdentityError("executable DEX exceeds bounded inspection budget")
 
             window = overlap + chunk
             if needle in window:
@@ -122,6 +128,10 @@ def verify_apk(
                 dex_files = sorted(name for name in names if EXECUTABLE_DEX_NAME.fullmatch(name))
                 if not dex_files:
                     raise ApkIdentityError("APK contains no DEX files")
+                # ZIP central-directory uncompressed sizes must be bounded.
+                # Streaming additionally enforces an independent byte budget.
+                if any(archive.getinfo(name).file_size > MAX_DEX_SCAN_BYTES for name in dex_files):
+                    raise ApkIdentityError("executable DEX exceeds bounded inspection budget")
 
                 needle = revision.encode("ascii")
                 revision_hits = [
