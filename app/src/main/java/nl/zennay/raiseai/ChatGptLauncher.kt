@@ -14,8 +14,8 @@ object ChatGptLauncher {
 
     fun routeLabel(): String = "RaiseGPT Wear UI"
 
-    fun launchFromActivity(activity: Activity): Boolean = runCatching {
-        activity.startActivity(intent(activity))
+    fun launchFromActivity(activity: Activity, tryWebsiteMic: Boolean = true): Boolean = runCatching {
+        activity.startActivity(intent(activity, tryWebsiteMic))
         CalibrationStore.recordAssistantLaunch(activity, routePath(activity, background = false))
         true
     }.getOrElse {
@@ -44,8 +44,8 @@ object ChatGptLauncher {
         }
     }
 
-    private fun intent(context: Context): Intent = Intent(context, ChatGptActivity::class.java).apply {
-        putExtra(ChatGptActivity.EXTRA_TRY_WEBSITE_MIC, true)
+    private fun intent(context: Context, tryWebsiteMic: Boolean = true): Intent = Intent(context, ChatGptActivity::class.java).apply {
+        putExtra(ChatGptActivity.EXTRA_TRY_WEBSITE_MIC, tryWebsiteMic)
     }
 
     fun browserFallbackIntent(context: Context): Intent {
