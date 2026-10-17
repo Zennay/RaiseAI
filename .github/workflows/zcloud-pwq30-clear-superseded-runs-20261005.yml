@@ -1,0 +1,72 @@
+name: Clear superseded zCloud PWQ-30 runs
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zcloud-pwq30-clear-superseded-runs-20261005.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  clear:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 4
+    steps:
+      - name: Cancel only explicit superseded PWQ-30 runs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "${RUNNER_NAME:-}" = "vps-bb300bba"
+          gh auth status >/dev/null 2>&1
+
+          repo="Zennay/zCloud"
+          expected_main="1cf0c840eea28581c2dd61ca38db3be3c0b4fd13"
+          expected_pr_head="b0ebddf0f3d2c22cb7f23698cae680149459ddf4"
+
+          test "$(gh api "repos/$repo/branches/main" --jq .commit.sha)" = "$expected_main"
+          test "$(gh api "repos/$repo/pulls/500" --jq .state)" = "open"
+          test "$(gh api "repos/$repo/pulls/500" --jq .base.sha)" = "$expected_main"
+          test "$(gh api "repos/$repo/pulls/500" --jq .head.sha)" = "$expected_pr_head"
+
+          cancel_if_superseded() {
+            local run_id="$1" expected_name="$2" expected_head="$3"
+            local payload status actual_name actual_head
+            payload="$(gh api "repos/$repo/actions/runs/$run_id")"
+            status="$(jq -r .status <<<"$payload")"
+            actual_name="$(jq -r .name <<<"$payload")"
+            actual_head="$(jq -r .head_sha <<<"$payload")"
+            test "$actual_name" = "$expected_name"
+            test "$actual_head" = "$expected_head"
+            test "$actual_head" != "$expected_main"
+            test "$actual_head" != "$expected_pr_head"
+            case "$status" in
+              queued|pending|in_progress|waiting|requested)
+                gh api --method POST "repos/$repo/actions/runs/$run_id/cancel" >/dev/null
+                echo "ZCLOUD_SUPERSEDED_CANCEL_REQUESTED run=$run_id name=$actual_name head=$actual_head status=$status"
+                ;;
+              completed)
+                echo "ZCLOUD_SUPERSEDED_ALREADY_TERMINAL run=$run_id conclusion=$(jq -r .conclusion <<<"$payload")"
+                ;;
+              *)
+                echo "unexpected run status run=$run_id status=$status" >&2
+                return 1
+                ;;
+            esac
+          }
+
+          cancel_if_superseded 37314769419 "zCloud automatic worker lane regression" "04edef63761038cd74a75ec33f729496a39ab7d0"
+          cancel_if_superseded 37315836347 "zCloud dashboard access recovery" "1c3cd21187bb1b3de04567b9ac728fad6149e051"
+          cancel_if_superseded 37315836278 "zCloud automatic worker lane regression" "1c3cd21187bb1b3de04567b9ac728fad6149e051"
+          cancel_if_superseded 37314618553 "zCloud automatic worker lane regression" "ee3c00f8d9ab98322494a6f7e2371217905ee680"
+          cancel_if_superseded 37314500581 "zCloud OOM guard VPS validation" "ac4ee6b60ebac0b5a85e957ec5e3e84b0204d019"
+
+          for protected in 37316563354 37316563616; do
+            payload="$(gh api "repos/$repo/actions/runs/$protected")"
+            test "$(jq -r .head_sha <<<"$payload")" = "$expected_main"
+            echo "ZCLOUD_CURRENT_MAIN_RUN_PROTECTED run=$protected name=$(jq -r .name <<<"$payload") status=$(jq -r .status <<<"$payload")"
+          done
+
+          echo "ZCLOUD_PWQ30_SUPERSEDED_QUEUE_CLEAR_GREEN"
