@@ -9,6 +9,7 @@ internal class VoiceRetryPolicy(
 
     private var automaticRetriesUsed = 0
 
+    @Synchronized
     fun tryConsumeRetry(): Boolean {
         if (automaticRetriesUsed >= maxAutomaticRetries) return false
         automaticRetriesUsed += 1
