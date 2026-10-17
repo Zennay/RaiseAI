@@ -30,7 +30,7 @@ printf '%s' "$PIN" | grep -Eq '^[0-9a-fA-F]{64}$' || {
 
 "$ADB" start-server >/dev/null
 
-find_watch() {
+find_watches() {
   "$ADB" devices -l | awk 'NR>1 && $2=="device" {print $1}' |
   while IFS= read -r serial; do
     [ -z "$serial" ] && continue
@@ -39,12 +39,21 @@ find_watch() {
     if [ "$model" = "SM_L315F" ] ||
        printf '%s\n' "$features" | grep -q 'android.hardware.type.watch'; then
       printf '%s\n' "$serial"
-      return 0
     fi
   done
 }
 
-TARGET="${ANDROID_SERIAL:-$(find_watch | head -n 1)}"
+if [ -n "${ANDROID_SERIAL:-}" ]; then
+  TARGET="$ANDROID_SERIAL"
+else
+  WATCHES="$(find_watches)"
+  WATCH_COUNT="$(printf '%s\n' "$WATCHES" | awk 'NF {count++} END {print count+0}')"
+  if [ "$WATCH_COUNT" -gt 1 ]; then
+    echo "Multiple Wear OS watches are connected; set ANDROID_SERIAL to the intended Watch."
+    exit 1
+  fi
+  TARGET="$(printf '%s\n' "$WATCHES" | awk 'NF {print; exit}')"
+fi
 [ -n "$TARGET" ] || {
   echo "No connected Wear OS watch found."
   echo "Enable Wireless debugging and connect/pair ADB first."
