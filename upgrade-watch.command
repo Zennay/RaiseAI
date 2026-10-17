@@ -32,11 +32,27 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
     echo "Commit/stash changes first so Watch evidence can attest the exact source revision."
     exit 1
   fi
-  RAISE_BUILD_REVISION="${RAISE_BUILD_REVISION:-$(git rev-parse HEAD)}"
-  printf '%s' "$RAISE_BUILD_REVISION" | grep -Eq '^[0-9a-fA-F]{40}$' || {
-    echo "RAISE_BUILD_REVISION must be an exact 40-character Git revision."
+  checked_out_revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"
+  printf '%s' "$checked_out_revision" | grep -Eq '^[0-9a-f]{40}$' || {
+    echo "Could not resolve an exact 40-character Git HEAD revision."
     exit 1
   }
+
+  if [ "${RAISE_BUILD_REVISION+x}" = "x" ]; then
+    requested_revision="$(printf '%s' "$RAISE_BUILD_REVISION" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr 'A-F' 'a-f')"
+    printf '%s' "$requested_revision" | grep -Eq '^[0-9a-f]{40}$' || {
+      echo "RAISE_BUILD_REVISION must be an exact 40-character Git revision."
+      exit 1
+    }
+    [ "$requested_revision" = "$checked_out_revision" ] || {
+      echo "RAISE_BUILD_REVISION does not match checked-out HEAD."
+      echo "head=$checked_out_revision requested=$requested_revision"
+      exit 1
+    }
+    RAISE_BUILD_REVISION="$requested_revision"
+  else
+    RAISE_BUILD_REVISION="$checked_out_revision"
+  fi
   export RAISE_BUILD_REVISION
 else
   echo "Git checkout required for evidence-capable Watch builds."
