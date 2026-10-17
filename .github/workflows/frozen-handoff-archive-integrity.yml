@@ -1,0 +1,43 @@
+name: Frozen handoff archive integrity CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "tools/fetch-frozen-physical-handoff.py"
+      - "tests/test_frozen_physical_handoff_fetcher.py"
+      - ".github/workflows/frozen-handoff-archive-integrity.yml"
+  pull_request:
+    paths:
+      - "tools/fetch-frozen-physical-handoff.py"
+      - "tests/test_frozen_physical_handoff_fetcher.py"
+      - ".github/workflows/frozen-handoff-archive-integrity.yml"
+
+concurrency:
+  group: raise-frozen-handoff-archive-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frozen-handoff-archive-integrity:
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+
+      - name: Compile frozen handoff tooling
+        run: python3 -m py_compile tools/fetch-frozen-physical-handoff.py
+
+      - name: Run frozen handoff fetcher regressions
+        run: python3 -m unittest tests/test_frozen_physical_handoff_fetcher.py -v

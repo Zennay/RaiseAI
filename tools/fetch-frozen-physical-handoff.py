@@ -8,6 +8,7 @@ backs the current physical V1 gate. It never rebuilds or substitutes the APK.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import os
 import shutil
@@ -43,12 +44,16 @@ class HandoffError(RuntimeError):
     pass
 
 
-def sha256_file(path: Path) -> str:
+def _sha256_stream(handle) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    with path.open("rb") as handle:
+        return _sha256_stream(handle)
 
 
 def _member_is_symlink(info: zipfile.ZipInfo) -> bool:
@@ -77,90 +82,125 @@ def extract_verified_archive(
     *,
     expected_sha256: str = EXPECTED_ARCHIVE_SHA256,
 ) -> None:
-    actual = sha256_file(archive)
-    if actual.lower() != expected_sha256.lower():
-        raise HandoffError(
-            "Frozen handoff archive SHA-256 mismatch: "
-            f"expected {expected_sha256}, got {actual}"
-        )
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        raise HandoffError("Platform does not support safe no-follow archive reads")
 
-    if os.path.lexists(output_dir):
-        raise HandoffError(f"Output already exists; refusing to overwrite: {output_dir}")
-
-    output_dir.parent.mkdir(parents=True, exist_ok=True)
-    stage = Path(
-        tempfile.mkdtemp(
-            prefix=f".{output_dir.name}.",
-            dir=str(output_dir.parent),
-        )
-    )
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0)
+    try:
+        archive_fd = os.open(archive, flags)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise HandoffError(
+                f"Frozen handoff archive must be a regular non-symlink file: {archive}"
+            ) from exc
+        raise HandoffError(f"Could not open frozen handoff archive safely: {exc}") from exc
 
     try:
-        with zipfile.ZipFile(archive) as package:
-            infos = package.infolist()
-            duplicate_names = sorted(
-                name
-                for name, count in Counter(info.filename for info in infos).items()
-                if count > 1
+        archive_stat = os.fstat(archive_fd)
+        if not stat.S_ISREG(archive_stat.st_mode):
+            raise HandoffError(
+                f"Frozen handoff archive must be a regular non-symlink file: {archive}"
             )
-            if duplicate_names:
+
+        with os.fdopen(archive_fd, "rb", closefd=False) as archive_handle:
+            actual = _sha256_stream(archive_handle)
+            if actual.lower() != expected_sha256.lower():
                 raise HandoffError(
-                    "Frozen handoff contains duplicate archive members: "
-                    + ", ".join(duplicate_names)
+                    "Frozen handoff archive SHA-256 mismatch: "
+                    f"expected {expected_sha256}, got {actual}"
                 )
+            archive_handle.seek(0)
 
-            names = set()
-            portable_paths: dict[str, str] = {}
-            for info in infos:
-                canonical_path = _validate_member_path(info.filename)
-                portable_key = unicodedata.normalize("NFC", canonical_path).casefold()
-                previous = portable_paths.get(portable_key)
-                if previous is not None:
-                    raise HandoffError(
-                        "Frozen handoff contains portable path collision: "
-                        f"{previous} <> {info.filename}"
-                    )
-                portable_paths[portable_key] = info.filename
-
-                if _member_is_symlink(info):
-                    raise HandoffError(
-                        f"Symlink entries are not allowed in frozen handoff: {info.filename}"
-                    )
-                if not info.is_dir():
-                    names.add(info.filename.rstrip("/"))
-
-            missing = sorted(REQUIRED_MEMBERS - names)
-            if missing:
-                raise HandoffError(
-                    "Frozen handoff is missing required members: " + ", ".join(missing)
-                )
-
-            for info in infos:
-                if info.is_dir():
-                    continue
-                target = stage / info.filename
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with package.open(info) as source, target.open("wb") as destination:
-                    shutil.copyfileobj(source, destination)
-
-        launcher = stage / "start-physical-handoff.command"
-        launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
-
-        try:
-            stage.rename(output_dir)
-        except OSError as exc:
             if os.path.lexists(output_dir):
                 raise HandoffError(
                     f"Output already exists; refusing to overwrite: {output_dir}"
-                ) from exc
-            raise HandoffError(
-                f"Could not publish verified handoff atomically: {exc}"
-            ) from exc
-        stage = None
-    except Exception:
-        if stage is not None:
-            shutil.rmtree(stage, ignore_errors=True)
-        raise
+                )
+
+            output_dir.parent.mkdir(parents=True, exist_ok=True)
+            stage = Path(
+                tempfile.mkdtemp(
+                    prefix=f".{output_dir.name}.",
+                    dir=str(output_dir.parent),
+                )
+            )
+
+            try:
+                with zipfile.ZipFile(archive_handle) as package:
+                    infos = package.infolist()
+                    duplicate_names = sorted(
+                        name
+                        for name, count in Counter(
+                            info.filename for info in infos
+                        ).items()
+                        if count > 1
+                    )
+                    if duplicate_names:
+                        raise HandoffError(
+                            "Frozen handoff contains duplicate archive members: "
+                            + ", ".join(duplicate_names)
+                        )
+
+                    names = set()
+                    portable_paths: dict[str, str] = {}
+                    for info in infos:
+                        canonical_path = _validate_member_path(info.filename)
+                        portable_key = unicodedata.normalize(
+                            "NFC", canonical_path
+                        ).casefold()
+                        previous = portable_paths.get(portable_key)
+                        if previous is not None:
+                            raise HandoffError(
+                                "Frozen handoff contains portable path collision: "
+                                f"{previous} <> {info.filename}"
+                            )
+                        portable_paths[portable_key] = info.filename
+
+                        if _member_is_symlink(info):
+                            raise HandoffError(
+                                "Symlink entries are not allowed in frozen handoff: "
+                                f"{info.filename}"
+                            )
+                        if not info.is_dir():
+                            names.add(info.filename.rstrip("/"))
+
+                    missing = sorted(REQUIRED_MEMBERS - names)
+                    if missing:
+                        raise HandoffError(
+                            "Frozen handoff is missing required members: "
+                            + ", ".join(missing)
+                        )
+
+                    for info in infos:
+                        if info.is_dir():
+                            continue
+                        target = stage / info.filename
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with package.open(info) as source, target.open(
+                            "wb"
+                        ) as destination:
+                            shutil.copyfileobj(source, destination)
+
+                launcher = stage / "start-physical-handoff.command"
+                launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
+
+                try:
+                    stage.rename(output_dir)
+                except OSError as exc:
+                    if os.path.lexists(output_dir):
+                        raise HandoffError(
+                            f"Output already exists; refusing to overwrite: {output_dir}"
+                        ) from exc
+                    raise HandoffError(
+                        f"Could not publish verified handoff atomically: {exc}"
+                    ) from exc
+                stage = None
+            except Exception:
+                if stage is not None:
+                    shutil.rmtree(stage, ignore_errors=True)
+                raise
+    finally:
+        os.close(archive_fd)
 
 
 class _SafeReleaseRedirect(urllib.request.HTTPRedirectHandler):
@@ -274,7 +314,7 @@ def main() -> int:
     output_dir = args.output.expanduser().absolute()
 
     if args.archive:
-        archive = args.archive.expanduser().resolve()
+        archive = args.archive.expanduser().absolute()
         if not archive.is_file():
             raise HandoffError(f"Archive not found: {archive}")
         extract_verified_archive(archive, output_dir)

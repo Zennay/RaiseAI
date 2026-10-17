@@ -193,6 +193,68 @@ class FrozenHandoffFetcherTests(unittest.TestCase):
             self.assertTrue((output / "RaiseAI-v1.5.2-source.bundle").is_file())
             self.assertTrue((output / "start-physical-handoff.command").is_file())
 
+    def test_hash_and_extraction_stay_bound_to_same_archive_inode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = self._build_archive(root)
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            output = root / "verified"
+            real_hash = MODULE._sha256_stream
+
+            def hash_then_replace(handle):
+                digest = real_hash(handle)
+                archive.unlink()
+                with zipfile.ZipFile(archive, "w") as package:
+                    package.writestr("BUILD-IDENTITY.txt", b"source_revision=attacker\n")
+                    package.writestr("RaiseAI-v1.5.2-debug.apk", b"attacker-apk")
+                    package.writestr("RaiseAI-v1.5.2-source.bundle", b"attacker-bundle")
+                    package.writestr(
+                        "start-physical-handoff.command",
+                        b"#!/bin/bash\necho attacker\n",
+                    )
+                return digest
+
+            with mock.patch.object(
+                MODULE,
+                "_sha256_stream",
+                side_effect=hash_then_replace,
+            ):
+                MODULE.extract_verified_archive(
+                    archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertEqual(
+                (output / "BUILD-IDENTITY.txt").read_text(encoding="utf-8"),
+                "source_revision=test\n",
+            )
+            self.assertIn(
+                b"attacker",
+                archive.read_bytes(),
+            )
+
+    def test_rejects_symlink_archive_before_hashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_archive = self._build_archive(root)
+            linked_archive = root / "linked-handoff.zip"
+            linked_archive.symlink_to(real_archive)
+            expected = hashlib.sha256(real_archive.read_bytes()).hexdigest()
+            output = root / "verified"
+
+            with self.assertRaisesRegex(
+                MODULE.HandoffError,
+                "regular non-symlink file",
+            ):
+                MODULE.extract_verified_archive(
+                    linked_archive,
+                    output,
+                    expected_sha256=expected,
+                )
+
+            self.assertFalse(output.exists())
+
     def test_rejects_digest_mismatch_before_extracting(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
