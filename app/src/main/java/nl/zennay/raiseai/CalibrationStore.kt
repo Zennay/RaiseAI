@@ -1,8 +1,6 @@
 package nl.zennay.raiseai
 
 import android.content.Context
-import kotlin.math.sqrt
-
 object CalibrationStore {
     private const val PREFS = "raise_ai_prefs"
     private const val KEY_X = "mouth_x"
@@ -22,7 +20,7 @@ object CalibrationStore {
     private const val KEY_SESSION_BLOCKS = "assistant_session_blocks"
 
     fun savePose(context: Context, x: Float, y: Float, z: Float) {
-        val normalized = normalize(x, y, z) ?: return
+        val normalized = MouthPose.normalizedOrNull(x, y, z) ?: return
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putFloat(KEY_X, normalized.x)
@@ -35,7 +33,7 @@ object CalibrationStore {
     fun loadPose(context: Context): MouthPose? {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!p.getBoolean(KEY_CALIBRATED, false)) return null
-        return MouthPose(
+        return MouthPose.normalizedOrNull(
             p.getFloat(KEY_X, 0f),
             p.getFloat(KEY_Y, 0f),
             p.getFloat(KEY_Z, 0f)
@@ -143,9 +141,4 @@ object CalibrationStore {
             .apply()
     }
 
-    private fun normalize(x: Float, y: Float, z: Float): MouthPose? {
-        val length = sqrt(x * x + y * y + z * z)
-        if (length < 0.001f) return null
-        return MouthPose(x / length, y / length, z / length)
-    }
 }
