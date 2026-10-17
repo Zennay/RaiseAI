@@ -43,7 +43,7 @@ else
   exit 1
 fi
 
-echo "Building Raise AI v$VERSION…"
+echo "Building Raise AI v${VERSION}…"
 echo "Evidence build revision: $RAISE_BUILD_REVISION"
 echo "The build will fail automatically if build identity or Watch ABI is wrong."
 ./gradlew :app:verifyEvidenceBuildIdentity :app:assembleDebug

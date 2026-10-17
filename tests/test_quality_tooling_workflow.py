@@ -41,6 +41,7 @@ def read_workflow_text(path: pathlib.Path) -> str:
 
 
 SHELL_SYNTAX_ENTRYPOINTS = [
+    "install-gesture-watch.command",
     "upgrade-watch.command",
     "watch-preflight.command",
     "login-from-mac.command",

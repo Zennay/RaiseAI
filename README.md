@@ -1,4 +1,12 @@
-# Raise AI v1.5.3 — Galaxy Watch 7
+# Raise AI v1.5.4 — Galaxy Watch 7
+
+## v1.5.4: Watch hands-free setup + Mac terminal installer (development PR #762)
+
+- Gemini is the default when no explicit Native Raise AI preference is saved.
+- Raise-to-mouth now has visible buttons for background AI launch access, optional Usage Access, Native microphone permission and a four-second non-launching gesture test.
+- Enabling monitoring checks calibration and the background-launch permission first instead of claiming a working gesture with an unavailable Android launch grant.
+- The Mac Terminal installer `install-gesture-watch.command` pins the feature branch and source revision, prefers an exact successful PR APK if available, otherwise builds locally, then verifies Watch package version **1.5.4** (versionCode **21**).
+- For step-by-step installation and Wear OS permission limitations, see `GESTURE-SETUP.md`. This is a development build, **not** the frozen v1.5.2 physical acceptance artifact.
 
 ## v1.5.3: bounded microphone retry + Windows installer
 
