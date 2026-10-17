@@ -53,6 +53,7 @@ export function httpsOrigin(value, label = "gateway URL") {
   }
 
   if (
+    !/^https:\/\/[^/?#]+\/?$/iu.test(value) ||
     url.protocol !== "https:" ||
     !url.hostname ||
     url.username ||
