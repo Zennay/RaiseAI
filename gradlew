@@ -3,6 +3,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 GRADLE_VERSION="9.6.0"
 GRADLE_BIN_SHA256="bbaeb2fef8710818cf0e261201dab964c572f92b942812df0c3620d62a529a01"
+CURL_CONNECT_TIMEOUT_SECONDS="10"
+CURL_MAX_TIME_SECONDS="120"
+CURL_RETRY_MAX_TIME_SECONDS="120"
 TOOLS="$ROOT/.tools"
 DIST="$TOOLS/gradle-$GRADLE_VERSION"
 ZIP="$TOOLS/gradle-$GRADLE_VERSION-bin.zip"
@@ -71,7 +74,13 @@ else
 
   echo "Gradle $GRADLE_VERSION is not cached; downloading once…"
   rm -f "$ZIP.part"
-  curl -L --fail --retry 3 "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip" -o "$ZIP.part"
+  curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" \
+    --max-time "$CURL_MAX_TIME_SECONDS" \
+    --retry 3 \
+    --retry-max-time "$CURL_RETRY_MAX_TIME_SECONDS" \
+    --location --fail \
+    "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip" \
+    -o "$ZIP.part"
 
   actual_sha256="$(sha256_file "$ZIP.part")"
   if [ "$actual_sha256" != "$GRADLE_BIN_SHA256" ]; then
