@@ -131,7 +131,7 @@ class PhoneCompanionActivity : Activity() {
         try {
             Wearable.getMessageClient(this).addListener(
                 wearListener,
-                Uri.parse("wear://*/$WATCH_REQUEST_PATH"),
+                Uri.parse("wear://*$WATCH_REQUEST_PATH"),
                 MessageClient.FILTER_LITERAL
             ).addOnFailureListener {
                 if (companionVisible && !isFinishing && !isDestroyed) {
