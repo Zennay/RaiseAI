@@ -92,7 +92,7 @@
             android:name=".VoiceLaunchTileService"
             android:exported="true"
             android:label="Raise AI - snel starten"
-            android:description="Open Raise AI spraak of Gemini met een tik"
+            android:description="@string/raise_tile_description"
             android:icon="@drawable/ic_raise_ai"
             android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
             <intent-filter>
