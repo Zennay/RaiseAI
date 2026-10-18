@@ -33,7 +33,7 @@ object AssistantLauncher {
         }
 
         val path = if (started) "GOOGLE_ASSIST" else "GOOGLE_ASSIST_FAILED"
-        CalibrationStore.recordAssistantLaunch(activity, path)
+        AssistantLaunchTelemetry.record { CalibrationStore.recordAssistantLaunch(activity, path) }
         return LaunchResult(started, path)
     }
 
@@ -51,7 +51,7 @@ object AssistantLauncher {
     fun launchFromService(context: Context): LaunchResult {
         if (!BackgroundLaunchGrant.isGranted(context)) {
             val path = "BLOCKED_NO_BACKGROUND_LAUNCH_GRANT"
-            CalibrationStore.recordAssistantLaunch(context, path)
+            AssistantLaunchTelemetry.record { CalibrationStore.recordAssistantLaunch(context, path) }
             Log.w(TAG, "Background launch grant missing; run installer again")
             return LaunchResult(false, path)
         }
@@ -69,7 +69,7 @@ object AssistantLauncher {
         }
 
         val path = if (started) "GOOGLE_ASSIST_BACKGROUND" else "GOOGLE_ASSIST_BACKGROUND_FAILED"
-        CalibrationStore.recordAssistantLaunch(context, path)
+        AssistantLaunchTelemetry.record { CalibrationStore.recordAssistantLaunch(context, path) }
         return LaunchResult(started, path)
     }
 }
