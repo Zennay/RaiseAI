@@ -45,6 +45,10 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
+    private val audioPermissionSession = NativeAudioPermissionRequestSession(REQUEST_AUDIO)
+    private val screenAwakeSession = NativeVoiceAwakeSession()
+    private var currentVoiceState = "idle"
+    private val screenAwakeDeadline = Runnable { syncScreenAwake() }
     private val retryListeningRunnable = Runnable {
         if (!submitted && !isFinishing && !isDestroyed) {
             startListening()
@@ -53,7 +57,9 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Only the initial interactive dictation phase may keep the screen awake,
+        // and never longer than the existing monotonic 20-second screen budget.
+        screenAwakeSession.startIfAbsent(SystemClock.elapsedRealtime())
         setContentView(buildUi())
         setState("starting", "Klaarmaken…")
 
@@ -61,7 +67,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             PackageManager.PERMISSION_GRANTED
         ) {
             startListening()
-        } else {
+        } else if (audioPermissionSession.beginRequest()) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
         }
     }
@@ -72,12 +78,13 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_AUDIO &&
-            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-        ) {
-            startListening()
-        } else {
-            showError("Microfoon-toegang is nodig")
+        when (audioPermissionSession.onResult(requestCode, permissions.toList(), grantResults.toList())) {
+            NativeAudioPermissionResultPolicy.Action.IGNORE_UNRELATED_REQUEST -> Unit
+            NativeAudioPermissionResultPolicy.Action.START_LISTENING -> {
+                if (!isFinishing && !isDestroyed) startListening()
+            }
+            NativeAudioPermissionResultPolicy.Action.SHOW_PERMISSION_REQUIRED ->
+                showError("Microfoon-toegang is nodig")
         }
     }
 
@@ -182,7 +189,8 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "nl-NL")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Some engines return a blank first hypothesis followed by usable speech.
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(
                 RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
                 1_000L
@@ -203,7 +211,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     override fun onRmsChanged(rmsdB: Float) {
-        val scale = (1f + (rmsdB.coerceIn(0f, 10f) / 45f))
+        val scale = NativeMicLevelScalePolicy.scale(rmsdB)
         orb.scaleX = scale
         orb.scaleY = scale
     }
@@ -250,9 +258,9 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
     private fun bestResult(bundle: Bundle?): String? =
-        bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            ?.firstOrNull()
-            ?.trim()
+        NativeSpeechCandidatePolicy.select(
+            bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+        )
 
     private fun submit(text: String) {
         if (submitted) return
@@ -336,8 +344,11 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                         error = error
                     )
                     mainHandler.post {
-                        showError("VPS niet bereikbaar")
-                        detailText.text = error.message ?: "Onbekende netwerkfout"
+                        // Exception messages may embed private gateway URLs, headers or secrets.
+                        // Surface only the reviewed bounded, category-based response.
+                        val feedback = NativeVoiceFailureFeedbackPolicy.describe(error)
+                        showError(feedback.title)
+                        detailText.text = feedback.detail
                     }
                 }
         }
@@ -417,9 +428,13 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
     private fun setState(state: String, label: String) {
         NativeSessionState.set(state)
+        currentVoiceState = state
         statusText.text = label
+        syncScreenAwake()
 
-        if (state == "listening" || state == "sending" || state == "executing") {
+        // Keep the GPU pulse only during active microphone interaction; HTTPS and background
+        // execution already have text feedback and need no continuous animation.
+        if (state == "listening" || state == "understanding") {
             if (orbAnimator?.isRunning != true) {
                 orbAnimator = ObjectAnimator.ofPropertyValuesHolder(
                     orb,
@@ -439,6 +454,8 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     }
 
     private fun showError(message: String) {
+        currentVoiceState = "error"
+        syncScreenAwake()
         submitted = true
         mainHandler.removeCallbacks(retryListeningRunnable)
         recognizer?.cancel()
@@ -446,6 +463,22 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         statusText.text = message
         orbAnimator?.cancel()
         fallbackButton.visibility = View.VISIBLE
+    }
+
+    private fun syncScreenAwake() {
+        mainHandler.removeCallbacks(screenAwakeDeadline)
+        val remaining = screenAwakeSession.remainingMs(
+            currentVoiceState, SystemClock.elapsedRealtime()
+        )
+        if (remaining > 0L && !isFinishing && !isDestroyed) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            mainHandler.postDelayed(screenAwakeDeadline, remaining)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (currentVoiceState != "starting" && currentVoiceState != "listening" &&
+                currentVoiceState != "understanding"
+            ) screenAwakeSession.finish()
+        }
     }
 
     private fun textView(size: Float, color: Int): TextView =
@@ -468,6 +501,9 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
+        audioPermissionSession.invalidate()
+        screenAwakeSession.invalidate()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         orbAnimator?.cancel()
         recognizer?.cancel()
         recognizer?.destroy()
