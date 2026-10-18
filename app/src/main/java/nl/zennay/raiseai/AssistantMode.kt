@@ -27,9 +27,18 @@ object AssistantModeStore {
             else -> AssistantMode.GEMINI
         }
 
+    internal fun readStoredValue(read: () -> String?): String? =
+        try {
+            read()
+        } catch (_: RuntimeException) {
+            null
+        }
+
     fun get(context: Context): AssistantMode {
-        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_ASSISTANT_MODE, null)
+        val stored = readStoredValue {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_ASSISTANT_MODE, null)
+        }
 
         return resolve(stored)
     }
