@@ -83,7 +83,19 @@ class GestureMonitorService : Service(), SensorEventListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        mouthPose = CalibrationStore.loadPose(this)
+        val refreshedPose = CalibrationStore.loadPose(this)
+        if (refreshedPose != mouthPose) {
+            mouthPose = refreshedPose
+            // A configuration change invalidates the current approach window. Rebind the
+            // listener so the first new sample establishes the new pose baseline rather
+            // than completing a movement that started under the old calibration.
+            if (sensorRegistered) {
+                unregisterAccelerometer()
+                registerAccelerometer()
+            }
+        } else {
+            mouthPose = refreshedPose
+        }
         applyPowerState()
         return START_STICKY
     }
