@@ -11,13 +11,15 @@ import android.content.pm.PackageManager
 internal class OfficialChatGptLauncher(private val activity: Activity) {
     internal enum class Result {
         OPENED_OFFICIAL_APP,
+        VERIFIED_OFFICIAL_APP,
         MISSING_APP,
         SIGNER_MISMATCH_OR_UNVERIFIED,
         LAUNCHER_UNAVAILABLE,
         LAUNCH_FAILED
     }
 
-    fun launchOnExplicitButtonTap(expectedSignerSha256: String): Result {
+    /** Separate verification lets a fresh user-approved Watch request be checked *before* launch. */
+    fun verifyInstalledPublisher(expectedSignerSha256: String): Result {
         val pm = activity.packageManager
         val packageInfo = try {
             @Suppress("DEPRECATION")
@@ -40,6 +42,15 @@ internal class OfficialChatGptLauncher(private val activity: Activity) {
         if (!OfficialAppCertificatePolicy.matches(expectedSignerSha256, certs)) {
             return Result.SIGNER_MISMATCH_OR_UNVERIFIED
         }
+        return Result.VERIFIED_OFFICIAL_APP
+    }
+
+    fun launchOnExplicitButtonTap(expectedSignerSha256: String): Result {
+        // Repeat signer verification at the actual launch boundary: previous validation
+        // alone is not proof the installed package remained unchanged.
+        val attestation = verifyInstalledPublisher(expectedSignerSha256)
+        if (attestation != Result.VERIFIED_OFFICIAL_APP) return attestation
+        val pm = activity.packageManager
 
         // This is only a public foreground launcher, never a private ChatGPT Voice intent.
         val launchIntent = try {
