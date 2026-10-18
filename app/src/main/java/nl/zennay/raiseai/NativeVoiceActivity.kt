@@ -432,7 +432,9 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         statusText.text = label
         syncScreenAwake()
 
-        if (state == "listening" || state == "sending" || state == "executing") {
+        // Keep the GPU pulse only during active microphone interaction; HTTPS and background
+        // execution already have text feedback and need no continuous animation.
+        if (state == "listening" || state == "understanding") {
             if (orbAnimator?.isRunning != true) {
                 orbAnimator = ObjectAnimator.ofPropertyValuesHolder(
                     orb,
