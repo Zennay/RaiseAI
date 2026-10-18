@@ -174,6 +174,7 @@
     assistantCandidate = "";
     assistantCandidateSince = 0;
     sawAssistantGenerating = false;
+    lastDeliveredAssistant = "";
   }
 
   function deliverAssistantReply(text) {
