@@ -29,7 +29,9 @@
     </queries>
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_raise_ai"
         android:label="Raise AI"
         android:roundIcon="@drawable/ic_raise_ai"
@@ -75,7 +77,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
 
         <receiver
             android:name=".BootReceiver"
