@@ -83,8 +83,30 @@ test("quick AI uses GLM 5.3 Flash with Gemini fallback by default", async () => 
     preferred_max_latency: { p90: 3 },
     allow_fallbacks: true
   });
+  assert.equal(calls[0].request.max_tokens, 120);
+  assert.match(
+    calls[0].request.messages[0].content,
+    /maximaal 2 korte zinnen/
+  );
   assert.equal(calls[0].url, "https://openrouter.ai/api/v1/chat/completions");
 });
+
+test("current info keeps a slightly larger glanceable budget", async () => {
+  const calls = [];
+  const execute = createOpenRouterExecutor({
+    apiKey: "test-key",
+    allowWebSearch: true,
+    fetchImpl: fakeResponse("actueel antwoord", calls)
+  });
+
+  await execute({ route: "current_info" }, "Wat gebeurt er vandaag?");
+  assert.equal(calls[0].request.max_tokens, 160);
+  assert.match(
+    calls[0].request.messages[0].content,
+    /maximaal 2 korte zinnen/
+  );
+});
+
 
 test("deep AI supports an independently configurable model", async () => {
   const calls = [];
