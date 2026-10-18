@@ -37,9 +37,11 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
     private var recognizer: SpeechRecognizer? = null
     private var orbAnimator: ObjectAnimator? = null
     private var submitted = false
+    @Volatile private var isUiStarted = false
     private val retryPolicy = VoiceRetryPolicy(MAX_AUTOMATIC_RETRIES)
+    private val recognitionSessions = VoiceRecognitionSessionGate()
     private val retryListeningRunnable = Runnable {
-        if (!submitted && !isFinishing && !isDestroyed) {
+        if (isUiStarted && !submitted && !isFinishing && !isDestroyed) {
             startListening()
         }
     }
@@ -57,6 +59,16 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         } else {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        isUiStarted = true
+    }
+
+    override fun onStop() {
+        isUiStarted = false
+        super.onStop()
     }
 
     override fun onRequestPermissionsResult(
@@ -129,10 +141,21 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             return
         }
 
+        val recognitionGeneration = recognitionSessions.beginSession()
         recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
-            it.setRecognitionListener(this)
+
+        val nextRecognizer = runCatching {
+            SpeechRecognizer.createSpeechRecognizer(this).also {
+                it.setRecognitionListener(scopedRecognitionListener(recognitionGeneration))
+            }
+        }.getOrElse { error ->
+            recognitionSessions.invalidate(recognitionGeneration)
+            recognizer = null
+            showError("Spraakherkenning kon niet starten")
+            detailText.text = error.message ?: "Android kon de spraakservice niet openen."
+            return
         }
+        recognizer = nextRecognizer
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
@@ -150,8 +173,64 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
 
         submitted = false
         setState("listening", "Ik luister")
-        recognizer?.startListening(intent)
+        runCatching {
+            nextRecognizer.startListening(intent)
+        }.onFailure { error ->
+            recognitionSessions.invalidate(recognitionGeneration)
+            runCatching { nextRecognizer.destroy() }
+            if (recognizer === nextRecognizer) recognizer = null
+            showError("Spraakherkenning kon niet starten")
+            detailText.text = error.message ?: "Android kon de spraakservice niet starten."
+        }
     }
+
+    private fun scopedRecognitionListener(generation: Long): RecognitionListener =
+        object : RecognitionListener {
+            private fun withCurrentSession(block: () -> Unit) {
+                if (
+                    recognitionSessions.accepts(generation) &&
+                    isUiStarted &&
+                    !submitted &&
+                    !isFinishing &&
+                    !isDestroyed
+                ) {
+                    block()
+                }
+            }
+
+            override fun onReadyForSpeech(params: Bundle?) =
+                withCurrentSession { this@NativeVoiceActivity.onReadyForSpeech(params) }
+
+            override fun onBeginningOfSpeech() =
+                withCurrentSession { this@NativeVoiceActivity.onBeginningOfSpeech() }
+
+            override fun onRmsChanged(rmsdB: Float) =
+                withCurrentSession { this@NativeVoiceActivity.onRmsChanged(rmsdB) }
+
+            override fun onBufferReceived(buffer: ByteArray?) =
+                withCurrentSession { this@NativeVoiceActivity.onBufferReceived(buffer) }
+
+            override fun onEndOfSpeech() =
+                withCurrentSession { this@NativeVoiceActivity.onEndOfSpeech() }
+
+            override fun onError(error: Int) =
+                withCurrentSession {
+                    recognitionSessions.invalidate(generation)
+                    this@NativeVoiceActivity.onError(error)
+                }
+
+            override fun onResults(results: Bundle?) =
+                withCurrentSession {
+                    recognitionSessions.invalidate(generation)
+                    this@NativeVoiceActivity.onResults(results)
+                }
+
+            override fun onPartialResults(partialResults: Bundle?) =
+                withCurrentSession { this@NativeVoiceActivity.onPartialResults(partialResults) }
+
+            override fun onEvent(eventType: Int, params: Bundle?) =
+                withCurrentSession { this@NativeVoiceActivity.onEvent(eventType, params) }
+        }
 
     override fun onReadyForSpeech(params: Bundle?) {
         setState("listening", "Ik luister")
@@ -240,13 +319,13 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
             runCatching { GatewayClient(settings).send(text) }
                 .onSuccess { response ->
                     val latencyMs = SystemClock.elapsedRealtime() - requestStartedMs
-                    WatchE2eEvidence.recordSuccess(
-                        context = applicationContext,
-                        inputLengthChars = text.length,
-                        latencyMs = latencyMs,
-                        response = response
-                    )
-                    mainHandler.post {
+                    postToUiIfActive {
+                        WatchE2eEvidence.recordSuccess(
+                            context = applicationContext,
+                            inputLengthChars = text.length,
+                            latencyMs = latencyMs,
+                            response = response
+                        )
                         val backgroundAction =
                             response.executionEnabled &&
                                 response.answer == null &&
@@ -274,17 +353,26 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
                 }
                 .onFailure { error ->
                     val latencyMs = SystemClock.elapsedRealtime() - requestStartedMs
-                    WatchE2eEvidence.recordFailure(
-                        context = applicationContext,
-                        inputLengthChars = text.length,
-                        latencyMs = latencyMs,
-                        error = error
-                    )
-                    mainHandler.post {
+                    postToUiIfActive {
+                        WatchE2eEvidence.recordFailure(
+                            context = applicationContext,
+                            inputLengthChars = text.length,
+                            latencyMs = latencyMs,
+                            error = error
+                        )
                         showError("VPS niet bereikbaar")
                         detailText.text = error.message ?: "Onbekende netwerkfout"
                     }
                 }
+        }
+    }
+
+    private fun postToUiIfActive(block: () -> Unit) {
+        if (!isUiStarted) return
+        mainHandler.post {
+            if (isUiStarted && !isFinishing && !isDestroyed) {
+                block()
+            }
         }
     }
 
@@ -340,6 +428,7 @@ class NativeVoiceActivity : Activity(), RecognitionListener {
         (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        recognitionSessions.invalidateAll()
         mainHandler.removeCallbacksAndMessages(null)
         orbAnimator?.cancel()
         recognizer?.cancel()
