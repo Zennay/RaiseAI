@@ -65,7 +65,8 @@ class PhoneCompanionActivity : Activity() {
         note("Check the paired Watch connection here. Connection alone does not prove APK " +
             "signing parity, command delivery or ChatGPT Voice audio routing.")
         note("If the Watch sends a valid foreground-only handoff request, you must still " +
-            "verify the publisher and tap the launch button here within 15 seconds. " +
+            "pre-enter the trusted publisher fingerprint and tap the launch button here " +
+            "within 15 seconds of the Watch request. " +
             "Nothing starts automatically and Voice must be selected manually.")
         wearStatus = note("Watch connection not checked yet.", 14f)
         container.addView(Button(this).apply {
