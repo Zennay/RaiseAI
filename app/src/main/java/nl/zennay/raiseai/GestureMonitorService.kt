@@ -25,7 +25,9 @@ import android.util.Log
 class GestureMonitorService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
-    private val detector = RaiseGestureDetector()
+    // Every sensor registration gets its own timestamp window and fresh motion baseline.
+    // Validation must happen before any vendor-provided axes reach the gesture detector.
+    private val sensorStream = VerifiedAccelerometerStream(RaiseGestureDetector())
     private var mouthPose: MouthPose? = null
     private lateinit var sessionGuard: AssistantSessionGuard
     private val handler = Handler(Looper.getMainLooper())
@@ -87,19 +89,19 @@ class GestureMonitorService : Service(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
-        sensorEventsPending++
+        // A stopped/paused listener can still receive a previously queued OEM batch.
+        // Never use it to trigger an assistant or mutate a new registration's baseline.
+        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER || !sensorRegistered || sleepPaused) return
 
-        // Sensor timestamps are monotonic nanoseconds since boot and remain correct even when
-        // events are delivered in a batch. Using them keeps hold/cooldown timing reliable.
-        val eventTimeMs = event.timestamp / 1_000_000L
-        val result = detector.onAccelerometer(
-            event.values[0],
-            event.values[1],
-            event.values[2],
-            eventTimeMs,
+        // The shared ingress rejects malformed/implausible axes, stale/out-of-order sensor
+        // timestamps and excessive future skew *before* the stateful detector sees them.
+        val result = sensorStream.process(
+            event.values,
+            event.timestamp,
+            SystemClock.elapsedRealtimeNanos(),
             mouthPose
-        )
+        ) ?: return
+        sensorEventsPending++
 
         if (!result.triggered) return
 
@@ -159,6 +161,9 @@ class GestureMonitorService : Service(), SensorEventListener {
         // ~10 Hz is enough for the current 180 ms hold detector. A small FIFO latency allows
         // hardware batching on devices that support it, reducing application-processor wakeups.
         val batchLatencyUs = if (sensor.fifoMaxEventCount > 0) SENSOR_BATCH_LATENCY_US else 0
+        // Reset the entire gesture state, not only the ordering window: keeping the previous
+        // gravity/movement baseline across a sleep pause can manufacture a fresh raise.
+        sensorStream.restartWithFreshDetector(RaiseGestureDetector())
         sensorRegistered = sensorManager.registerListener(
             this,
             sensor,
