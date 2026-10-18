@@ -290,3 +290,12 @@ html[data-raiseai-state="sending"] #raiseai-voice-orb {
     height: 46px !important;
   }
 }
+
+
+/* Respect the Watch accessibility motion preference and avoid continuous UI animation. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-raiseai-state="listening"] .raiseai-orb-ring,
+  html[data-raiseai-state="sending"] #raiseai-voice-orb {
+    animation: none !important;
+  }
+}
