@@ -4,6 +4,8 @@ import android.app.Activity
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
@@ -24,6 +26,15 @@ class PhoneCompanionActivity : Activity() {
     private lateinit var wearStatus: TextView
     private var watchLookupGeneration = 0
     private var companionVisible = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val pendingExpiry = Runnable {
+        if (pendingWatchRequest != null) {
+            pendingWatchRequest = null
+            if (companionVisible) {
+                wearStatus.text = "Watch request expired. Start a fresh request on the Watch."
+            }
+        }
+    }
     private var pendingWatchRequest: OfficialChatGptPhoneHandoffPolicy.Request? = null
     private val requestPolicy = OfficialChatGptPhoneHandoffPolicy()
     private val wearListener = MessageClient.OnMessageReceivedListener { event ->
@@ -62,6 +73,14 @@ class PhoneCompanionActivity : Activity() {
             isAllCaps = false
             setOnClickListener { inspectWearConnection() }
         })
+        container.addView(Button(this).apply {
+            text = "Reject pending Watch request"
+            isAllCaps = false
+            setOnClickListener {
+                clearPendingWatchRequest()
+                wearStatus.text = "Any pending Watch request was discarded. No app opened."
+            }
+        })
         note("Get the signing certificate SHA-256 from a separately authenticated, trustworthy " +
             "publisher reference. Do NOT copy it from the installed APK: a matching attacker " +
             "certificate would prove nothing.")
@@ -84,7 +103,7 @@ class PhoneCompanionActivity : Activity() {
                 val launcher = OfficialChatGptLauncher(this@PhoneCompanionActivity)
                 val incoming = pendingWatchRequest
                 if (incoming != null) {
-                    pendingWatchRequest = null
+                    clearPendingWatchRequest()
                     val signed = launcher.verifyInstalledPublisher(expected) ==
                         OfficialChatGptLauncher.Result.VERIFIED_OFFICIAL_APP
                     val decision = requestPolicy.decide(
@@ -146,7 +165,7 @@ class PhoneCompanionActivity : Activity() {
 
     override fun onStop() {
         companionVisible = false
-        pendingWatchRequest = null
+        clearPendingWatchRequest()
         ++watchLookupGeneration
         try {
             Wearable.getMessageClient(this).removeListener(wearListener)
@@ -186,6 +205,12 @@ class PhoneCompanionActivity : Activity() {
                         return@addOnSuccessListener
                     }
                     pendingWatchRequest = request
+                    mainHandler.removeCallbacks(pendingExpiry)
+                    // Expire relative to the authenticated receiver's current time; Android
+                    // callbacks cannot leave a stale approval prompt on screen indefinitely.
+                    val expiryDelayMs = (request.issuedAtEpochMs - System.currentTimeMillis() +
+                        MAX_REQUEST_AGE_MS).coerceIn(0L, MAX_REQUEST_AGE_MS + MAX_FUTURE_MS)
+                    mainHandler.postDelayed(pendingExpiry, expiryDelayMs)
                     wearStatus.text = "Watch request received from the only nearby connected " +
                         "device. Enter your independently trusted publisher fingerprint and " +
                         "tap the phone's Verify/Open button now. Voice is still manual."
@@ -193,6 +218,11 @@ class PhoneCompanionActivity : Activity() {
         } catch (_: RuntimeException) {
             wearStatus.text = "Watch identity unavailable. No request accepted."
         }
+    }
+
+    private fun clearPendingWatchRequest() {
+        pendingWatchRequest = null
+        mainHandler.removeCallbacks(pendingExpiry)
     }
 
     private fun inspectWearConnection() {
@@ -234,6 +264,7 @@ class PhoneCompanionActivity : Activity() {
 
     override fun onDestroy() {
         ++watchLookupGeneration
+        clearPendingWatchRequest()
         super.onDestroy()
     }
 
