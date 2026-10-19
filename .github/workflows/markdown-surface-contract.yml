@@ -23,7 +23,8 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay')
+    runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 5
     env:
       LANG: C.UTF-8
@@ -45,7 +46,7 @@ jobs:
           EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"
+          test "${RUNNER_ENVIRONMENT:-}" = "self-hosted"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Verify Python runtime
