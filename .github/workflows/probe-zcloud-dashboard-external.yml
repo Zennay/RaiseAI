@@ -13,7 +13,8 @@ permissions:
 
 jobs:
   probe:
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 3
     steps:
       - name: Probe public zCloud dashboard

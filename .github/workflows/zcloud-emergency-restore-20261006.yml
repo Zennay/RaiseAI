@@ -319,8 +319,8 @@ jobs:
 
   verify-public:
     needs: recover
-    if: needs.recover.result == 'success'
-    runs-on: ubuntu-latest
+    if: (needs.recover.result == 'success') && ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, vps-bb300bba]
     timeout-minutes: 3
     steps:
       - name: Verify zCloud externally and publish result
