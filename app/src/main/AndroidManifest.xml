@@ -88,6 +88,22 @@
             </intent-filter>
         </receiver>
 
+        <!-- Explicit-tap Wear Tile: system-only binding, never an exported Activity. -->
+        <service
+            android:name=".VoiceLaunchTileService"
+            android:exported="true"
+            android:label="Raise AI - snel starten"
+            android:description="@string/raise_tile_description"
+            android:icon="@drawable/ic_raise_ai"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/ic_raise_ai" />
+        </service>
+
         <service
             android:name=".GestureMonitorService"
             android:exported="false"

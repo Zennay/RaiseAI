@@ -112,6 +112,10 @@ android {
 dependencies {
     // Last GeckoView line whose AndroidX dependencies build cleanly with SDK 35.
     implementation("org.mozilla.geckoview:geckoview:139.0.20250609112858")
+    // On-device launch Tile: no service polling, microphone or network work.
+    implementation("androidx.wear.tiles:tiles:1.6.2")
+    implementation("androidx.wear.protolayout:protolayout:1.4.2")
+    implementation("androidx.concurrent:concurrent-futures:1.3.0")
     testImplementation("junit:junit:4.13.2")
 }
 
