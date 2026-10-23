@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if [ "$#" -gt 1 ]; then
+  echo "Usage: ./provision-watch-gateway.command [/path/to/watch-gateway.properties]"
+  exit 2
+fi
+
 PROFILE="${1:-$HOME/.config/raiseai/watch-gateway.properties}"
 PACKAGE="nl.zennay.raiseai"
 SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"

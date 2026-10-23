@@ -7,7 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STATE_DIR="$HOME/.raiseai"
 ENDPOINT_FILE="$STATE_DIR/watch-endpoint"
 SIGNING_DIR="$STATE_DIR/signing"
-mkdir -p "$STATE_DIR" "$SIGNING_DIR"
+
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  echo "Usage: ./install-watch-apk.command /path/to/RaiseAI.apk [watch-ip:port]"
+  exit 2
+fi
 
 if [ -n "${ANDROID_SDK_ROOT:-}" ]; then
   SDK_DIR="$ANDROID_SDK_ROOT"
@@ -20,16 +24,13 @@ else
 fi
 
 ADB="$SDK_DIR/platform-tools/adb"
-APK="${1:-}"
+APK="$1"
 CONNECT_ENDPOINT="${2:-${WATCH_ENDPOINT:-}}"
 
-if [ -z "$APK" ]; then
-  echo "Usage: ./install-watch-apk.command /path/to/RaiseAI.apk [watch-ip:port]"
-  exit 2
-fi
 [ -x "$ADB" ] || { echo "adb not found at: $ADB"; exit 1; }
 [ -f "$APK" ] || { echo "APK not found: $APK"; exit 1; }
 command -v unzip >/dev/null || { echo "unzip is required"; exit 1; }
+mkdir -p "$STATE_DIR" "$SIGNING_DIR"
 
 sha256_file() {
   local path="$1"
