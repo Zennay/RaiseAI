@@ -133,5 +133,34 @@ class WatchTraceAnalyzerTests(unittest.TestCase):
                 analyzer.read_samples(path)
 
 
+    def test_read_samples_rejects_symlink_input(self):
+        content = "label,session_id,elapsed_ms,x,y,z\nmouth_raise,1,0,0.1,0.2,9.7\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            target = root / "target.csv"
+            target.write_text(content, encoding="utf-8")
+            linked = root / "linked.csv"
+            linked.symlink_to(target)
+            with self.assertRaisesRegex(
+                analyzer.TraceError,
+                "regular non-symlink file",
+            ):
+                analyzer.read_samples(linked)
+
+    @unittest.skipUnless(hasattr(__import__("os"), "mkfifo"), "FIFO unsupported")
+    def test_read_samples_rejects_fifo_without_blocking(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fifo = pathlib.Path(tmp) / "traces.csv"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(
+                analyzer.TraceError,
+                "regular non-symlink file",
+            ):
+                analyzer.read_samples(fifo)
+
+
+
 if __name__ == "__main__":
     unittest.main()
