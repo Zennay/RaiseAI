@@ -13,6 +13,8 @@ import argparse
 import csv
 import json
 import math
+import os
+import stat
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -65,11 +67,31 @@ def _parse_float(row: dict[str, str], key: str, line: int) -> float:
     return value
 
 
-def read_samples(path: Path) -> list[Sample]:
+def _open_regular_csv(path: Path):
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+        raise TraceError("safe non-blocking no-follow trace CSV reads are unavailable on this platform")
+
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+
     try:
-        handle = path.open("r", encoding="utf-8", newline="")
+        fd = os.open(path, flags)
     except OSError as exc:
-        raise TraceError(str(exc)) from exc
+        raise TraceError(f"trace CSV cannot be opened safely: {path}") from exc
+
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise TraceError("trace CSV must be a regular file")
+        return os.fdopen(fd, "r", encoding="utf-8", newline="")
+    except Exception:
+        os.close(fd)
+        raise
+
+
+def read_samples(path: Path) -> list[Sample]:
+    handle = _open_regular_csv(path)
 
     with handle:
         reader = csv.DictReader(handle)
@@ -87,6 +109,8 @@ def read_samples(path: Path) -> list[Sample]:
         samples: list[Sample] = []
         labels_by_session: dict[int, str] = {}
         for line, row in enumerate(reader, start=2):
+            if None in row:
+                raise TraceError(f"line {line}: row has surplus fields")
             label = (row.get("label") or "").strip()
             if label not in ALLOWED_LABELS:
                 raise TraceError(f"line {line}: unknown label {label!r}")

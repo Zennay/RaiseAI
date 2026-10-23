@@ -1,5 +1,8 @@
 import importlib.util
+import os
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -170,6 +173,20 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
             with self.assertRaisesRegex(analyzer.TrialError, "duplicate column names"):
                 analyzer.read_trials(path)
 
+    def test_read_trials_rejects_surplus_row_fields(self):
+        content = (
+            "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,"
+            "app_version,source_revision,detector_config\n"
+            "mouth_raise,1,4000,40,true,0.98,1.5.2,"
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,"
+            "raise-detector-v1;similarity=0.955,unexpected\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "sensor-trials.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(analyzer.TrialError, "surplus fields"):
+                analyzer.read_trials(path)
+
     def test_read_trials_rejects_duplicate_session(self):
         content = (
             "label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,app_version,source_revision,detector_config\n"
@@ -181,6 +198,46 @@ class WatchTrialAnalyzerTests(unittest.TestCase):
             path.write_text(content, encoding="utf-8")
             with self.assertRaisesRegex(analyzer.TrialError, "duplicate session_id"):
                 analyzer.read_trials(path)
+    def test_cli_rejects_invalid_utf8_with_machine_readable_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "sensor-trials.csv"
+            path.write_bytes(
+                b"label,session_id,duration_ms,sample_count,detector_triggered,max_similarity,"
+                b"app_version,source_revision,detector_config\n"
+                b"mouth_raise,1,4000,40,true,0.98,1.5.2,"
+                b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,"
+                b"raise-detector-v1;similarity=0.955\n\xff"
+            )
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), str(path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertEqual(
+                '{"valid":false,"reason":"trial CSV must be valid UTF-8"}',
+                result.stdout.strip(),
+            )
+
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+        "FIFO/non-blocking file opens unavailable",
+    )
+    def test_cli_rejects_fifo_trial_without_blocking_for_writer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "sensor-trials.csv"
+            os.mkfifo(path)
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), str(path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertIn("trial CSV must be a regular file", result.stdout)
 
 
 if __name__ == "__main__":
