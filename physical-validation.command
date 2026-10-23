@@ -8,8 +8,6 @@ EVIDENCE_ROOT="${RAISE_EVIDENCE_ROOT:-$STATE_DIR/evidence}"
 LATEST_SESSION_FILE="$STATE_DIR/latest-physical-validation-session"
 DEFAULT_PROFILE="$HOME/.config/raiseai/watch-gateway.properties"
 
-mkdir -p "$STATE_DIR" "$EVIDENCE_ROOT"
-
 usage() {
   cat <<'EOF'
 Usage:
@@ -169,6 +167,8 @@ prepare_session() {
     echo "Version mismatch: VERSION.txt=$version, Gradle=$gradle_version"
     exit 1
   }
+
+  mkdir -p "$STATE_DIR" "$EVIDENCE_ROOT"
 
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   session="$EVIDENCE_ROOT/${stamp}-v${version}-${revision:0:12}"
