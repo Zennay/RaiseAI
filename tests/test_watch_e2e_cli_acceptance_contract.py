@@ -35,7 +35,7 @@ def successful_evidence(**overrides):
         "input_length_chars": 24,
         "latency_ms": 740,
         "route": "quick_ai",
-        "status": "ok",
+        "status": "answered",
         "execution_enabled": False,
         "execution_reason_present": False,
         "answer_present": True,
@@ -63,7 +63,7 @@ class WatchE2eCliAcceptanceContract(unittest.TestCase):
         code, output = self.invoke(
             successful_evidence(),
             "--expect-route", "quick_ai",
-            "--expect-status", "ok",
+            "--expect-status", "answered",
             "--require-answer",
             "--expect-app-version", "1.5.2",
             "--expect-source-revision", FROZEN_SHA,
@@ -84,7 +84,7 @@ class WatchE2eCliAcceptanceContract(unittest.TestCase):
         )
         self.assertEqual(code, 1)
         self.assertIs(output["valid"], False)
-        self.assertIn("answer/message", output["reason"])
+        self.assertIn("status and answer_present", output["reason"])
 
     def test_failed_request_cannot_masquerade_as_success(self):
         failure = {
