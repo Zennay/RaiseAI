@@ -71,6 +71,30 @@ class QualityWorkflowActionPinningTests(unittest.TestCase):
                     "checkout must not leave GitHub credentials in the worktree",
                 )
 
+    def test_watch_workflow_token_is_explicitly_read_only(self):
+        text = WATCH.read_text(encoding="utf-8")
+        permissions = re.search(
+            r"(?ms)^permissions:\n((?:  [^\n]+\n)+)",
+            text,
+        )
+        self.assertIsNotNone(permissions, "Watch CI must declare token permissions")
+        self.assertEqual(
+            permissions.group(1).splitlines(),
+            ["  contents: read"],
+            "Watch CI must grant only repository read access",
+        )
+        self.assertNotRegex(text, r"(?m)^    permissions:", "jobs may not elevate permissions")
+
+    def test_watch_vps_job_skips_untrusted_fork_pull_requests(self):
+        text = WATCH.read_text(encoding="utf-8")
+        guard = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}"
+        self.assertEqual(text.count(guard), 1, "VPS job must reject fork PRs before allocation")
+        self.assertEqual(
+            len(re.findall(r"(?m)^    if:", text)),
+            1,
+            "no other job-level guard may create a privilege bypass",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
