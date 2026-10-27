@@ -229,7 +229,7 @@ class YamlSurfaceContractTests(unittest.TestCase):
 
     def test_workflow_pins_exact_ruby_psych_runtime(self):
         for token in (
-            'expected = ["3.2.3", "5.0.1"]',
+            'expected = ["3.3.8", "5.1.2"]',
             "actual = [RUBY_VERSION, Psych::VERSION]",
             "unless actual == expected",
             'unexpected Ruby/Psych runtime:',
