@@ -159,7 +159,7 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
             index for index, line in enumerate(lines)
             if line == "        run: |"
         ]
-        self.assertEqual(len(run_indices), 4)
+        self.assertEqual(len(run_indices), 5)
         for run_index in run_indices:
             with self.subTest(line=run_index + 1):
                 step_start = max(i for i in step_starts if i < run_index)
