@@ -134,7 +134,7 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
             index for index, line in enumerate(lines)
             if line == "        run: |"
         ]
-        self.assertEqual(len(run_indices), 4)
+        self.assertEqual(len(run_indices), 5)
         self.assertNotIn("continue-on-error: true", self.text)
         self.assertEqual(self.text.count("    if: ((github.event_name != 'pull_request'"), 1)
 
