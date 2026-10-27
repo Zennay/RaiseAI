@@ -59,7 +59,7 @@ test("gateway test CI pins external actions and exact PR-head checkout", () => {
     ),
     "gateway test setup-node must stay on the audited Node 24 release",
   );
-  assert.match(TEST_WORKFLOW, /runs-on:\s*ubuntu-24\.04\b/);
+  assert.match(TEST_WORKFLOW, /runs-on:\s*\[self-hosted,\s*vps-bb300bba\]/);
   assert.equal(
     TEST_WORKFLOW.split(`          node-version: "${NODE_VERSION}"`).length - 1,
     1,
