@@ -82,8 +82,8 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("actions/setup-python", "5fda3b95a4ea91299a34e894583c3862153e4b97")])
-        self.assertIn('          python-version: "3.12.12"', self.text)
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
+        self.assertIn('          uv python install 3.12.12 --default', self.text)
         expression = (
             "${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}"
