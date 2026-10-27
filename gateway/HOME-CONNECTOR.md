@@ -32,7 +32,7 @@ purpose-built Home bridge is installed and tested:
 RAISE_HOME_EXECUTION_ENABLED=1
 RAISE_HOME_BRIDGE_ORIGIN=https://your-authorized-home-bridge.example
 RAISE_HOME_BRIDGE_TOKEN=REPLACE_WITH_PRIVATE_32_PLUS_CHARACTER_TOKEN
-RAISE_HOME_DEVICES_JSON={"woonkamer":"allowed-light-id"}
+RAISE_HOME_DEVICES_JSON='{"woonkamer":"allowed-light-id"}'
 ```
 
 The bridge origin must be a plain HTTPS origin (no path, userinfo, query or
