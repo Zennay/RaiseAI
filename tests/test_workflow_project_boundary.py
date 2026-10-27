@@ -167,7 +167,7 @@ class WorkflowProjectBoundaryTests(unittest.TestCase):
     def test_boundary_workflow_pins_semantic_parser_runtime(self):
         workflow = read_workflow_text(BOUNDARY_WORKFLOW)
         self.assertIn("Verify Ruby/Psych runtime", workflow)
-        self.assertIn('expected = ["3.2.3", "5.0.1"]', workflow)
+        self.assertIn('expected = ["3.3.8", "5.1.2"]', workflow)
         self.assertIn('ruby --disable-gems -e \'require "psych";', workflow)
         self.assertIn(
             "python3 -m unittest tests.test_workflow_project_boundary",
