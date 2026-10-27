@@ -147,9 +147,9 @@ class PythonSurfaceContractTests(unittest.TestCase):
             with self.subTest(event=event):
                 self.assertEqual(self._trigger_paths(event), expected)
 
-    def test_workflow_is_hosted_read_only_exact_head_and_bounded(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
+    def test_workflow_is_guarded_self_hosted_read_only_exact_head_and_bounded(self):
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertEqual(self.workflow.count("    if: ((github.event_name != 'pull_request'"), 1)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
         self.assertIn("timeout-minutes: 5", self.workflow)
@@ -167,7 +167,8 @@ class PythonSurfaceContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual(refs, [("actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"), ("actions/setup-python", "5fda3b95a4ea91299a34e894583c3862153e4b97")])
+        self.assertIn('          python-version: "3.12.12"', self.workflow)
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
 
     def test_workflow_runs_dynamic_python_discovery_and_contract(self):
@@ -206,7 +207,7 @@ class PythonSurfaceContractTests(unittest.TestCase):
                 self.assertIn("        shell: bash", step)
                 self.assertEqual(lines[run_index + 1], "          set -euo pipefail")
         self.assertNotIn("continue-on-error: true", self.workflow)
-        self.assertNotRegex(self.workflow, r"(?m)^\s+if:\s*")
+        self.assertEqual(self.workflow.count("    if: ((github.event_name != 'pull_request'"), 1)
 
     def test_workflow_control_keys_cannot_hide_behind_yaml_quotes(self):
         quoted_key = re.compile(
@@ -247,7 +248,7 @@ class PythonSurfaceContractTests(unittest.TestCase):
                 job_keys.append(match.group(1))
         self.assertEqual(
             job_keys,
-            ["runs-on", "timeout-minutes", "env", "steps"],
+            ["if", "runs-on", "timeout-minutes", "env", "steps"],
         )
 
 
@@ -350,6 +351,7 @@ class PythonSurfaceContractTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
+            "Set up isolated audited CPython 3.12",
             "Verify Python runtime",
             "Validate tracked Python surface",
             "Run Python surface regression contract",
@@ -364,6 +366,7 @@ class PythonSurfaceContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Set up isolated audited CPython 3.12": ["name", "uses", "with"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate tracked Python surface": ["name", "shell", "run"],
             "Run Python surface regression contract": ["name", "shell", "run"],
