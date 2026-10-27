@@ -63,8 +63,8 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         self.assertNotIn("schedule:", self.text)
 
     def test_runner_and_permissions_are_exact(self):
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
+        self.assertEqual(self.text.count("    if: ((github.event_name != 'pull_request'"), 1)
         self.assertNotIn('test "$(hostname)" = "vps-bb300bba"', self.text)
         self.assertEqual(self.text.count("    timeout-minutes: 5"), 1)
         self.assertRegex(
@@ -82,7 +82,8 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("actions/setup-python", "5fda3b95a4ea91299a34e894583c3862153e4b97")])
+        self.assertIn('          python-version: "3.12.12"', self.text)
         expression = (
             "${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}"
@@ -135,7 +136,7 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         ]
         self.assertEqual(len(run_indices), 4)
         self.assertNotIn("continue-on-error: true", self.text)
-        self.assertNotRegex(self.text, r"(?m)^\s+if:\s*")
+        self.assertEqual(self.text.count("    if: ((github.event_name != 'pull_request'"), 1)
 
         for run_index in run_indices:
             with self.subTest(line=run_index + 1):
