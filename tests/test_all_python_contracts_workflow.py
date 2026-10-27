@@ -57,10 +57,10 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
         self.assertNotIn("    paths-ignore:", self.text)
         self.assertNotIn("pull_request_target:", self.text)
 
-    def test_is_hosted_read_only_and_secret_free(self):
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
+    def test_is_guarded_self_hosted_read_only_and_secret_free(self):
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
         self.assertNotIn("ubuntu-latest", self.text)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertEqual(self.text.count("    if: ((github.event_name != 'pull_request'"), 1)
         self.assertRegex(
             self.text,
             r"(?ms)^permissions:\n  contents: read\n\nconcurrency:",
@@ -74,7 +74,8 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("actions/setup-python", "5fda3b95a4ea91299a34e894583c3862153e4b97")])
+        self.assertIn('          python-version: "3.12.12"', self.text)
         expression = (
             "${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}"
@@ -121,10 +122,10 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
         )
 
     def test_execution_controls_are_fail_closed_and_bounded(self):
-        self.assertNotRegex(
-            self.text,
-            r"(?m)^\s+if:\s*",
-            "aggregate contract jobs and steps must not be conditionally skipped",
+        self.assertEqual(
+            self.text.count("    if: ((github.event_name != 'pull_request'"),
+            1,
+            "only the trusted-repo and actor job guard may skip execution",
         )
         self.assertNotRegex(
             self.text,
@@ -199,7 +200,7 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
                 job_keys.append(match.group(1))
         self.assertEqual(
             job_keys,
-            ["runs-on", "timeout-minutes", "env", "steps"],
+            ["if", "runs-on", "timeout-minutes", "env", "steps"],
             "aggregate contract job must keep an exact execution surface",
         )
 
@@ -235,6 +236,7 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
+            "Set up isolated audited CPython 3.12",
             "Verify Python runtime",
             "Run every Python contract without skips",
             "Verify worktree remains clean",
@@ -248,6 +250,7 @@ class AllPythonContractsWorkflowTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Set up isolated audited CPython 3.12": ["name", "uses", "with"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Run every Python contract without skips": ["name", "shell", "run"],
             "Verify worktree remains clean": ["name", "shell", "run"],
