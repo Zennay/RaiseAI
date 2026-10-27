@@ -199,10 +199,10 @@ class MarkdownSurfaceContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(MarkdownContractError, message):
                     decode_markdown_source(payload, relative="fixture.md")
 
-    def test_workflow_is_hosted_read_only_exact_head_and_bounded(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("runs-on: [self-hosted", self.workflow)
-        self.assertIn('test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"', self.workflow)
+    def test_workflow_is_self_hosted_read_only_exact_head_and_bounded(self):
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertNotIn("runs-on: ubuntu-24.04", self.workflow)
+        self.assertIn('test "${RUNNER_ENVIRONMENT:-}" = "self-hosted"', self.workflow)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertIn("timeout-minutes: 5", self.workflow)
         self.assertIn("cancel-in-progress: true", self.workflow)
