@@ -17,6 +17,8 @@
   let silenceTimer = null;
   let startRetryTimer = null;
   let startRetryCount = 0;
+  // Invalidates delayed start/send callbacks after a native cancellation.
+  let interactionEpoch = 0;
   let lastPromptText = "";
   let listeningStartedWithText = "";
   let scheduled = false;
@@ -358,7 +360,11 @@
       return;
     }
     startRetryCount += 1;
-    startRetryTimer = setTimeout(() => startDictation(source), START_RETRY_MS);
+    const epoch = interactionEpoch;
+    startRetryTimer = setTimeout(() => {
+      startRetryTimer = null;
+      if (epoch === interactionEpoch) startDictation(source);
+    }, START_RETRY_MS);
   }
 
   function startDictation(source = "unknown") {
@@ -387,8 +393,9 @@
     emitState("starting", { source });
     try {
       mic.click();
+      const epoch = interactionEpoch;
       setTimeout(() => {
-        if (state === "starting") {
+        if (epoch === interactionEpoch && state === "starting") {
           emitState("listening", {
             source,
             transcript: promptText(findPrompt())
@@ -403,7 +410,8 @@
     }
   }
 
-  function clickSendWhenReady(reason, attempt = 0) {
+  function clickSendWhenReady(reason, attempt = 0, epoch = interactionEpoch) {
+    if (epoch !== interactionEpoch || state !== "finalizing") return;
     const prompt = findPrompt();
     const composer = findComposer(prompt);
     const send = findButton(composer, "send");
@@ -423,7 +431,7 @@
     }
 
     if (attempt < 8) {
-      setTimeout(() => clickSendWhenReady(reason, attempt + 1), 180);
+      setTimeout(() => clickSendWhenReady(reason, attempt + 1, epoch), 180);
     } else {
       emitState("ready", { reason, error: "send_unavailable", transcript: text });
     }
@@ -442,7 +450,8 @@
       try { mic.click(); } catch (_) {}
     }
 
-    setTimeout(() => clickSendWhenReady(reason), 320);
+    const epoch = interactionEpoch;
+    setTimeout(() => clickSendWhenReady(reason, 0, epoch), 320);
   }
 
   function connectNativeBridge() {
@@ -455,8 +464,16 @@
         } else if (message.type === "ttsState") {
           emitState(message.speaking ? "speaking" : "ready");
         } else if (message.type === "cancelDictation") {
+          interactionEpoch += 1;
           clearSilenceTimer();
-          if (state === "listening" || state === "starting") {
+          if (startRetryTimer) clearTimeout(startRetryTimer);
+          startRetryTimer = null;
+          startRetryCount = 0;
+          // A cancelled exchange must not deliver a late assistant reply to the watch.
+          awaitingAssistantReply = false;
+          assistantCandidate = "";
+          assistantCandidateSince = 0;
+          if (state === "listening" || state === "starting" || state === "finalizing") {
             const prompt = findPrompt();
             const mic = findButton(findComposer(prompt), "mic");
             if (mic && isMicActive(mic)) {
