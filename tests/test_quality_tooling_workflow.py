@@ -120,8 +120,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(
             [action for action, _ in refs],
-            ["actions/checkout", "actions/setup-python"],
-            "quality workflow must only use audited checkout and isolated CPython setup",
+            ["actions/checkout", "astral-sh/setup-uv"],
+            "quality workflow must only use audited checkout and pinned uv setup",
         )
 
         lines = self.text.splitlines()
@@ -707,7 +707,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             [
                 "Checkout exact tested revision",
                 "Verify exact tested revision",
-                "Set up isolated audited CPython 3.12",
+                "Install pinned uv bootstrap",
+                "Provide isolated CPython 3.12 on PATH",
                 "Verify Python runtime",
                 "Shell syntax",
                 "Python syntax",
@@ -721,7 +722,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
-            "Set up isolated audited CPython 3.12": ["name", "uses", "with"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Shell syntax": ["name", "shell", "run"],
             "Python syntax": ["name", "shell", "run"],
