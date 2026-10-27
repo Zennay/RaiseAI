@@ -173,10 +173,10 @@ test("workflow triggers cover current and future JavaScript surfaces", () => {
 
 test("workflow uses guarded self-hosted VPS, read-only exact-head and secret-free execution", () => {
   assert.match(WORKFLOW, /^name: JavaScript surface contract CI$/m);
-  assert.match(WORKFLOW, /^        runs-on: \[self-hosted, vps-bb300bba\]$/m);
+  assert.match(WORKFLOW, /^    runs-on: \[self-hosted, vps-bb300bba\]$/m);
   assert.match(
     WORKFLOW,
-    /^        if: \(\(github\.event_name != 'pull_request' && github\.event_name != 'pull_request_target'\) \|\| \(github\.event\.pull_request\.head\.repo\.full_name == github\.repository && github\.actor == 'Zennay'\)\)$/m,
+    /^    if: \(\(github\.event_name != 'pull_request' && github\.event_name != 'pull_request_target'\) \|\| \(github\.event\.pull_request\.head\.repo\.full_name == github\.repository && github\.actor == 'Zennay'\)\)$/m,
   );
   assert.match(WORKFLOW, /permissions:\n  contents: read\n/);
   assert.doesNotMatch(WORKFLOW, /\$\{\{\s*secrets\./);
