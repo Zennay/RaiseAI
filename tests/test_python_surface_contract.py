@@ -167,8 +167,8 @@ class PythonSurfaceContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"), ("actions/setup-python", "5fda3b95a4ea91299a34e894583c3862153e4b97")])
-        self.assertIn('          python-version: "3.12.12"', self.workflow)
+        self.assertEqual(refs, [("actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
+        self.assertIn('          uv python install 3.12.12 --default', self.workflow)
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
 
     def test_workflow_runs_dynamic_python_discovery_and_contract(self):
@@ -351,7 +351,8 @@ class PythonSurfaceContractTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
-            "Set up isolated audited CPython 3.12",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Validate tracked Python surface",
             "Run Python surface regression contract",
@@ -366,7 +367,8 @@ class PythonSurfaceContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
-            "Set up isolated audited CPython 3.12": ["name", "uses", "with"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate tracked Python surface": ["name", "shell", "run"],
             "Run Python surface regression contract": ["name", "shell", "run"],
