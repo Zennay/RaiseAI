@@ -690,7 +690,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
         self.assertEqual(
             keys,
-            ["runs-on", "timeout-minutes", "env", "steps"],
+            ["if", "runs-on", "timeout-minutes", "env", "steps"],
             "python-quality must not gain unreviewed job-level execution controls",
         )
 
