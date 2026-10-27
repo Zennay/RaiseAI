@@ -119,19 +119,19 @@ class RepositoryBlobBudgetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "size must not be negative"):
             validate_blob_budget([("bad.bin", -1)])
 
-    def test_workflow_is_read_only_exact_head_and_hosted_runner_bound(self):
+    def test_workflow_is_read_only_exact_head_and_self_hosted_runner_bound(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("permissions:\n  contents: read", text)
         self.assertNotRegex(text, r"(?m)^\s+[A-Za-z0-9_-]+:\s*write\s*$")
         self.assertNotRegex(text, r"\$\{\{\s*secrets\.")
         self.assertIn(
-            "    runs-on: ubuntu-24.04",
+            "    runs-on: [self-hosted, vps-bb300bba]",
             text,
         )
         self.assertNotIn("ubuntu-latest", text)
-        self.assertNotIn("runs-on: [self-hosted", text)
+        self.assertNotIn("runs-on: ubuntu-24.04", text)
         self.assertIn("    timeout-minutes: 10", text)
-        self.assertIn('          test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"', text)
+        self.assertIn('          test "${RUNNER_ENVIRONMENT:-}" = "self-hosted"', text)
         self.assertIn(
             "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             text,
