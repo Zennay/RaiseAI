@@ -1,0 +1,90 @@
+name: Raise official ChatGPT phone companion CI
+
+on:
+  pull_request:
+    paths:
+      - "phone-companion/**"
+      - ".github/workflows/phone-companion-ci.yml"
+      - "gradlew"
+  push:
+    branches:
+      - main
+    paths:
+      - "phone-companion/**"
+      - ".github/workflows/phone-companion-ci.yml"
+      - "gradlew"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-phone-companion-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phone-companion:
+    # Never run external fork PR code on a persistent self-hosted VPS.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, vps-bb300bba]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact tested source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify checkout identity
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: "platform-tools"
+
+      - name: Install phone Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Validate phone-only install guard syntax
+        run: bash -n phone-companion/install-phone.command
+
+      - name: Compile and run Android-free signing regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version
+          ./gradlew --no-daemon -p phone-companion testDebugUnitTest assembleDebug
+
+      - name: Assert phone manifest has no microphone, network or background permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+          manifest = pathlib.Path('phone-companion/src/main/AndroidManifest.xml')
+          root = ET.fromstring(manifest.read_text(encoding='utf-8'))
+          android = '{http://schemas.android.com/apk/res/android}'
+          assert not any(e.tag.endswith('uses-permission') for e in root), 'Phone probe requests excessive permissions'
+          for activity in root.iter('activity'):
+              if activity.attrib.get(android + 'exported') == 'true':
+                  assert activity.attrib.get(android + 'name') == '.PhoneCompanionActivity'
+          print('Phone permissions and exported activity contract OK')
+          PY
+
+      - name: Upload exact-head phone development APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 (node24)
+        with:
+          name: raiseai-phone-companion-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          path: phone-companion/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
