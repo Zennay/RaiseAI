@@ -184,12 +184,12 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
     def test_workflow_pins_exact_powershell_runtime(self):
         command = (
             'test "$(pwsh -NoLogo -NoProfile -NonInteractive -Command '
-            "'$PSVersionTable.PSVersion.ToString()')\" = \"7.6.6\""
+            "'$PSVersionTable.PSVersion.ToString()')\" = \"7.6.8\""
         )
         self.assertEqual(
             self.workflow.count(command),
             1,
-            "PowerShell parser runtime must remain pinned to reviewed 7.6.6",
+            "PowerShell parser runtime must remain pinned to reviewed 7.6.8",
         )
         self.assertNotIn(
             "pwsh -NoLogo -NoProfile -NonInteractive -Command "
