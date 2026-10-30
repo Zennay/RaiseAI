@@ -64,7 +64,7 @@ class ObservationTemplateReadWorkflowTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
         expression = (
             "${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}"
@@ -140,7 +140,7 @@ class ObservationTemplateReadWorkflowTests(unittest.TestCase):
             index for index, line in enumerate(lines)
             if line == "        run: |"
         ]
-        self.assertEqual(len(run_indices), 5)
+        self.assertEqual(len(run_indices), 6)
         for run_index in run_indices:
             step_start = max(i for i in step_starts if i < run_index)
             following = [i for i in step_starts if i > step_start]

@@ -20,6 +20,7 @@ EXPECTED = {
     ],
     PHYSICAL: [
         ("actions/checkout", CHECKOUT_SHA),
+        ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9"),
     ],
 }
 

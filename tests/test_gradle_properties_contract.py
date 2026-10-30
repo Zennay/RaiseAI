@@ -284,7 +284,8 @@ class GradlePropertiesContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(refs[1][1], "c771a70e6277c0a99b617c7a806ffedaca235ff9")
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
 
     def test_workflow_locks_exact_gradle_properties_contract(self):
@@ -368,6 +369,8 @@ class GradlePropertiesContractTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Validate Gradle properties contract",
             "Run Gradle properties regression contract",
@@ -386,6 +389,8 @@ class GradlePropertiesContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate Gradle properties contract": ["name", "shell", "run"],
             "Run Gradle properties regression contract": ["name", "shell", "run"],

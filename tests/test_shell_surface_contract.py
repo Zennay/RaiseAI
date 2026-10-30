@@ -246,7 +246,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(refs[1][1], "c771a70e6277c0a99b617c7a806ffedaca235ff9")
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
 
     def test_workflow_runs_dynamic_shell_discovery_and_contract(self):
@@ -404,6 +405,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
             "Checkout exact tested revision",
             "Verify exact tested revision",
             "Verify Bash runtime",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Validate tracked shell surface",
             "Run shell surface regression contract",
@@ -419,6 +422,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
             "Verify Bash runtime": ["name", "shell", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate tracked shell surface": ["name", "shell", "run"],
             "Run shell surface regression contract": ["name", "shell", "run"],

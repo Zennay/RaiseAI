@@ -305,6 +305,8 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
             "Checkout exact tested revision",
             "Verify exact tested revision",
             "Verify PowerShell runtime",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Validate tracked PowerShell surface",
             "Run PowerShell surface regression contract",
@@ -317,6 +319,8 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
             "Verify PowerShell runtime": ["name", "shell", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate tracked PowerShell surface": ["name", "shell", "run"],
             "Run PowerShell surface regression contract": ["name", "shell", "run"],
@@ -370,7 +374,8 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(refs[1][1], "c771a70e6277c0a99b617c7a806ffedaca235ff9")
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
         self.assertIn(
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",

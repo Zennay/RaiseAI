@@ -95,7 +95,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
         self.assertIn(
             f"uses: actions/checkout@{CHECKOUT_SHA} # v7.0.1 (node24)",
@@ -292,6 +292,8 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Run release documentation identity contract",
             "Verify worktree remains clean",
@@ -306,6 +308,8 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Run release documentation identity contract": ["name", "shell", "run"],
             "Verify worktree remains clean": ["name", "shell", "run"],
