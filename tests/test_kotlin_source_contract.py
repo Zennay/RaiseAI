@@ -143,7 +143,7 @@ class KotlinSourceContractTests(unittest.TestCase):
             for line in jobs_block.splitlines()[1:]
             if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line))
         ]
-        self.assertEqual(job_keys, ["runs-on", "timeout-minutes", "env", "steps"])
+        self.assertEqual(job_keys, ["if", "runs-on", "timeout-minutes", "env", "steps"])
 
         on_start = lines.index("on:") + 1
         permissions_start = lines.index("permissions:")
@@ -240,6 +240,8 @@ class KotlinSourceContractTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Validate Kotlin source contract",
             "Verify worktree remains clean",
@@ -250,6 +252,8 @@ class KotlinSourceContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate Kotlin source contract": ["name", "shell", "run"],
             "Verify worktree remains clean": ["name", "shell", "run"],
@@ -298,8 +302,8 @@ class KotlinSourceContractTests(unittest.TestCase):
         self.assertEqual(verifier_keys, ["EXPECTED_SHA"])
 
     def test_workflow_is_hosted_read_only_exact_head_bounded_and_strict(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
         self.assertNotIn("pull_request_target:", self.workflow)
@@ -320,7 +324,11 @@ class KotlinSourceContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(len(refs), 2)
+        self.assertRegex(refs[1][1], r"^[0-9a-f]{40}$")
+        self.assertIn("uv python install 3.12.12 --default", self.workflow)
+        self.assertIn("UV_PYTHON_BIN_DIR: ${{ runner.temp }}/raiseai-cpython-bin", self.workflow)
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
 
         lines = self.workflow.splitlines()
