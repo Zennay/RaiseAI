@@ -60,7 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${BASH_VERSION}" = "5.2.21(1)-release"
+          test "${BASH_VERSION}" = "5.3.9(1)-release"
 
       - name: Install pinned uv bootstrap
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
