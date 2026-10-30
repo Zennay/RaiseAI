@@ -185,13 +185,13 @@ class JsonSurfaceContractTests(unittest.TestCase):
                 self.assertEqual(self._trigger_paths(event), expected)
 
     def test_workflow_is_hosted_read_only_exact_head_bounded_and_secret_free(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
         self.assertNotIn("pull_request_target:", self.workflow)
         self.assertNotIn("continue-on-error: true", self.workflow)
-        self.assertNotRegex(self.workflow, r"(?m)^\s+if:\s*")
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("timeout-minutes: 5", self.workflow)
         self.assertIn("cancel-in-progress: true", self.workflow)
         expression = (
@@ -293,7 +293,8 @@ class JsonSurfaceContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(refs[1][1], "c771a70e6277c0a99b617c7a806ffedaca235ff9")
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
         self.assertIn(
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
@@ -367,6 +368,8 @@ class JsonSurfaceContractTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Validate tracked JSON surface",
             "Run JSON surface regression contract",
@@ -385,6 +388,8 @@ class JsonSurfaceContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate tracked JSON surface": ["name", "shell", "run"],
             "Run JSON surface regression contract": ["name", "shell", "run"],
@@ -466,7 +471,7 @@ class JsonSurfaceContractTests(unittest.TestCase):
             match = re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line)
             if match:
                 job_keys.append(match.group(1))
-        self.assertEqual(job_keys, ["runs-on", "timeout-minutes", "env", "steps"])
+        self.assertEqual(job_keys, ["if", "runs-on", "timeout-minutes", "env", "steps"])
 
 
 if __name__ == "__main__":

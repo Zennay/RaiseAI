@@ -63,8 +63,8 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
         self.assertNotIn("schedule:", self.text)
 
     def test_runner_and_permissions_are_exact(self):
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
+        self.assertEqual(self.text.count("    if: ((github.event_name != 'pull_request'"), 1)
         self.assertNotIn('test "$(hostname)" = "vps-bb300bba"', self.text)
         self.assertEqual(self.text.count("    timeout-minutes: 5"), 1)
         self.assertRegex(
@@ -82,7 +82,8 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
+        self.assertIn('          uv python install 3.12.12 --default', self.text)
         expression = (
             "${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}"
@@ -133,9 +134,9 @@ class TrackedSecretHygieneWorkflowTests(unittest.TestCase):
             index for index, line in enumerate(lines)
             if line == "        run: |"
         ]
-        self.assertEqual(len(run_indices), 4)
+        self.assertEqual(len(run_indices), 5)
         self.assertNotIn("continue-on-error: true", self.text)
-        self.assertNotRegex(self.text, r"(?m)^\s+if:\s*")
+        self.assertEqual(self.text.count("    if: ((github.event_name != 'pull_request'"), 1)
 
         for run_index in run_indices:
             with self.subTest(line=run_index + 1):

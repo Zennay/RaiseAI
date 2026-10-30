@@ -12,7 +12,7 @@ class MacAdbAutoconnectQualityWorkflowTests(unittest.TestCase):
         self.text = WORKFLOW.read_text(encoding="utf-8")
 
     def test_fork_pr_is_skipped_before_persistent_runner_allocation(self):
-        guard = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}"
+        guard = "    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay')"
         self.assertEqual(self.text.count(guard), 1)
         self.assertEqual(
             len(re.findall(r"^\s*if\s*:", self.text, flags=re.MULTILINE)),
@@ -21,11 +21,11 @@ class MacAdbAutoconnectQualityWorkflowTests(unittest.TestCase):
         )
 
     def test_pinned_hosted_runner_and_timeout_are_exact(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.text)
-        self.assertNotIn("runs-on: [self-hosted", self.text)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
+        self.assertIn("    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay')", self.text)
         self.assertIn("timeout-minutes: 5", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertIn("    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay')", self.text)
 
     def test_required_gate_is_not_prestart_cancelled(self):
         self.assertIn("concurrency:", self.text)
@@ -78,7 +78,7 @@ class MacAdbAutoconnectQualityWorkflowTests(unittest.TestCase):
             )
 
     def test_hosted_runner_identity_and_clean_worktree_are_enforced(self):
-        self.assertIn('test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"', self.text)
+        self.assertIn('test "${RUNNER_ENVIRONMENT:-}" = "self-hosted"', self.text)
         self.assertIn('test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"', self.text)
         self.assertIn("git diff --exit-code -- .", self.text)
         self.assertIn("git diff --cached --exit-code -- .", self.text)

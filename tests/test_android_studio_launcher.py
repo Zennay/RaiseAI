@@ -97,15 +97,16 @@ class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
         cls.workflow = read_contract_input(WORKFLOW)
 
     def test_workflow_is_exact_head_read_only_and_immutable(self):
-        self.assertIn("    runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
-        self.assertNotIn("vps-bb300bba", self.workflow)
+        self.assertIn("    runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("permissions:\n  contents: read", self.workflow)
-        self.assertEqual(self.workflow.count("        uses:"), 1)
+        self.assertEqual(self.workflow.count("        uses:"), 2)
         self.assertIn(
             "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
             self.workflow,
         )
+        self.assertIn("astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9", self.workflow)
         exact_head = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         self.assertEqual(self.workflow.count(f"          ref: {exact_head}"), 1)
         self.assertEqual(self.workflow.count(f"          EXPECTED_SHA: {exact_head}"), 1)

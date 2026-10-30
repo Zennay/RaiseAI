@@ -95,6 +95,21 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
+      - name: Install pinned uv bootstrap
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.5"
+          enable-cache: false
+
+      - name: Provide isolated CPython 3.12 on PATH
+        shell: bash
+        env:
+          UV_PYTHON_BIN_DIR: ${{ runner.temp }}/raiseai-cpython-bin
+        run: |
+          set -euo pipefail
+          uv python install 3.12.12 --default
+          printf '%s\n' "$UV_PYTHON_BIN_DIR" >> "$GITHUB_PATH"
+
       - name: Verify Python runtime
         shell: bash
         run: |

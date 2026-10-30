@@ -11,9 +11,9 @@ WORKFLOW = (ROOT / ".github" / "workflows" / "physical-share-bundle-quality.yml"
 
 class PhysicalShareBundleWorkflowContractTests(unittest.TestCase):
     def test_workflow_is_exact_head_hosted_and_read_only(self):
-        self.assertEqual(WORKFLOW.count("    runs-on: ubuntu-24.04"), 1)
-        self.assertNotIn("runs-on: [self-hosted", WORKFLOW)
-        self.assertEqual(WORKFLOW.count('          test "${RUNNER_ENVIRONMENT:-}" = "github-hosted"'), 1)
+        self.assertEqual(WORKFLOW.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
+        self.assertEqual(WORKFLOW.count("    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay')"), 1)
+        self.assertEqual(WORKFLOW.count('          test "${RUNNER_ENVIRONMENT:-}" = "self-hosted"'), 1)
         self.assertIn("permissions:\n  contents: read\n", WORKFLOW)
         self.assertNotRegex(WORKFLOW, r"(?m)^\s+[A-Za-z0-9_-]+:\s*write\s*$")
         self.assertNotIn("${{ secrets.", WORKFLOW)
@@ -27,7 +27,8 @@ class PhysicalShareBundleWorkflowContractTests(unittest.TestCase):
 
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(r"(?m)^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)", WORKFLOW)
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(refs[1][1], "c771a70e6277c0a99b617c7a806ffedaca235ff9")
         self.assertEqual(
             refs[0][1],
             "3d3c42e5aac5ba805825da76410c181273ba90b1",

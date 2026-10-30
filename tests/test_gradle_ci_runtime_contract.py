@@ -47,7 +47,7 @@ class GradleCiRuntimeContractTests(unittest.TestCase):
                 read_workflow_text(invalid)
 
     def test_runner_and_environment_are_pinned(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.text)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
         for line in (
             "      LANG: C.UTF-8",
@@ -82,7 +82,7 @@ class GradleCiRuntimeContractTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
         self.assertIn(
             f"uses: actions/checkout@{CHECKOUT_SHA} # v7.0.1 (node24)",
             self.text,

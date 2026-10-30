@@ -47,8 +47,8 @@ class ObservationTemplateReadWorkflowTests(unittest.TestCase):
                 read_workflow_text(invalid)
 
     def test_lane_is_hosted_read_only_and_secret_free(self):
-        self.assertIn("    runs-on: ubuntu-24.04", self.text)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertIn("    runs-on: [self-hosted, vps-bb300bba]", self.text)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
         self.assertRegex(
             self.text,
@@ -64,7 +64,7 @@ class ObservationTemplateReadWorkflowTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
         expression = (
             "${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}"
@@ -140,7 +140,7 @@ class ObservationTemplateReadWorkflowTests(unittest.TestCase):
             index for index, line in enumerate(lines)
             if line == "        run: |"
         ]
-        self.assertEqual(len(run_indices), 5)
+        self.assertEqual(len(run_indices), 6)
         for run_index in run_indices:
             step_start = max(i for i in step_starts if i < run_index)
             following = [i for i in step_starts if i > step_start]

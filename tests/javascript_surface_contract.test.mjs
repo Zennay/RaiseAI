@@ -171,14 +171,16 @@ test("workflow triggers cover current and future JavaScript surfaces", () => {
   assert.deepEqual(triggerPaths("pull_request"), expected);
 });
 
-test("workflow is hosted, read-only, exact-head, bounded and secret-free", () => {
+test("workflow uses guarded self-hosted VPS, read-only exact-head and secret-free execution", () => {
   assert.match(WORKFLOW, /^name: JavaScript surface contract CI$/m);
-  assert.match(WORKFLOW, /runs-on: ubuntu-24\.04/);
-  assert.doesNotMatch(WORKFLOW, /self-hosted/);
+  assert.match(WORKFLOW, /^    runs-on: \[self-hosted, vps-bb300bba\]$/m);
+  assert.match(
+    WORKFLOW,
+    /^    if: \(\(github\.event_name != 'pull_request' && github\.event_name != 'pull_request_target'\) \|\| \(github\.event\.pull_request\.head\.repo\.full_name == github\.repository && github\.actor == 'Zennay'\)\)$/m,
+  );
   assert.match(WORKFLOW, /permissions:\n  contents: read\n/);
   assert.doesNotMatch(WORKFLOW, /\$\{\{\s*secrets\./);
   assert.doesNotMatch(WORKFLOW, /^\s*environment\s*:/m);
-  assert.doesNotMatch(WORKFLOW, /^\s+if:\s*/m);
   assert.doesNotMatch(WORKFLOW, /continue-on-error:\s*true/);
   assert.doesNotMatch(WORKFLOW, /pull_request_target:/);
   assert.match(WORKFLOW, /timeout-minutes: 5/);
@@ -284,7 +286,7 @@ test("workflow keeps exact top-level and job execution surfaces", () => {
     .slice(1)
     .map((line) => line.match(/^    ([A-Za-z0-9_-]+):.*$/)?.[1])
     .filter(Boolean);
-  assert.deepEqual(jobKeys, ["runs-on", "timeout-minutes", "env", "steps"]);
+  assert.deepEqual(jobKeys, ["if", "runs-on", "timeout-minutes", "env", "steps"]);
 });
 
 test("workflow leaves the checkout clean after validation", () => {

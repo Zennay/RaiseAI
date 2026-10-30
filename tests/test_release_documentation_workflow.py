@@ -86,7 +86,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
             'assert sys.version_info[:2] == (3, 12), sys.version\''
         )
         self.assertEqual(self.text.count(runtime), 1)
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
         self.assertNotIn("ubuntu-latest", self.text)
 
     def test_external_action_surface_is_exact_and_immutable(self):
@@ -95,7 +95,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
         self.assertIn(
             f"uses: actions/checkout@{CHECKOUT_SHA} # v7.0.1 (node24)",
@@ -174,9 +174,9 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
                 self.assertEqual(lines[run_index + 1], "          set -euo pipefail")
 
     def test_workflow_is_bounded_hosted_and_secret_free(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.text)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertIn("timeout-minutes: 5", self.text)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.text)
         self.assertNotIn("pull_request_target:", self.text)
         self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")
 
@@ -201,7 +201,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         ]
         self.assertEqual(
             job_keys,
-            ["runs-on", "timeout-minutes", "env", "steps"],
+            ["if", "runs-on", "timeout-minutes", "env", "steps"],
             "release documentation workflow must not gain unreviewed job controls",
         )
 
@@ -292,6 +292,8 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         expected_names = [
             "Checkout exact tested revision",
             "Verify exact tested revision",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Run release documentation identity contract",
             "Verify worktree remains clean",
@@ -306,6 +308,8 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Run release documentation identity contract": ["name", "shell", "run"],
             "Verify worktree remains clean": ["name", "shell", "run"],

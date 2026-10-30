@@ -4,6 +4,7 @@ import https from "node:https";
 import { createHandler } from "./app.mjs";
 import { applyServerRuntimeLimits, parseDeployRevision, parseServerPort, validateServerConfig } from "./server-policy.mjs";
 import { createZCloudExecutor } from "./connectors/zcloud.mjs";
+import { createHomeExecutor } from "./connectors/home.mjs";
 import { createOpenRouterExecutor } from "./providers/openrouter.mjs";
 
 const host = process.env.RAISE_HOST ?? "127.0.0.1";
@@ -19,6 +20,13 @@ const executeZCloud = createZCloudExecutor({
   baseUrl: process.env.RAISE_ZCLOUD_URL ?? "http://127.0.0.1:8765"
 });
 
+const executeHome = createHomeExecutor({
+  enabled: process.env.RAISE_HOME_EXECUTION_ENABLED === "1",
+  origin: process.env.RAISE_HOME_BRIDGE_ORIGIN ?? "",
+  token: process.env.RAISE_HOME_BRIDGE_TOKEN ?? "",
+  devicesJson: process.env.RAISE_HOME_DEVICES_JSON ?? ""
+});
+
 const executeOpenRouter = createOpenRouterExecutor({
   apiKey: process.env.OPENROUTER_API_KEY ?? "",
   fastModel: process.env.RAISE_OPENROUTER_FAST_MODEL ?? "z-ai/glm-5.3-flash",
@@ -30,6 +38,7 @@ const executeOpenRouter = createOpenRouterExecutor({
 
 const execute = async (decision, text) =>
   (await executeZCloud(decision, text)) ??
+  (await executeHome(decision, text)) ??
   (await executeOpenRouter(decision, text));
 
 const handler = createHandler({ token, execute, revision });

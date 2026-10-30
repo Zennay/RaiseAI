@@ -232,7 +232,7 @@ class FrozenPreserveContractWorkflowTests(unittest.TestCase):
         self.text = read_workflow_text(CONTRACT_WORKFLOW)
 
     def test_contract_lane_runtime_and_checkout_are_pinned(self):
-        self.assertIn("    runs-on: ubuntu-24.04", self.text)
+        self.assertIn("    runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
         for line in (
             "      LANG: C.UTF-8",
@@ -256,7 +256,7 @@ class FrozenPreserveContractWorkflowTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
         self.assertIn(
             f"uses: actions/checkout@{CHECKOUT_SHA} # v7.0.1 (node24)",
             self.text,
@@ -290,7 +290,7 @@ class FrozenPreserveContractWorkflowTests(unittest.TestCase):
 
         lines = self.text.splitlines()
         run_indices = [i for i, line in enumerate(lines) if line == "        run: |"]
-        self.assertEqual(len(run_indices), 3)
+        self.assertEqual(len(run_indices), 4)
         for index in run_indices:
             self.assertEqual(lines[index + 1], "          set -euo pipefail")
 

@@ -191,8 +191,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
                 self.assertEqual(self._trigger_paths(event), expected)
 
     def test_workflow_is_hosted_read_only_exact_head_and_bounded(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
         self.assertIn("timeout-minutes: 5", self.workflow)
@@ -229,18 +229,15 @@ class ShellSurfaceContractTests(unittest.TestCase):
             1,
             "exact-head equality must remain an executable workflow command",
         )
-        self.assertNotRegex(
-            self.workflow,
-            r"""(?m)^(?:"if"|'if'|if|    (?:"if"|'if'|if)|        (?:"if"|'if'|if))\s*:""",
-            "workflow, job and step-level if guards must not be able to skip shell validation",
-        )
+        self.assertEqual(self.workflow.count("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))"), 1)
+        self.assertNotRegex(self.workflow, r"(?m)^        if:\s*", "step-level skip guards remain forbidden")
 
     def test_workflow_pins_exact_bash_runtime(self):
         self.assertIn("- name: Verify Bash runtime", self.workflow)
         self.assertEqual(
-            self.workflow.count('test "${BASH_VERSION}" = "5.2.21(1)-release"'),
+            self.workflow.count('test "${BASH_VERSION}" = "5.3.9(1)-release"'),
             1,
-            "shell syntax parser must remain pinned to reviewed Bash 5.2.21(1)-release",
+            "shell syntax parser must remain pinned to reviewed Bash 5.3.9(1)-release",
         )
 
     def test_workflow_uses_only_immutable_checkout_action(self):
@@ -249,7 +246,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
             self.workflow,
             flags=re.MULTILINE,
         )
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(refs[1][1], "c771a70e6277c0a99b617c7a806ffedaca235ff9")
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
 
     def test_workflow_runs_dynamic_shell_discovery_and_contract(self):
@@ -361,7 +359,7 @@ class ShellSurfaceContractTests(unittest.TestCase):
             for line in jobs_block.splitlines()[1:]
             if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line))
         ]
-        self.assertEqual(job_keys, ["runs-on", "timeout-minutes", "env", "steps"])
+        self.assertEqual(job_keys, ["if", "runs-on", "timeout-minutes", "env", "steps"])
 
         env_start = lines.index("    env:") + 1
         env_keys = []
@@ -407,6 +405,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
             "Checkout exact tested revision",
             "Verify exact tested revision",
             "Verify Bash runtime",
+            "Install pinned uv bootstrap",
+            "Provide isolated CPython 3.12 on PATH",
             "Verify Python runtime",
             "Validate tracked shell surface",
             "Run shell surface regression contract",
@@ -422,6 +422,8 @@ class ShellSurfaceContractTests(unittest.TestCase):
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
             "Verify Bash runtime": ["name", "shell", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Validate tracked shell surface": ["name", "shell", "run"],
             "Run shell surface regression contract": ["name", "shell", "run"],

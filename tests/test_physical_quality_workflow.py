@@ -94,9 +94,9 @@ class PhysicalQualityWorkflowContractTests(unittest.TestCase):
         self.assertEqual(self._event_paths("pull_request"), EXPECTED_PATHS)
 
     def test_hosted_runtime_and_python_environment_are_pinned(self):
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
         self.assertNotIn("ubuntu-latest", self.text)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.text)
         for line in EXPECTED_ENV:
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
@@ -113,7 +113,7 @@ class PhysicalQualityWorkflowContractTests(unittest.TestCase):
             self.text,
             flags=re.MULTILINE,
         )
-        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA)])
+        self.assertEqual(refs, [("actions/checkout", CHECKOUT_SHA), ("astral-sh/setup-uv", "c771a70e6277c0a99b617c7a806ffedaca235ff9")])
         self.assertRegex(refs[0][1], r"^[0-9a-f]{40}$")
         self.assertEqual(self.text.count("          persist-credentials: false"), 1)
 

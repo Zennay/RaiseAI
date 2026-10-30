@@ -112,7 +112,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "deprecated checkout v4/Node 20 pin must not return",
         )
 
-    def test_action_execution_surface_is_checkout_only(self):
+    def test_action_execution_surface_is_pinned_and_scoped(self):
         refs = re.findall(
             r"^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
             self.text,
@@ -120,8 +120,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(
             [action for action, _ in refs],
-            ["actions/checkout"],
-            "quality workflow must not expand beyond the audited checkout action",
+            ["actions/checkout", "astral-sh/setup-uv"],
+            "quality workflow must only use audited checkout and pinned uv setup",
         )
 
         lines = self.text.splitlines()
@@ -428,10 +428,10 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: true", self.text)
 
     def test_quality_execution_is_unconditional(self):
-        self.assertNotRegex(
-            self.text,
-            r"(?m)^\s+if:\s*",
-            "dedicated quality jobs and steps must not be conditionally skipped",
+        self.assertEqual(
+            self.text.count("    if: ((github.event_name != 'pull_request'"),
+            1,
+            "only the trusted-repository and actor job guard may skip execution",
         )
 
     def test_job_timeout_stays_small_and_unique(self):
@@ -461,8 +461,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("cancel-in-progress: true", self.text)
 
-    def test_hosted_runtime_is_reproducible(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.text)
+    def test_self_hosted_runtime_is_reproducible(self):
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
         self.assertIn("LANG: C.UTF-8", self.text)
         self.assertIn("LC_ALL: C.UTF-8", self.text)
@@ -484,9 +484,9 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         self.assertIn('platform.python_implementation() == "CPython"', self.text)
         self.assertIn("sys.version_info[:2] == (3, 12)", self.text)
 
-    def test_job_stays_github_hosted_and_secret_free(self):
-        self.assertRegex(self.text, r"runs-on:\s*ubuntu-[0-9]+\.[0-9]+")
-        self.assertNotIn("self-hosted", self.text)
+    def test_job_stays_guarded_self_hosted_and_secret_free(self):
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
+        self.assertEqual(self.text.count("    if: ((github.event_name != 'pull_request'"), 1)
         self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")
         self.assertNotRegex(self.text, r"(?m)^\s*environment\s*:")
 
@@ -512,7 +512,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             "hosted quality workflow must remain a single audited job",
         )
 
-        for key in ("runs-on", "timeout-minutes", "env", "steps"):
+        for key in ("if", "runs-on", "timeout-minutes", "env", "steps"):
             with self.subTest(scope="python-quality", key=key):
                 matches = re.findall(
                     rf"(?m)^    {re.escape(key)}:[^\n]*$",
@@ -690,7 +690,7 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
 
         self.assertEqual(
             keys,
-            ["runs-on", "timeout-minutes", "env", "steps"],
+            ["if", "runs-on", "timeout-minutes", "env", "steps"],
             "python-quality must not gain unreviewed job-level execution controls",
         )
 
@@ -707,6 +707,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
             [
                 "Checkout exact tested revision",
                 "Verify exact tested revision",
+                "Install pinned uv bootstrap",
+                "Provide isolated CPython 3.12 on PATH",
                 "Verify Python runtime",
                 "Shell syntax",
                 "Python syntax",
@@ -720,6 +722,8 @@ class QualityToolingWorkflowContractTests(unittest.TestCase):
         expected_keys = {
             "Checkout exact tested revision": ["name", "uses", "with"],
             "Verify exact tested revision": ["name", "shell", "env", "run"],
+            "Install pinned uv bootstrap": ["name", "uses", "with"],
+            "Provide isolated CPython 3.12 on PATH": ["name", "shell", "env", "run"],
             "Verify Python runtime": ["name", "shell", "run"],
             "Shell syntax": ["name", "shell", "run"],
             "Python syntax": ["name", "shell", "run"],
