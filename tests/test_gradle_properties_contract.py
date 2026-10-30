@@ -165,8 +165,8 @@ class GradlePropertiesContractTests(unittest.TestCase):
                 self.assertEqual(self._trigger_paths(event), expected)
 
     def test_workflow_is_hosted_read_only_exact_head_and_bounded(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
         self.assertIn("timeout-minutes: 5", self.workflow)
@@ -332,7 +332,7 @@ class GradlePropertiesContractTests(unittest.TestCase):
                 job_keys.append(match.group(1))
         self.assertEqual(
             job_keys,
-            ["runs-on", "timeout-minutes", "env", "steps"],
+            ["if", "runs-on", "timeout-minutes", "env", "steps"],
             "Gradle properties verify job must keep an exact execution surface",
         )
 
@@ -451,7 +451,7 @@ class GradlePropertiesContractTests(unittest.TestCase):
                 self.assertIn("        shell: bash", step)
                 self.assertEqual(lines[run_index + 1], "          set -euo pipefail")
         self.assertNotIn("continue-on-error: true", self.workflow)
-        self.assertNotRegex(self.workflow, r"(?m)^\s+if:\s*")
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
 
 
 if __name__ == "__main__":

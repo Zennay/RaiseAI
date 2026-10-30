@@ -70,7 +70,7 @@ class FrozenAcceptanceToolingWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("pull_request_target:", self.text)
 
     def test_hosted_runtime_is_reproducible(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.text)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
         for line in (
             "      LANG: C.UTF-8",

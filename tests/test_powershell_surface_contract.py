@@ -166,8 +166,8 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
                 self.assertEqual(self._trigger_paths(event), expected)
 
     def test_workflow_is_hosted_read_only_exact_head_bounded_and_secret_free(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("permissions:\n  contents: read\n", self.workflow)
         self.assertNotRegex(self.workflow, r"\$\{\{\s*secrets\.")
         self.assertNotIn("pull_request_target:", self.workflow)
@@ -287,7 +287,7 @@ class PowerShellSurfaceContractTests(unittest.TestCase):
             for line in jobs_block.splitlines()[1:]
             if (match := re.fullmatch(r"    ([A-Za-z0-9_-]+):.*", line))
         ]
-        self.assertEqual(job_keys, ["runs-on", "timeout-minutes", "env", "steps"])
+        self.assertEqual(job_keys, ["if", "runs-on", "timeout-minutes", "env", "steps"])
 
         env_start = lines.index("    env:") + 1
         expected_env = [

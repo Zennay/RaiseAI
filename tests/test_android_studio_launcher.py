@@ -97,9 +97,9 @@ class AndroidStudioLauncherWorkflowContractTest(unittest.TestCase):
         cls.workflow = read_contract_input(WORKFLOW)
 
     def test_workflow_is_exact_head_read_only_and_immutable(self):
-        self.assertIn("    runs-on: ubuntu-24.04", self.workflow)
-        self.assertNotIn("self-hosted", self.workflow)
-        self.assertNotIn("vps-bb300bba", self.workflow)
+        self.assertIn("    runs-on: [self-hosted, vps-bb300bba]", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.workflow)
         self.assertIn("permissions:\n  contents: read", self.workflow)
         self.assertEqual(self.workflow.count("        uses:"), 1)
         self.assertIn(

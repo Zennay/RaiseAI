@@ -47,7 +47,7 @@ class GradleCiRuntimeContractTests(unittest.TestCase):
                 read_workflow_text(invalid)
 
     def test_runner_and_environment_are_pinned(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.text)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertNotIn("ubuntu-latest", self.text)
         for line in (
             "      LANG: C.UTF-8",

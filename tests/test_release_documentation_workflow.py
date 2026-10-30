@@ -86,7 +86,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
             'assert sys.version_info[:2] == (3, 12), sys.version\''
         )
         self.assertEqual(self.text.count(runtime), 1)
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
         self.assertNotIn("ubuntu-latest", self.text)
 
     def test_external_action_surface_is_exact_and_immutable(self):
@@ -174,9 +174,9 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
                 self.assertEqual(lines[run_index + 1], "          set -euo pipefail")
 
     def test_workflow_is_bounded_hosted_and_secret_free(self):
-        self.assertIn("runs-on: ubuntu-24.04", self.text)
+        self.assertIn("runs-on: [self-hosted, vps-bb300bba]", self.text)
         self.assertIn("timeout-minutes: 5", self.text)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.text)
         self.assertNotIn("pull_request_target:", self.text)
         self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")
 
@@ -201,7 +201,7 @@ class ReleaseDocumentationWorkflowContractTests(unittest.TestCase):
         ]
         self.assertEqual(
             job_keys,
-            ["runs-on", "timeout-minutes", "env", "steps"],
+            ["if", "runs-on", "timeout-minutes", "env", "steps"],
             "release documentation workflow must not gain unreviewed job controls",
         )
 

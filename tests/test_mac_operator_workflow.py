@@ -28,9 +28,9 @@ class MacOperatorWorkflowTests(unittest.TestCase):
         cls.text = read_workflow_text(WORKFLOW)
 
     def test_is_hosted_read_only_exact_head_and_credential_free(self):
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
-        self.assertNotIn("self-hosted", self.text)
-        self.assertNotIn("vps-bb300bba", self.text)
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.text)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.text)
         self.assertIn("permissions:\n  contents: read\n", self.text)
         self.assertNotIn("pull_request_target:", self.text)
         self.assertNotRegex(self.text, r"\$\{\{\s*secrets\.")

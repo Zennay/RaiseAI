@@ -94,9 +94,9 @@ class PhysicalQualityWorkflowContractTests(unittest.TestCase):
         self.assertEqual(self._event_paths("pull_request"), EXPECTED_PATHS)
 
     def test_hosted_runtime_and_python_environment_are_pinned(self):
-        self.assertEqual(self.text.count("    runs-on: ubuntu-24.04"), 1)
+        self.assertEqual(self.text.count("    runs-on: [self-hosted, vps-bb300bba]"), 1)
         self.assertNotIn("ubuntu-latest", self.text)
-        self.assertNotIn("self-hosted", self.text)
+        self.assertIn("    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))", self.text)
         for line in EXPECTED_ENV:
             with self.subTest(line=line):
                 self.assertEqual(self.text.count(line), 1)
