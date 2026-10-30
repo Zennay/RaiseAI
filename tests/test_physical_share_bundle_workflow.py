@@ -27,7 +27,8 @@ class PhysicalShareBundleWorkflowContractTests(unittest.TestCase):
 
     def test_workflow_uses_only_immutable_checkout_action(self):
         refs = re.findall(r"(?m)^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)", WORKFLOW)
-        self.assertEqual([action for action, _ in refs], ["actions/checkout"])
+        self.assertEqual([action for action, _ in refs], ["actions/checkout", "astral-sh/setup-uv"])
+        self.assertEqual(refs[1][1], "c771a70e6277c0a99b617c7a806ffedaca235ff9")
         self.assertEqual(
             refs[0][1],
             "3d3c42e5aac5ba805825da76410c181273ba90b1",
