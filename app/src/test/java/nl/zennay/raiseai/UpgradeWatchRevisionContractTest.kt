@@ -10,7 +10,7 @@ class UpgradeWatchRevisionContractTest {
         val script = findProjectFile("upgrade-watch.command").readText()
 
         val cleanTree = script.indexOf("Refusing evidence-capable build from a dirty Git worktree.")
-        val headResolution = script.indexOf("""checked_out_revision="$(git rev-parse HEAD | tr 'A-F' 'a-f')"""")
+        val headResolution = script.indexOf("checked_out_revision=\"\$(git rev-parse HEAD | tr 'A-F' 'a-f')\"")
         val explicitPresence = script.indexOf("RAISE_BUILD_REVISION+x")
         val malformedReject = script.indexOf(
             "RAISE_BUILD_REVISION must be an exact 40-character Git revision."
